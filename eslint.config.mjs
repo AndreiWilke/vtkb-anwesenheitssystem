@@ -6,12 +6,23 @@ export default tseslint.config(
     ignores: ["**/node_modules/**", "**/coverage/**", "**/dist/**"],
   },
   eslint.configs.recommended,
+  {
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        URL: "readonly",
+        console: "readonly",
+        document: "readonly",
+        window: "readonly",
+      },
+    },
+  },
   ...tseslint.configs.recommendedTypeChecked.map((config) => ({
     ...config,
-    files: ["**/*.ts"],
+    files: ["**/*.{ts,tsx}"],
   })),
   {
-    files: ["**/*.ts"],
+    files: ["**/*.{ts,tsx}"],
     languageOptions: {
       parserOptions: {
         projectService: true,

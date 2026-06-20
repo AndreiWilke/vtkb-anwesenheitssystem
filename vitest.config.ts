@@ -6,6 +6,6 @@ export default defineConfig({
       include: ["packages/shared/src/**/*.ts"],
       reporter: ["text", "html"],
     },
-    include: ["packages/**/*.test.ts"],
+    include: ["packages/**/*.test.ts", "apps/**/*.test.{ts,tsx}"],
   },
 });

@@ -1,6 +1,7 @@
 import { MemberQualification } from "@vtkb/shared";
 
 import type { AgeGroup, BeltColor, Member, PhotoProposal, TrainingSessionMock } from "./types";
+import { createClubDateAtTime } from "./time";
 
 const fictionalFirstNames = [
   "Aiko",
@@ -84,20 +85,14 @@ export const members: Member[] = fictionalFirstNames.map((firstName, index) => {
   };
 });
 
-function atTime(base: Date, hours: number, minutes: number): Date {
-  const value = new Date(base);
-  value.setHours(hours, minutes, 0, 0);
-  return value;
-}
-
 export function createTodaySessions(now = new Date()): TrainingSessionMock[] {
   return [
     {
       id: "session-early",
       name: "Grundlagentraining",
       dojo: "Dojo Nord",
-      startsAt: atTime(now, 16, 0),
-      endsAt: atTime(now, 17, 30),
+      startsAt: createClubDateAtTime(now, 16, 0),
+      endsAt: createClubDateAtTime(now, 17, 30),
       responsibleTrainerId: "member-02",
       assistantTrainerIds: ["member-05"],
     },
@@ -105,8 +100,8 @@ export function createTodaySessions(now = new Date()): TrainingSessionMock[] {
       id: "session-main",
       name: "Donnerstagstraining",
       dojo: "Dojo VTKB Berlin",
-      startsAt: atTime(now, 17, 30),
-      endsAt: atTime(now, 19, 0),
+      startsAt: createClubDateAtTime(now, 17, 30),
+      endsAt: createClubDateAtTime(now, 19, 0),
       responsibleTrainerId: "member-01",
       assistantTrainerIds: ["member-05", "member-06"],
     },
@@ -114,8 +109,8 @@ export function createTodaySessions(now = new Date()): TrainingSessionMock[] {
       id: "session-following",
       name: "Fortgeschrittenentraining",
       dojo: "Dojo VTKB Berlin",
-      startsAt: atTime(now, 19, 0),
-      endsAt: atTime(now, 20, 30),
+      startsAt: createClubDateAtTime(now, 19, 0),
+      endsAt: createClubDateAtTime(now, 20, 30),
       responsibleTrainerId: "member-03",
       assistantTrainerIds: ["member-07"],
     },
@@ -134,6 +129,8 @@ export const initialPhotoProposals: PhotoProposal[] = [
     label: "Vorschlag A",
     status: "EINDEUTIG",
     candidateMemberId: "member-09",
+    selectedMemberId: "member-09",
+    resolutionAction: "PRESELECTED_MEMBER",
     resolved: true,
   },
   {
@@ -141,16 +138,22 @@ export const initialPhotoProposals: PhotoProposal[] = [
     label: "Vorschlag B",
     status: "PRUEFEN",
     candidateMemberId: "member-10",
-    alternateMemberId: "member-11",
+    resolutionAction: null,
     resolved: false,
   },
-  { id: "proposal-3", label: "Gesicht C", status: "UNBEKANNT", resolved: false },
+  {
+    id: "proposal-3",
+    label: "Gesicht C",
+    status: "UNBEKANNT",
+    resolutionAction: null,
+    resolved: false,
+  },
   {
     id: "proposal-4",
     label: "Paar D",
     status: "DUBLETTE",
     candidateMemberId: "member-12",
-    alternateMemberId: "member-12",
+    resolutionAction: null,
     resolved: false,
   },
 ];

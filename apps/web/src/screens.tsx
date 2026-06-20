@@ -33,24 +33,15 @@ import type {
   BeltColor,
   LocalGuest,
   Member,
+  ProposalDecision,
   PhotoProposal,
   TrainingSessionMock,
 } from "./types";
 import { presentMemberIds, sessionUiStatus } from "./workflow";
-
-const dateFormatter = new Intl.DateTimeFormat("de-DE", {
-  weekday: "long",
-  day: "2-digit",
-  month: "long",
-  year: "numeric",
-});
-const timeFormatter = new Intl.DateTimeFormat("de-DE", {
-  hour: "2-digit",
-  minute: "2-digit",
-});
+import { clubDateFormatter, clubTimeFormatter } from "./time";
 
 function formatSessionTime(session: TrainingSessionMock) {
-  return `${timeFormatter.format(session.startsAt)}–${timeFormatter.format(session.endsAt)} Uhr`;
+  return `${clubTimeFormatter.format(session.startsAt)}–${clubTimeFormatter.format(session.endsAt)} Uhr`;
 }
 
 function memberName(members: readonly Member[], id: string) {
@@ -99,7 +90,7 @@ export function StartScreen({
   const following = sessions.find((session) => session.startsAt >= selectedSession.endsAt);
   return (
     <section>
-      <PageHeading title="Start" description={dateFormatter.format(new Date())} />
+      <PageHeading title="Start" description={clubDateFormatter.format(new Date())} />
       <div className="section-label">Heute empfohlen</div>
       <article className="session-focus">
         <div className="session-title-row">
@@ -203,7 +194,7 @@ export function SessionSelectScreen({
               type="button"
               onClick={() => onSelect(session)}
             >
-              <span className="session-date">{dateFormatter.format(session.startsAt)}</span>
+              <span className="session-date">{clubDateFormatter.format(session.startsAt)}</span>
               <strong>{session.name}</strong>
               <span>
                 {formatSessionTime(session)} · {session.dojo}
@@ -579,7 +570,12 @@ export function GuestScreen({
           <p className="empty-state">Noch keine Gäste erfasst.</p>
         ) : (
           guests.map((guest) => (
-            <div className="guest-row" key={guest.id}>
+            <div
+              className="guest-row"
+              data-guest-id={guest.id}
+              data-testid="guest-row"
+              key={guest.id}
+            >
               <MemberAvatar initials="G" />
               <span>
                 <strong>
@@ -670,6 +666,15 @@ const proposalLabels: Record<PhotoProposal["status"], string> = {
   DUBLETTE: "Mögliche Dublette",
 };
 
+const resolutionLabels: Record<NonNullable<PhotoProposal["resolutionAction"]>, string> = {
+  PRESELECTED_MEMBER: "Sicher vorausgewählt",
+  CONFIRMED_MEMBER: "Person bestätigt",
+  SELECTED_MEMBER: "Andere Person gewählt",
+  MARKED_UNKNOWN: "Als unbekannt markiert",
+  GUEST_CREATED: "Als Gast erfasst",
+  DISCARDED: "Verworfen",
+};
+
 export function PhotoReviewScreen({
   proposals,
   members,
@@ -680,15 +685,34 @@ export function PhotoReviewScreen({
 }: {
   proposals: readonly PhotoProposal[];
   members: readonly Member[];
-  onResolve: (
-    id: string,
-    action: "CONFIRM" | "UNKNOWN" | "DISCARD" | "GUEST" | "ALTERNATE",
-  ) => void;
+  onResolve: (id: string, action: ProposalDecision, selectedMemberId?: string) => void;
   onSummary: () => void;
   onManual: () => void;
   onBack: () => void;
 }) {
   const unresolved = proposals.filter((proposal) => !proposal.resolved).length;
+  const [pickerProposalId, setPickerProposalId] = useState<string | null>(null);
+  const [pickerSearch, setPickerSearch] = useState("");
+  const [pickerMemberId, setPickerMemberId] = useState<string | null>(null);
+  const pickerProposal = proposals.find((proposal) => proposal.id === pickerProposalId);
+  const pickerMembers = members.filter((member) =>
+    member.name.toLocaleLowerCase("de").includes(pickerSearch.trim().toLocaleLowerCase("de")),
+  );
+  const openPicker = (proposal: PhotoProposal) => {
+    setPickerProposalId(proposal.id);
+    setPickerMemberId(proposal.selectedMemberId ?? proposal.candidateMemberId ?? null);
+    setPickerSearch("");
+  };
+  const closePicker = () => {
+    setPickerProposalId(null);
+    setPickerMemberId(null);
+    setPickerSearch("");
+  };
+  const confirmPicker = () => {
+    if (!pickerProposal || !pickerMemberId) return;
+    onResolve(pickerProposal.id, "SELECT_MEMBER", pickerMemberId);
+    closePicker();
+  };
   return (
     <section>
       <PageHeading
@@ -703,25 +727,28 @@ export function PhotoReviewScreen({
       <div className="proposal-list">
         {proposals.map((proposal) => {
           const candidate = members.find((member) => member.id === proposal.candidateMemberId);
+          const selectedMember = members.find((member) => member.id === proposal.selectedMemberId);
+          const displayedMember = selectedMember ?? candidate;
           return (
             <article
               className={`proposal-row proposal-${proposal.status.toLowerCase()}`}
+              data-testid={proposal.id}
               key={proposal.id}
             >
               <div className="face-placeholder" aria-label="Neutraler Gesichtsausschnitt">
                 <span />
               </div>
               <div className="proposal-person">
-                {candidate ? (
-                  <MemberAvatar initials={candidate.initials} />
+                {displayedMember ? (
+                  <MemberAvatar initials={displayedMember.initials} />
                 ) : (
                   <MemberAvatar initials="?" muted />
                 )}
                 <span>
                   <small>{proposalLabels[proposal.status]}</small>
-                  <strong>{candidate?.name ?? "Keine sichere Zuordnung"}</strong>
-                  {candidate ? (
-                    <BeltMark color={candidate.beltColor} grade={candidate.beltGrade} />
+                  <strong>{displayedMember?.name ?? "Keine sichere Zuordnung"}</strong>
+                  {displayedMember ? (
+                    <BeltMark color={displayedMember.beltColor} grade={displayedMember.beltGrade} />
                   ) : null}
                 </span>
               </div>
@@ -730,44 +757,31 @@ export function PhotoReviewScreen({
                   proposal.resolved ? "good" : proposal.status === "UNBEKANNT" ? "muted" : "warn"
                 }
               >
-                {proposal.resolved ? "Bestätigt" : "Offen"}
+                {proposal.resolutionAction ? resolutionLabels[proposal.resolutionAction] : "Offen"}
               </StatusTag>
               <div className="proposal-actions">
-                <button
-                  disabled={proposal.resolved}
-                  type="button"
-                  onClick={() => onResolve(proposal.id, "CONFIRM")}
-                >
-                  Bestätigen
+                {proposal.status !== "UNBEKANNT" && proposal.candidateMemberId ? (
+                  <button type="button" onClick={() => onResolve(proposal.id, "CONFIRM_CANDIDATE")}>
+                    Bestätigen
+                  </button>
+                ) : null}
+                <button type="button" onClick={() => openPicker(proposal)}>
+                  {proposal.status === "UNBEKANNT" ? "Mitglied auswählen" : "Andere Person"}
                 </button>
-                <button
-                  disabled={proposal.resolved}
-                  type="button"
-                  onClick={() => onResolve(proposal.id, "ALTERNATE")}
-                >
-                  Andere Person
+                <button type="button" onClick={() => onResolve(proposal.id, "MARK_UNKNOWN")}>
+                  Als unbekannt markieren
                 </button>
-                <button
-                  disabled={proposal.resolved}
-                  type="button"
-                  onClick={() => onResolve(proposal.id, "UNKNOWN")}
-                >
-                  Unbekannt
-                </button>
-                <button
-                  disabled={proposal.resolved}
-                  type="button"
-                  onClick={() => onResolve(proposal.id, "DISCARD")}
-                >
+                <button type="button" onClick={() => onResolve(proposal.id, "DISCARD")}>
                   Verwerfen
                 </button>
-                <button
-                  disabled={proposal.resolved}
-                  type="button"
-                  onClick={() => onResolve(proposal.id, "GUEST")}
-                >
-                  Als Gast
+                <button type="button" onClick={() => onResolve(proposal.id, "CREATE_GUEST")}>
+                  Als Gast erfassen
                 </button>
+                {proposal.resolved ? (
+                  <button type="button" onClick={() => onResolve(proposal.id, "RESET")}>
+                    Entscheidung zurücknehmen
+                  </button>
+                ) : null}
               </div>
             </article>
           );
@@ -780,6 +794,58 @@ export function PhotoReviewScreen({
         <PrimaryButton onClick={onSummary}>Gesamtliste öffnen</PrimaryButton>
         <SecondaryButton onClick={onManual}>Zur manuellen Liste</SecondaryButton>
       </div>
+      {pickerProposal ? (
+        <div className="member-picker-backdrop">
+          <section
+            aria-label="Mitglied für Foto-Demovorschlag auswählen"
+            aria-modal="true"
+            className="member-picker"
+            role="dialog"
+          >
+            <PageHeading
+              title={pickerProposal.status === "UNBEKANNT" ? "Mitglied auswählen" : "Andere Person"}
+              description="Die Auswahl wird erst nach Ihrer Bestätigung übernommen."
+            />
+            <label className="search-field">
+              <Search aria-hidden="true" />
+              <input
+                aria-label="Mitglied für Vorschlag suchen"
+                placeholder="Mitglied suchen …"
+                value={pickerSearch}
+                onChange={(event) => setPickerSearch(event.target.value)}
+              />
+            </label>
+            <div className="member-picker-list">
+              {pickerMembers.map((member) => (
+                <button
+                  aria-pressed={pickerMemberId === member.id}
+                  className={
+                    pickerMemberId === member.id
+                      ? "member-picker-option selected"
+                      : "member-picker-option"
+                  }
+                  key={member.id}
+                  type="button"
+                  onClick={() => setPickerMemberId(member.id)}
+                >
+                  <MemberAvatar initials={member.initials} />
+                  <span>
+                    <strong>{member.name}</strong>
+                    <BeltMark color={member.beltColor} grade={member.beltGrade} />
+                  </span>
+                  {pickerMemberId === member.id ? <CheckCircle2 aria-label="Ausgewählt" /> : null}
+                </button>
+              ))}
+            </div>
+            <div className="action-stack">
+              <PrimaryButton disabled={!pickerMemberId} onClick={confirmPicker}>
+                Ausgewähltes Mitglied übernehmen
+              </PrimaryButton>
+              <SecondaryButton onClick={closePicker}>Abbrechen</SecondaryButton>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -843,14 +909,14 @@ export function SummaryScreen({
         title="Gesamtliste prüfen"
         description={`${session.name} · ${formatSessionTime(session)} · ${session.dojo}`}
       />
-      <div className="summary-total">
+      <div className="summary-total" data-testid="summary-total">
         <span>Gesamt anwesend</span>
         <strong>{total}</strong>
       </div>
       {group("Verantwortlicher Trainer", responsible)}
       {group("Assistenztrainer", assistants)}
       {group("Teilnehmer", participants)}
-      <section className="summary-group">
+      <section className="summary-group" data-testid="summary-guests">
         <h2>
           Gäste<span>{guests.length}</span>
         </h2>
@@ -939,7 +1005,7 @@ export function CompleteScreen({
         <div>
           <dt>Datum und Zeit</dt>
           <dd>
-            {dateFormatter.format(session.startsAt)} · {formatSessionTime(session)}
+            {clubDateFormatter.format(session.startsAt)} · {formatSessionTime(session)}
           </dd>
         </div>
         <div>

@@ -6,6 +6,7 @@ import type { AppScreen, BeltColor } from "./types";
 interface AppShellProps extends PropsWithChildren {
   screen: AppScreen;
   onNavigate: (screen: AppScreen) => void;
+  reviewEnabled: boolean;
 }
 
 const navItems: ReadonlyArray<{ label: string; screen: AppScreen; icon: typeof Home }> = [
@@ -23,7 +24,7 @@ export function ToriiMark(): ReactNode {
   );
 }
 
-export function AppShell({ children, screen, onNavigate }: AppShellProps) {
+export function AppShell({ children, reviewEnabled, screen, onNavigate }: AppShellProps) {
   const hideNav = screen === "LOGIN";
   return (
     <div className="app-shell">
@@ -49,6 +50,7 @@ export function AppShell({ children, screen, onNavigate }: AppShellProps) {
         <nav aria-label="Hauptnavigation" className="bottom-nav">
           {navItems.map((item) => {
             const Icon = item.icon;
+            const disabled = item.screen === "SUMMARY" && !reviewEnabled;
             const active =
               screen === item.screen ||
               (item.screen === "MANUAL" &&
@@ -59,6 +61,7 @@ export function AppShell({ children, screen, onNavigate }: AppShellProps) {
               <button
                 aria-current={active ? "page" : undefined}
                 className={active ? "nav-item active" : "nav-item"}
+                disabled={disabled}
                 key={item.label}
                 type="button"
                 onClick={() => onNavigate(item.screen)}

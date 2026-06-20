@@ -206,6 +206,10 @@ svg {
 .nav-item.active {
   color: var(--red);
 }
+.nav-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
 
 .page-heading {
   margin-bottom: 22px;
@@ -938,6 +942,55 @@ input {
   display: grid;
   gap: 10px;
   margin-top: 20px;
+}
+
+.member-picker-backdrop {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: grid;
+  align-items: end;
+  padding: 18px;
+  background: rgb(15 23 42 / 58%);
+}
+.member-picker {
+  width: min(100%, 620px);
+  max-height: min(82vh, 760px);
+  margin: 0 auto;
+  padding: 20px;
+  overflow: auto;
+  border-radius: 18px 18px 12px 12px;
+  background: #fff;
+  box-shadow: 0 20px 60px rgb(15 23 42 / 28%);
+}
+.member-picker-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.member-picker-option {
+  display: grid;
+  width: 100%;
+  min-height: 70px;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 11px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  color: var(--ink);
+  background: #fff;
+  text-align: left;
+}
+.member-picker-option.selected {
+  border: 2px solid var(--red);
+  background: #fff8f7;
+}
+.member-picker-option strong {
+  display: block;
+}
+.member-picker-option > svg {
+  color: var(--red);
 }
 
 .summary-total {

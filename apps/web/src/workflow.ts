@@ -18,7 +18,7 @@ import type {
 
 export function sessionUiStatus(session: TrainingSessionMock, now = new Date()): SessionUiStatus {
   if (now < session.startsAt) return "BEVORSTEHEND";
-  if (now <= session.endsAt) return "LAEUFT";
+  if (now < session.endsAt) return "LAEUFT";
   return "BEENDET";
 }
 
@@ -53,6 +53,14 @@ export function presentMemberIds(attendance: AttendanceState): string[] {
   return Object.entries(attendance).flatMap(([memberId, selection]) =>
     selection.presenceStatus === PresenceStatus.PRESENT ? [memberId] : [],
   );
+}
+
+export function createLocalGuestIdFactory(prefix = "guest"): () => string {
+  let nextId = 0;
+  return () => {
+    nextId += 1;
+    return `${prefix}-${String(nextId).padStart(3, "0")}`;
+  };
 }
 
 export function canCompleteSession(

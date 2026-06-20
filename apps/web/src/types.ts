@@ -5,6 +5,21 @@ export type BeltColor = "WEISS" | "GELB" | "ORANGE" | "GRUEN" | "BLAU" | "BRAUN"
 export type SessionUiStatus = "BEVORSTEHEND" | "LAEUFT" | "BEENDET";
 export type GuestKind = "GAST" | "PROBETRAINING";
 export type ProposalStatus = "EINDEUTIG" | "PRUEFEN" | "UNBEKANNT" | "DUBLETTE";
+export type ProposalResolutionAction =
+  | "PRESELECTED_MEMBER"
+  | "CONFIRMED_MEMBER"
+  | "SELECTED_MEMBER"
+  | "MARKED_UNKNOWN"
+  | "GUEST_CREATED"
+  | "DISCARDED";
+export type ProposalDecision =
+  | "CONFIRM_CANDIDATE"
+  | "SELECT_MEMBER"
+  | "MARK_UNKNOWN"
+  | "CREATE_GUEST"
+  | "DISCARD"
+  | "RESET";
+export type CaptureMethod = "MANUAL" | "PHOTO_DEMO";
 
 export interface Member {
   id: string;
@@ -48,8 +63,17 @@ export interface PhotoProposal {
   label: string;
   status: ProposalStatus;
   candidateMemberId?: string;
-  alternateMemberId?: string;
+  selectedMemberId?: string;
+  guestId?: string;
+  resolutionAction: ProposalResolutionAction | null;
   resolved: boolean;
+}
+
+export interface WorkflowState {
+  trainingStarted: boolean;
+  captureMethod: CaptureMethod | null;
+  captureActivityRecorded: boolean;
+  attendanceReviewed: boolean;
 }
 
 export type AppScreen =

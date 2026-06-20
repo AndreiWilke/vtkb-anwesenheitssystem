@@ -54,7 +54,14 @@
       "flow": "photo-demo",
       "completed": true,
       "cameraAccess": false,
-      "unresolved": 0
+      "unresolved": 0,
+      "preselectedMemberCount": 1,
+      "uncertainDecision": "confirmed",
+      "unknownDecision": "guest",
+      "guestCount": 1,
+      "duplicateCountedOnce": true,
+      "summaryTotal": 5,
+      "visibleSummaryPeople": 5
     },
     {
       "screen": "statistics",

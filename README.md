@@ -35,6 +35,8 @@ Die Smartphone-first-PWA in `apps/web` bildet den vollständigen lokalen Bediena
 - rein simulierte Fotoassistenz ohne Kamera, Upload, Bilder oder Gesichtserkennung,
 - verpflichtende Trainerprüfung, lokale Abschlussansicht und interne Demo-Auswertung.
 
+Die fachliche Vereinszeitzone ist ausdrücklich `Europe/Berlin`. Lokale Trainingseinheiten und ihre Anzeige werden unabhängig von der Prozess- oder Systemzeitzone in dieser Zeitzone erzeugt; direkt aufeinanderfolgende Einheiten verwenden halb offene Zeitintervalle und wechseln deshalb exakt am gemeinsamen Zeitpunkt.
+
 Der Prototyp speichert nur im React-Zustand des aktuellen Browser-Tabs. Ein Neuladen setzt die Demo zurück. Details und Prüfergebnisse stehen in [docs/PACKAGE_1_REPORT.md](docs/PACKAGE_1_REPORT.md).
 
 ## Zielarchitektur spaeterer Pakete

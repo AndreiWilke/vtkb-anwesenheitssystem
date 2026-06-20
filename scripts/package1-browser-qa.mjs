@@ -72,10 +72,27 @@ await page.getByRole("button", { name: /Fotoassistenz – nur Demo/ }).click();
 await page.getByText(/keine Bilder werden aufgenommen oder verarbeitet/i).waitFor();
 await page.getByRole("button", { name: "Demo-Analyse starten" }).click();
 await page.getByRole("heading", { name: "Demo-Vorschläge prüfen" }).waitFor();
-const confirmButtons = page.getByRole("button", { name: "Bestätigen" });
-for (const button of await confirmButtons.all()) {
-  if (await button.isEnabled()) await button.click();
+
+const preselectedProposal = page.getByTestId("proposal-1");
+if ((await preselectedProposal.getByText("Sicher vorausgewählt").count()) !== 1) {
+  throw new Error("Der eindeutige Vorschlag ist nicht sichtbar vorausgewählt");
 }
+
+const uncertainProposal = page.getByTestId("proposal-2");
+await uncertainProposal.getByRole("button", { name: "Bestätigen" }).click();
+await uncertainProposal.getByText("Person bestätigt").waitFor();
+
+const unknownProposal = page.getByTestId("proposal-3");
+if ((await unknownProposal.getByRole("button", { name: "Bestätigen" }).count()) !== 0) {
+  throw new Error("Ein unbekanntes Gesicht bietet unzulässig eine allgemeine Bestätigung an");
+}
+await unknownProposal.getByRole("button", { name: "Als Gast erfassen" }).click();
+await unknownProposal.getByText("Als Gast erfasst").waitFor();
+
+const duplicateProposal = page.getByTestId("proposal-4");
+await duplicateProposal.getByRole("button", { name: "Bestätigen" }).click();
+await duplicateProposal.getByText("Person bestätigt").waitFor();
+
 await page.getByText("Alle Vorschläge geklärt").waitFor();
 await page.evaluate(() => window.scrollTo(0, 0));
 await page.screenshot({ path: screenshotPath("photo-review-390.png") });
@@ -83,7 +100,33 @@ await page.getByRole("button", { name: "Gesamtliste öffnen" }).click();
 const photoSave = page.getByRole("button", { name: "Liste geprüft und speichern" });
 if (!(await photoSave.isEnabled()))
   throw new Error("Geklärter Foto-Demoablauf ist nicht speicherbar");
-results.push({ flow: "photo-demo", completed: true, cameraAccess: false, unresolved: 0 });
+const summaryTotal = Number(await page.getByTestId("summary-total").locator("strong").innerText());
+const visibleSummaryPeople = await page.locator(".summary-person").count();
+const visibleGuests = await page.getByTestId("summary-guests").locator(".summary-person").count();
+const mikaEntries = await page.getByText("Mika Beispiel", { exact: true }).count();
+if (summaryTotal !== visibleSummaryPeople) {
+  throw new Error(
+    `Gesamtsumme ${summaryTotal} entspricht nicht ${visibleSummaryPeople} sichtbaren Einzelgruppen`,
+  );
+}
+if (visibleGuests !== 1)
+  throw new Error(`Erwartet wurde genau ein Gast, erhalten: ${visibleGuests}`);
+if (mikaEntries !== 1)
+  throw new Error(`Der vorausgewählte Vorschlag wurde ${mikaEntries}-mal statt einmal gezählt`);
+if (summaryTotal !== 5) throw new Error(`Unerwartete Foto-Demo-Gesamtsumme: ${summaryTotal}`);
+results.push({
+  flow: "photo-demo",
+  completed: true,
+  cameraAccess: false,
+  unresolved: 0,
+  preselectedMemberCount: mikaEntries,
+  uncertainDecision: "confirmed",
+  unknownDecision: "guest",
+  guestCount: visibleGuests,
+  duplicateCountedOnce: true,
+  summaryTotal,
+  visibleSummaryPeople,
+});
 
 await page.getByRole("button", { name: "Auswertung" }).click();
 await page.getByRole("heading", { name: "Auswertung · Demo" }).waitFor();

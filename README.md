@@ -1,6 +1,6 @@
 # VTKB Digitales Anwesenheitssystem
 
-> **Status:** Projektgrundlage (Paket 0). Es besteht keine Produktivfreigabe. Es werden keine AWS-Ressourcen bereitgestellt und keine echten Personen-, Foto- oder biometrischen Daten verarbeitet.
+> **Status:** Lokaler klickbarer UX-Prototyp (Paket 1). Es besteht keine Produktivfreigabe. Es werden keine AWS-Ressourcen bereitgestellt und keine echten Personen-, Foto- oder biometrischen Daten verarbeitet.
 
 ## Projektziel
 
@@ -25,6 +25,18 @@ Es gibt keinen festen Kader. Alle aktiven Mitglieder koennen grundsaetzlich an e
 - Eine Trainer- oder Assistenzfunktion impliziert `PRESENT` und wird nicht zusaetzlich als Teilnehmer gezaehlt.
 - Dauerhafte Qualifikation und heutige Funktion sind verschiedene fachliche Konzepte.
 
+## Paket-1-Prototyp
+
+Die Smartphone-first-PWA in `apps/web` bildet den vollständigen lokalen Bedienablauf mit 40 eindeutig fiktiven Mitgliedern ab:
+
+- vorgeschlagene oder frei gewählte Trainingseinheit,
+- genau ein verantwortlicher Trainer und optionale Assistenztrainer,
+- vollständige manuelle Anwesenheit mit Suche, Filtern, Rollen und Gästen,
+- rein simulierte Fotoassistenz ohne Kamera, Upload, Bilder oder Gesichtserkennung,
+- verpflichtende Trainerprüfung, lokale Abschlussansicht und interne Demo-Auswertung.
+
+Der Prototyp speichert nur im React-Zustand des aktuellen Browser-Tabs. Ein Neuladen setzt die Demo zurück. Details und Prüfergebnisse stehen in [docs/PACKAGE_1_REPORT.md](docs/PACKAGE_1_REPORT.md).
+
 ## Zielarchitektur spaeterer Pakete
 
 - React, TypeScript und Vite als Smartphone-first-PWA.
@@ -40,7 +52,7 @@ Diese Architektur wird in Paket 0 nur dokumentiert. Die Entscheidungen stehen in
 ## Repository-Struktur
 
 ```text
-apps/web/                    spaetere PWA
+apps/web/                    lokaler Paket-1-UX-Prototyp
 services/api/                spaetere HTTP-API und Geschaeftslogik
 services/recognition-worker/ spaetere asynchrone Fotoassistenz
 packages/shared/             gemeinsame Typen und Validierung
@@ -50,7 +62,7 @@ docs/                        ADRs, Datenschutz, Runbooks und API-Dokumentation
 docs/reference/              Machbarkeitsstudie, Prompts und neutrale Diagramme
 ```
 
-Die npm-Workspaces heissen `@vtkb/web`, `@vtkb/api`, `@vtkb/recognition-worker` und `@vtkb/shared`. Die ersten drei enthalten in Paket 0 ausschliesslich Metadaten und beginnen noch keine Implementierung.
+Die npm-Workspaces heissen `@vtkb/web`, `@vtkb/api`, `@vtkb/recognition-worker` und `@vtkb/shared`. Nur `@vtkb/web` enthält in Paket 1 eine lokale Implementierung; API und Recognition Worker bleiben Metadaten-Platzhalter.
 
 ## Lokale Entwicklung
 
@@ -58,11 +70,19 @@ Als lokale Standardumgebung wird Node.js 22.12 oder neuer mit npm empfohlen. Ver
 
 ```powershell
 npm ci
+npm run dev
+```
+
+Der lokale Prototyp ist danach standardmäßig unter `http://127.0.0.1:5173` erreichbar. Weitere Prüf- und Buildbefehle:
+
+```powershell
 npm run format:check
 npm run lint
 npm run typecheck
 npm test
 npm run check
+npm run build
+npm run preview
 ```
 
 `npm ci` installiert exakt den Stand aus `package-lock.json` und ist deshalb der reproduzierbare Standard. `npm run check` fuehrt alle nicht veraendernden Qualitaetspruefungen nacheinander aus. Fuer automatische Formatierung steht `npm run format` bereit.

@@ -1,0 +1,9 @@
+node_modules/
+coverage/
+dist/
+package-lock.json
+pnpm-lock.yaml
+VTKB_*.md
+VTKB_*.docx
+VTKB_*.zip
+

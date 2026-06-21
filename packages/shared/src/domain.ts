@@ -50,6 +50,7 @@ export const TrainingSessionStatus = {
   PLANNED: "PLANNED",
   IN_PROGRESS: "IN_PROGRESS",
   COMPLETED: "COMPLETED",
+  ABORTED: "ABORTED",
   CANCELLED: "CANCELLED",
 } as const;
 
@@ -142,8 +143,11 @@ export interface SettlementSnapshot {
   lines: readonly SettlementLine[];
   corrections: readonly CompensationCorrection[];
   totalCents: number;
-  approvedAt: string;
-  approvedBy: string;
+  snapshotKind: "APPROVAL" | "CANCELLATION";
+  capturedAt: string;
+  capturedBy: string;
+  approvedAt: string | null;
+  approvedBy: string | null;
 }
 
 export interface AuditEntry {

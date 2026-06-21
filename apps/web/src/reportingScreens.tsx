@@ -2,8 +2,10 @@ import { useMemo, useState } from "react";
 import {
   DemoRole,
   MemberQualification,
+  PresenceStatus,
   SessionRole,
   SettlementStatus,
+  TrainingSessionStatus,
   type AuditEntry,
   type CompensationCorrection,
   type CompensationRate,
@@ -38,19 +40,33 @@ import {
 } from "./components";
 import {
   aggregateAttendance,
+  addSettlementCorrection,
   attendanceCsv,
   calculateSettlement,
-  canTransitionSettlement,
+  calculateDashboardMetrics,
   compensationCsv,
+  createCancellationSnapshot,
   createCorrection,
   createSettlementSnapshot,
   filterSessionsByPeriod,
   formatEuro,
+  isSettlementEditable,
+  isSettlementRelevant,
+  memberAttendanceEntries,
+  membersWithTrainerActivity,
   monthlyAttendance,
+  parseEuroToCents,
   paymentCsv,
+  removeSettlementCorrection,
+  resolveSettlementView,
   roleCan,
+  transitionSettlementStatus,
+  validateCompensationRates,
+  validateSettlementForApproval,
+  validateSettlementForReview,
   type MemberAttendanceSummary,
   type PeriodFilter,
+  type SettlementView,
 } from "./reporting";
 import { historicalSessions, initialCompensationRates } from "./reportingMockData";
 import { clubTimeFormatter } from "./time";
@@ -161,6 +177,8 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
   const [correctionOpen, setCorrectionOpen] = useState(false);
   const [correctionAmount, setCorrectionAmount] = useState("");
   const [correctionReason, setCorrectionReason] = useState("");
+  const [correctionError, setCorrectionError] = useState("");
+  const [transitionErrors, setTransitionErrors] = useState<Record<string, string>>({});
   const [periodMode, setPeriodMode] = useState<PeriodFilter["mode"]>("MONTH");
   const [year, setYear] = useState(2026);
   const [rangeFrom, setRangeFrom] = useState("2026-01-01");
@@ -218,23 +236,32 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
     ],
   );
 
-  const trainerMembers = members.filter((member) =>
-    historicalSessions.some((session) =>
-      session.attendance.some(
-        (record) =>
-          record.memberId === member.id &&
-          (record.sessionRole === SessionRole.RESPONSIBLE_TRAINER ||
-            record.sessionRole === SessionRole.ASSISTANT_TRAINER),
-      ),
-    ),
-  );
+  const trainerMembers = membersWithTrainerActivity(members, historicalSessions);
   const keyFor = (memberId: string) => `${month}:${memberId}`;
+  const hasStoredStatus = (memberId: string) => keyFor(memberId) in statuses;
   const statusFor = (memberId: string) => statuses[keyFor(memberId)] ?? SettlementStatus.DRAFT;
   const correctionsFor = (memberId: string) => corrections[keyFor(memberId)] ?? [];
   const calculationFor = (memberId: string) =>
     calculateSettlement(memberId, month, historicalSessions, rates, correctionsFor(memberId));
-  const displayTotal = (memberId: string) =>
-    snapshots[keyFor(memberId)]?.totalCents ?? calculationFor(memberId).totalCents;
+  const settlementViewFor = (memberId: string) =>
+    resolveSettlementView(
+      statusFor(memberId),
+      calculationFor(memberId),
+      snapshots[keyFor(memberId)],
+      correctionsFor(memberId),
+    );
+  const relevantSettlementMembers = trainerMembers.filter((member) =>
+    isRelevantSettlement(member.id),
+  );
+
+  function isRelevantSettlement(memberId: string): boolean {
+    return isSettlementRelevant({
+      calculation: calculationFor(memberId),
+      corrections: correctionsFor(memberId),
+      hasStoredStatus: hasStoredStatus(memberId),
+      snapshot: snapshots[keyFor(memberId)],
+    });
+  }
 
   const addAudit = (
     action: string,
@@ -265,7 +292,17 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
 
   const transition = (memberId: string, next: SettlementStatusValue) => {
     const previous = statusFor(memberId);
-    if (!canTransitionSettlement(previous, next)) return;
+    const calculation = calculationFor(memberId);
+    try {
+      transitionSettlementStatus(previous, next, calculation);
+      setTransitionErrors((current) => ({ ...current, [keyFor(memberId)]: "" }));
+    } catch (error) {
+      setTransitionErrors((current) => ({
+        ...current,
+        [keyFor(memberId)]: error instanceof Error ? error.message : "Statuswechsel blockiert.",
+      }));
+      return;
+    }
     if (
       requiresConfirmation(next) &&
       !window.confirm(
@@ -281,7 +318,15 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
     const key = keyFor(memberId);
     if (next === SettlementStatus.APPROVED) {
       const snapshot = createSettlementSnapshot(
-        calculationFor(memberId),
+        calculation,
+        correctionsFor(memberId),
+        "Vorstand Demo A",
+        new Date().toISOString(),
+      );
+      setSnapshots((current) => ({ ...current, [key]: snapshot }));
+    } else if (next === SettlementStatus.CANCELLED && snapshots[key] === undefined) {
+      const snapshot = createCancellationSnapshot(
+        calculation,
         correctionsFor(memberId),
         "Vorstand Demo A",
         new Date().toISOString(),
@@ -303,28 +348,53 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
   };
 
   const saveCorrection = () => {
-    const amountCents = Math.round(Number(correctionAmount.replace(",", ".")) * 100);
-    const correction = createCorrection({
-      id: `correction-${Date.now()}`,
-      amountCents,
-      reason: correctionReason,
-      editedBy: "Vorstand Demo A",
-      editedAt: new Date().toISOString(),
-    });
     const key = keyFor(selectedMemberId);
-    setCorrections((current) => ({ ...current, [key]: [...(current[key] ?? []), correction] }));
-    addAudit("Korrektur hinzugefügt", key, null, formatEuro(amountCents), correction.reason);
+    const parsed = parseEuroToCents(correctionAmount);
+    if (!parsed.ok || parsed.cents === undefined) {
+      setCorrectionError(parsed.error ?? "Ungültiger Betrag.");
+      return;
+    }
+    try {
+      const correction = createCorrection({
+        id: `correction-${Date.now()}`,
+        amountCents: parsed.cents,
+        reason: correctionReason,
+        editedBy: "Vorstand Demo A",
+        editedAt: new Date().toISOString(),
+      });
+      const nextCorrections = addSettlementCorrection(
+        correctionsFor(selectedMemberId),
+        correction,
+        statusFor(selectedMemberId),
+      );
+      setCorrections((current) => ({ ...current, [key]: nextCorrections }));
+      addAudit("Korrektur hinzugefügt", key, null, formatEuro(parsed.cents), correction.reason);
+    } catch (error) {
+      setCorrectionError(error instanceof Error ? error.message : "Korrektur ist ungültig.");
+      return;
+    }
     setCorrectionOpen(false);
     setCorrectionAmount("");
     setCorrectionReason("");
+    setCorrectionError("");
   };
 
   const removeCorrection = (correction: CompensationCorrection) => {
     const key = keyFor(selectedMemberId);
-    setCorrections((current) => ({
-      ...current,
-      [key]: (current[key] ?? []).filter((item) => item.id !== correction.id),
-    }));
+    try {
+      const nextCorrections = removeSettlementCorrection(
+        correctionsFor(selectedMemberId),
+        correction.id,
+        statusFor(selectedMemberId),
+      );
+      setCorrections((current) => ({ ...current, [key]: nextCorrections }));
+    } catch (error) {
+      setTransitionErrors((current) => ({
+        ...current,
+        [key]: error instanceof Error ? error.message : "Korrektur kann nicht entfernt werden.",
+      }));
+      return;
+    }
     addAudit(
       "Korrektur entfernt",
       key,
@@ -370,6 +440,12 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
             { view: "AUDIT", label: "Audit", icon: FileClock },
             { view: "PAYMENTS", label: "Zahlungsliste", icon: WalletCards },
           ];
+  const correctionAmountValidation = parseEuroToCents(correctionAmount);
+  const visibleCorrectionError =
+    correctionError ||
+    (correctionAmount && !correctionAmountValidation.ok
+      ? (correctionAmountValidation.error ?? "Ungültiger Betrag.")
+      : "");
 
   return (
     <section className="reporting-root">
@@ -409,9 +485,10 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
       {activeView === "DASHBOARD" ? (
         <Dashboard
           month={month}
-          members={members}
-          rates={rates}
-          statuses={trainerMembers.map((member) => statusFor(member.id))}
+          settlements={relevantSettlementMembers.map((member) => ({
+            status: statusFor(member.id),
+            view: settlementViewFor(member.id),
+          }))}
           onMonthChange={setMonth}
         />
       ) : null}
@@ -525,7 +602,7 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
               ]}
             />
             <FilterSelect
-              label="Heutige Funktion"
+              label="Dauerhafte Qualifikation"
               value={qualification}
               onChange={setQualification}
               options={[
@@ -609,7 +686,7 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
             }
             month={month}
             statusFor={statusFor}
-            calculationFor={calculationFor}
+            settlementViewFor={settlementViewFor}
             onOpen={(memberId) => {
               setSelectedMemberId(memberId);
               setView("TRAINER_DETAIL");
@@ -641,9 +718,9 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
                   "aufwandsentschaedigung.csv",
                   compensationCsv(
                     month,
-                    trainerMembers.map((member) => ({
+                    relevantSettlementMembers.map((member) => ({
                       member,
-                      calculation: calculationFor(member.id),
+                      settlement: settlementViewFor(member.id),
                       status: statusFor(member.id),
                     })),
                   ),
@@ -657,10 +734,9 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
             </SecondaryButton>
           </div>
           <SettlementList
-            members={trainerMembers}
+            members={relevantSettlementMembers}
             statusFor={statusFor}
-            calculationFor={calculationFor}
-            displayTotal={displayTotal}
+            settlementViewFor={settlementViewFor}
             onOpen={openSettlement}
           />
         </section>
@@ -675,12 +751,18 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
           }
           month={month}
           calculation={calculationFor(activeView === "OWN" ? "member-01" : selectedMemberId)}
-          corrections={correctionsFor(activeView === "OWN" ? "member-01" : selectedMemberId)}
+          settlement={settlementViewFor(activeView === "OWN" ? "member-01" : selectedMemberId)}
           snapshot={snapshots[keyFor(activeView === "OWN" ? "member-01" : selectedMemberId)]}
           status={statusFor(activeView === "OWN" ? "member-01" : selectedMemberId)}
+          transitionError={
+            transitionErrors[keyFor(activeView === "OWN" ? "member-01" : selectedMemberId)] ?? ""
+          }
           demoRole={demoRole}
           onBack={() => setView("SETTLEMENTS")}
-          onAddCorrection={() => setCorrectionOpen(true)}
+          onAddCorrection={() => {
+            setCorrectionError("");
+            setCorrectionOpen(true);
+          }}
           onRemoveCorrection={removeCorrection}
           onTransition={(next) =>
             transition(activeView === "OWN" ? "member-01" : selectedMemberId, next)
@@ -708,20 +790,20 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
 
       {activeView === "PAYMENTS" ? (
         <PaymentList
-          displayTotal={displayTotal}
-          members={trainerMembers}
+          members={relevantSettlementMembers}
           month={month}
+          settlementViewFor={settlementViewFor}
           statusFor={statusFor}
           onExport={() =>
             downloadCsv(
               "zahlungsliste.csv",
               paymentCsv(
                 month,
-                trainerMembers
+                relevantSettlementMembers
                   .filter((member) => isPayableStatus(statusFor(member.id)))
                   .map((member) => ({
                     member,
-                    totalCents: displayTotal(member.id),
+                    totalCents: settlementViewFor(member.id).totalCents,
                     status: statusFor(member.id),
                   })),
               ),
@@ -759,7 +841,10 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
                 inputMode="decimal"
                 placeholder="z. B. -10,00"
                 value={correctionAmount}
-                onChange={(event) => setCorrectionAmount(event.target.value)}
+                onChange={(event) => {
+                  setCorrectionAmount(event.target.value);
+                  setCorrectionError("");
+                }}
               />
             </label>
             <label>
@@ -767,15 +852,19 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
               <textarea
                 aria-label="Korrekturbegründung"
                 value={correctionReason}
-                onChange={(event) => setCorrectionReason(event.target.value)}
+                onChange={(event) => {
+                  setCorrectionReason(event.target.value);
+                  setCorrectionError("");
+                }}
               />
             </label>
+            {visibleCorrectionError ? (
+              <p className="field-error" role="alert">
+                {visibleCorrectionError}
+              </p>
+            ) : null}
             <PrimaryButton
-              disabled={
-                !correctionReason.trim() ||
-                !correctionAmount ||
-                Number(correctionAmount.replace(",", ".")) === 0
-              }
+              disabled={!correctionReason.trim() || !correctionAmountValidation.ok}
               onClick={saveCorrection}
             >
               Korrektur speichern
@@ -828,59 +917,36 @@ function FilterSelect({
 
 function Dashboard({
   month,
-  members,
-  rates,
-  statuses,
+  settlements,
   onMonthChange,
 }: {
   month: string;
-  members: readonly Member[];
-  rates: readonly CompensationRate[];
-  statuses: readonly SettlementStatusValue[];
+  settlements: ReadonlyArray<{ status: SettlementStatusValue; view: SettlementView }>;
   onMonthChange: (month: string) => void;
 }) {
-  const sessions = filterSessionsByPeriod(historicalSessions, { mode: "MONTH", month });
-  const records = sessions.flatMap((session) => session.attendance);
-  const unique = new Set(records.map((record) => record.memberId)).size;
-  const settlements = members.map((member) =>
-    calculateSettlement(member.id, month, historicalSessions, rates),
+  const sessions = filterSessionsByPeriod(historicalSessions, { mode: "MONTH", month }).filter(
+    (session) => session.status === TrainingSessionStatus.COMPLETED,
   );
+  const dashboard = calculateDashboardMetrics(sessions, settlements);
   const metrics = [
-    ["Abgeschlossene Einheiten", sessions.length],
-    ["Unterschiedliche Anwesende", unique],
-    ["Gesamte Anwesenheiten", records.length],
-    [
-      "Verantwortliche Einsätze",
-      records.filter((record) => record.sessionRole === SessionRole.RESPONSIBLE_TRAINER).length,
-    ],
-    [
-      "Assistenz-Einsätze",
-      records.filter((record) => record.sessionRole === SessionRole.ASSISTANT_TRAINER).length,
-    ],
-    [
-      "Voraussichtliche Gesamtvergütung",
-      formatEuro(settlements.reduce((sum, item) => sum + item.totalCents, 0)),
-    ],
-    [
-      "Abrechnungen im Entwurf",
-      statuses.filter((status) => status === SettlementStatus.DRAFT).length,
-    ],
-    [
-      "Geprüfte Abrechnungen",
-      statuses.filter((status) => status === SettlementStatus.REVIEWED).length,
-    ],
-    [
-      "Freigegebene Abrechnungen",
-      statuses.filter((status) => status === SettlementStatus.APPROVED).length,
-    ],
-    ["Bezahlte Abrechnungen", statuses.filter((status) => status === SettlementStatus.PAID).length],
-    ["Offene Prüfhinweise", settlements.reduce((sum, item) => sum + item.reviewNotes.length, 0)],
+    ["Abgeschlossene Einheiten", dashboard.completedSessions],
+    ["Unterschiedliche Anwesende", dashboard.uniquePresentMembers],
+    ["Gesamte Anwesenheiten", dashboard.totalAttendances],
+    ["Verantwortliche Einsätze", dashboard.responsibleAssignments],
+    ["Assistenz-Einsätze", dashboard.assistantAssignments],
+    ["Voraussichtliche Gesamtvergütung", formatEuro(dashboard.totalCompensationCents)],
+    ["Abrechnungen im Entwurf", dashboard.draftSettlements],
+    ["Geprüfte Abrechnungen", dashboard.reviewedSettlements],
+    ["Freigegebene Abrechnungen", dashboard.approvedSettlements],
+    ["Bezahlte Abrechnungen", dashboard.paidSettlements],
+    ["Offene Prüfhinweise", dashboard.openReviewNotes],
   ] as const;
   const development = Array.from({ length: 6 }, (_, index) => {
     const key = `2026-${String(index + 1).padStart(2, "0")}`;
-    const count = filterSessionsByPeriod(historicalSessions, { mode: "MONTH", month: key }).flatMap(
-      (session) => session.attendance,
-    ).length;
+    const count = filterSessionsByPeriod(historicalSessions, { mode: "MONTH", month: key })
+      .filter((session) => session.status === TrainingSessionStatus.COMPLETED)
+      .flatMap((session) => session.attendance)
+      .filter((record) => record.presenceStatus === PresenceStatus.PRESENT).length;
     return { key, count };
   });
   const max = Math.max(...development.map((item) => item.count));
@@ -995,24 +1061,16 @@ function MemberDetail({
   const [monthFilter, setMonthFilter] = useState("");
   const [yearFilter, setYearFilter] = useState("");
   const [trainingFilter, setTrainingFilter] = useState("");
-  const entries = historicalSessions
-    .flatMap((session) =>
-      session.attendance
-        .filter(
-          (record) =>
-            record.memberId === member.id &&
-            (!monthFilter || session.date.startsWith(monthFilter)) &&
-            (!yearFilter || session.date.startsWith(`${yearFilter}-`)) &&
-            (!trainingFilter || session.trainingType === trainingFilter) &&
-            (!roleFilter || record.sessionRole === roleFilter),
-        )
-        .map((record) => ({ session, record })),
-    )
-    .sort((a, b) =>
-      sortDescending
-        ? b.session.date.localeCompare(a.session.date)
-        : a.session.date.localeCompare(b.session.date),
-    );
+  const entries = memberAttendanceEntries(member.id, historicalSessions, {
+    month: monthFilter,
+    year: yearFilter,
+    trainingType: trainingFilter,
+    role: roleFilter,
+  }).sort((a, b) =>
+    sortDescending
+      ? b.session.date.localeCompare(a.session.date)
+      : a.session.date.localeCompare(b.session.date),
+  );
   return (
     <section>
       <button className="text-button" type="button" onClick={onBack}>
@@ -1072,7 +1130,9 @@ function MemberDetail({
       <div className="responsive-data-list">
         {entries.map(({ session, record }) => {
           const responsible = session.attendance.find(
-            (item) => item.sessionRole === SessionRole.RESPONSIBLE_TRAINER,
+            (item) =>
+              item.presenceStatus === PresenceStatus.PRESENT &&
+              item.sessionRole === SessionRole.RESPONSIBLE_TRAINER,
           );
           return (
             <article className="data-card" key={session.id}>
@@ -1118,13 +1178,13 @@ function TrainerList({
   members,
   month,
   statusFor,
-  calculationFor,
+  settlementViewFor,
   onOpen,
 }: {
   members: readonly Member[];
   month: string;
   statusFor: (id: string) => SettlementStatusValue;
-  calculationFor: (id: string) => ReturnType<typeof calculateSettlement>;
+  settlementViewFor: (id: string) => SettlementView;
   onOpen: (id: string) => void;
 }) {
   const yearly = aggregateAttendance(members, historicalSessions, { mode: "YEAR", year: 2026 });
@@ -1132,7 +1192,7 @@ function TrainerList({
     <div className="responsive-data-list">
       {members.map((member) => {
         const summary = yearly.find((item) => item.member.id === member.id)!;
-        const calculation = calculationFor(member.id);
+        const settlement = settlementViewFor(member.id);
         return (
           <button
             className="data-card"
@@ -1164,12 +1224,12 @@ function TrainerList({
             <span>
               <small>Abrechnungsfähig {displayMonth(month)}</small>
               <strong>
-                {calculation.responsibleCount} / {calculation.assistantCount}
+                {settlement.responsibleCount} / {settlement.assistantCount}
               </strong>
             </span>
             <span>
               <small>Automatisch</small>
-              <strong>{formatEuro(calculation.totalCents)}</strong>
+              <strong>{formatEuro(settlement.totalCents)}</strong>
             </span>
             <StatusTag tone={statusTone(statusFor(member.id))}>
               {statusLabels[statusFor(member.id)]}
@@ -1184,20 +1244,18 @@ function TrainerList({
 function SettlementList({
   members,
   statusFor,
-  calculationFor,
-  displayTotal,
+  settlementViewFor,
   onOpen,
 }: {
   members: readonly Member[];
   statusFor: (id: string) => SettlementStatusValue;
-  calculationFor: (id: string) => ReturnType<typeof calculateSettlement>;
-  displayTotal: (id: string) => number;
+  settlementViewFor: (id: string) => SettlementView;
   onOpen: (id: string) => void;
 }) {
   return (
     <div className="responsive-data-list">
       {members.map((member) => {
-        const calculation = calculationFor(member.id);
+        const settlement = settlementViewFor(member.id);
         return (
           <button
             className="data-card settlement-card"
@@ -1212,28 +1270,28 @@ function SettlementList({
             <span>
               <small>Trainer</small>
               <strong>
-                {calculation.responsibleCount} · {formatEuro(calculation.responsibleCents)}
+                {settlement.responsibleCount} · {formatEuro(settlement.responsibleCents)}
               </strong>
             </span>
             <span>
               <small>Assistenz</small>
               <strong>
-                {calculation.assistantCount} · {formatEuro(calculation.assistantCents)}
+                {settlement.assistantCount} · {formatEuro(settlement.assistantCents)}
               </strong>
             </span>
             <span>
               <small>Korrekturen</small>
-              <strong>{formatEuro(calculation.correctionCents)}</strong>
+              <strong>{formatEuro(settlement.correctionCents)}</strong>
             </span>
             <span className="money-total">
               <small>Gesamt</small>
-              <strong>{formatEuro(displayTotal(member.id))}</strong>
+              <strong>{formatEuro(settlement.totalCents)}</strong>
             </span>
             <StatusTag tone={statusTone(statusFor(member.id))}>
               {statusLabels[statusFor(member.id)]}
             </StatusTag>
-            {calculation.reviewNotes.length ? (
-              <span className="review-note">{calculation.reviewNotes.length} Prüfhinweis(e)</span>
+            {settlement.reviewNotes.length ? (
+              <span className="review-note">{settlement.reviewNotes.length} Prüfhinweis(e)</span>
             ) : null}
           </button>
         );
@@ -1246,9 +1304,10 @@ function SettlementDetail({
   member,
   month,
   calculation,
-  corrections,
+  settlement,
   snapshot,
   status,
+  transitionError,
   demoRole,
   onBack,
   onAddCorrection,
@@ -1258,9 +1317,10 @@ function SettlementDetail({
   member: Member;
   month: string;
   calculation: ReturnType<typeof calculateSettlement>;
-  corrections: readonly CompensationCorrection[];
+  settlement: SettlementView;
   snapshot?: SettlementSnapshot;
   status: SettlementStatusValue;
+  transitionError: string;
   demoRole: DemoRoleValue;
   onBack: () => void;
   onAddCorrection: () => void;
@@ -1271,17 +1331,19 @@ function SettlementDetail({
     mode: "YEAR",
     year: 2026,
   })[0];
-  const lines = snapshot?.lines ?? calculation.lines;
-  const shownCorrections = snapshot?.corrections ?? corrections;
-  const frozen = status === SettlementStatus.APPROVED || status === SettlementStatus.PAID;
-  const trainerSubtotal = lines
-    .filter((line) => line.role === SessionRole.RESPONSIBLE_TRAINER)
-    .reduce((sum, line) => sum + (line.amountCents ?? 0), 0);
-  const assistantSubtotal = lines
-    .filter((line) => line.role === SessionRole.ASSISTANT_TRAINER)
-    .reduce((sum, line) => sum + (line.amountCents ?? 0), 0);
-  const correctionTotal = shownCorrections.reduce((sum, item) => sum + item.amountCents, 0);
-  const total = snapshot?.totalCents ?? calculation.totalCents;
+  const lines = settlement.lines;
+  const shownCorrections = settlement.corrections;
+  const editable = isSettlementEditable(status);
+  const reviewValidation = validateSettlementForReview(calculation);
+  const approvalValidation = validateSettlementForApproval(calculation);
+  const subtitle =
+    status === SettlementStatus.CANCELLED
+      ? snapshot?.snapshotKind === "APPROVAL"
+        ? "Storniert nach Freigabe · historischer Snapshot bleibt verbindlich"
+        : "Storniert vor Freigabe · eingefrorener Stand"
+      : settlement.source === "SNAPSHOT"
+        ? "Freigegebener Snapshot – unveränderlich"
+        : "Entwurf – Änderungen an Sätzen berechnen automatisch neu";
   return (
     <section className="print-sheet">
       <div className="no-print">
@@ -1289,14 +1351,7 @@ function SettlementDetail({
           <ArrowLeft aria-hidden="true" /> Zur Monatsabrechnung
         </button>
       </div>
-      <SectionTitle
-        title={`${member.name} · ${displayMonth(month)}`}
-        subtitle={
-          frozen
-            ? "Freigegebener Snapshot – unveränderlich"
-            : "Entwurf – Änderungen an Sätzen berechnen automatisch neu"
-        }
-      />
+      <SectionTitle title={`${member.name} · ${displayMonth(month)}`} subtitle={subtitle} />
       {demoRole === DemoRole.TRAINER && ownAttendance ? (
         <div className="dashboard-grid own-attendance-summary">
           <article>
@@ -1319,19 +1374,30 @@ function SettlementDetail({
       ) : null}
       <div className="settlement-header">
         <StatusTag tone={statusTone(status)}>{statusLabels[status]}</StatusTag>
-        {snapshot ? (
+        {snapshot?.snapshotKind === "APPROVAL" && snapshot.approvedAt && snapshot.approvedBy ? (
           <span>
             Freigegeben {dateFormatter.format(new Date(snapshot.approvedAt))} durch{" "}
             {snapshot.approvedBy}
           </span>
+        ) : snapshot ? (
+          <span>
+            Bei Stornierung eingefroren {dateFormatter.format(new Date(snapshot.capturedAt))} durch{" "}
+            {snapshot.capturedBy}
+          </span>
         ) : null}
       </div>
-      {calculation.reviewNotes.length ? (
+      {settlement.reviewNotes.length ? (
         <div className="validation-box">
           <strong>Prüfhinweis</strong>
-          {calculation.reviewNotes.map((note) => (
+          {settlement.reviewNotes.map((note) => (
             <div key={note}>{note}</div>
           ))}
+        </div>
+      ) : null}
+      {transitionError ? (
+        <div className="validation-box" role="alert">
+          <strong>Statuswechsel nicht möglich</strong>
+          <div>{transitionError}</div>
         </div>
       ) : null}
       <div className="responsive-data-list settlement-lines">
@@ -1376,7 +1442,7 @@ function SettlementDetail({
                   {correction.reason} · {correction.editedBy}
                 </small>
               </span>
-              {!frozen && demoRole === DemoRole.BOARD ? (
+              {editable && demoRole === DemoRole.BOARD ? (
                 <button
                   aria-label="Korrektur entfernen"
                   className="icon-button no-print"
@@ -1391,7 +1457,7 @@ function SettlementDetail({
         ) : (
           <p>Keine Korrekturen.</p>
         )}
-        {!frozen && demoRole === DemoRole.BOARD ? (
+        {editable && demoRole === DemoRole.BOARD ? (
           <SecondaryButton className="no-print" onClick={onAddCorrection}>
             Korrektur hinzufügen
           </SecondaryButton>
@@ -1400,19 +1466,19 @@ function SettlementDetail({
       <dl className="settlement-totals">
         <div>
           <dt>Zwischensumme Trainer</dt>
-          <dd>{formatEuro(trainerSubtotal)}</dd>
+          <dd>{formatEuro(settlement.responsibleCents)}</dd>
         </div>
         <div>
           <dt>Zwischensumme Assistenz</dt>
-          <dd>{formatEuro(assistantSubtotal)}</dd>
+          <dd>{formatEuro(settlement.assistantCents)}</dd>
         </div>
         <div>
           <dt>Korrekturen</dt>
-          <dd>{formatEuro(correctionTotal)}</dd>
+          <dd>{formatEuro(settlement.correctionCents)}</dd>
         </div>
         <div className="grand-total">
           <dt>Gesamtbetrag</dt>
-          <dd>{formatEuro(total)}</dd>
+          <dd>{formatEuro(settlement.totalCents)}</dd>
         </div>
       </dl>
       <div className="settlement-actions no-print">
@@ -1420,7 +1486,10 @@ function SettlementDetail({
           <Printer aria-hidden="true" /> Einzelabrechnung drucken
         </SecondaryButton>
         {demoRole === DemoRole.BOARD && status === SettlementStatus.DRAFT ? (
-          <PrimaryButton onClick={() => onTransition(SettlementStatus.REVIEWED)}>
+          <PrimaryButton
+            disabled={!reviewValidation.valid}
+            onClick={() => onTransition(SettlementStatus.REVIEWED)}
+          >
             Als geprüft markieren
           </PrimaryButton>
         ) : null}
@@ -1429,7 +1498,10 @@ function SettlementDetail({
             <SecondaryButton onClick={() => onTransition(SettlementStatus.DRAFT)}>
               Zurück in Entwurf
             </SecondaryButton>
-            <PrimaryButton onClick={() => onTransition(SettlementStatus.APPROVED)}>
+            <PrimaryButton
+              disabled={!approvalValidation.valid}
+              onClick={() => onTransition(SettlementStatus.APPROVED)}
+            >
               Freigeben
             </PrimaryButton>
           </>
@@ -1459,6 +1531,33 @@ function RateEditor({
   onSave: (rate: CompensationRate, previous: CompensationRate) => void;
 }) {
   const [drafts, setDrafts] = useState(() => rates.map((rate) => ({ ...rate })));
+  const [amountInputs, setAmountInputs] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      rates.map((rate) => [rate.id, (rate.amountCents / 100).toFixed(2).replace(".", ",")]),
+    ),
+  );
+  const [rateErrors, setRateErrors] = useState<Record<string, string[]>>({});
+
+  const saveRate = (rate: CompensationRate) => {
+    const parsed = parseEuroToCents(amountInputs[rate.id] ?? "");
+    const updated = { ...rate, amountCents: parsed.cents ?? Number.NaN };
+    const proposedRates = rates.map((item) => (item.id === rate.id ? updated : item));
+    const messages = [
+      ...(parsed.ok ? [] : [parsed.error ?? "Betrag ist ungültig."]),
+      ...validateCompensationRates(proposedRates)
+        .filter((issue) => issue.rateId === rate.id)
+        .map((issue) => issue.message),
+    ];
+    const uniqueMessages = [...new Set(messages)];
+    setRateErrors((current) => ({ ...current, [rate.id]: uniqueMessages }));
+    if (uniqueMessages.length > 0 || parsed.cents === undefined) return;
+    onSave(updated, rates.find((item) => item.id === rate.id)!);
+    setDrafts((current) => current.map((item) => (item.id === rate.id ? updated : item)));
+    setAmountInputs((current) => ({
+      ...current,
+      [rate.id]: (updated.amountCents / 100).toFixed(2).replace(".", ","),
+    }));
+  };
   return (
     <section>
       <SectionTitle
@@ -1499,18 +1598,10 @@ function RateEditor({
                 aria-label={`Betrag ${rate.label}`}
                 disabled={disabled}
                 inputMode="decimal"
-                value={(rate.amountCents / 100).toFixed(2).replace(".", ",")}
-                onChange={(event) => {
-                  const amountCents = Math.round(
-                    Number(event.target.value.replace(",", ".")) * 100,
-                  );
-                  if (Number.isFinite(amountCents))
-                    setDrafts((current) =>
-                      current.map((item) =>
-                        item.id === rate.id ? { ...item, amountCents } : item,
-                      ),
-                    );
-                }}
+                value={amountInputs[rate.id] ?? ""}
+                onChange={(event) =>
+                  setAmountInputs((current) => ({ ...current, [rate.id]: event.target.value }))
+                }
               />
             </label>
             <label>
@@ -1560,12 +1651,16 @@ function RateEditor({
               />{" "}
               aktiv
             </label>
-            <PrimaryButton
-              disabled={disabled}
-              onClick={() => onSave(rate, rates.find((item) => item.id === rate.id)!)}
-            >
+            <PrimaryButton disabled={disabled} onClick={() => saveRate(rate)}>
               Satz lokal speichern
             </PrimaryButton>
+            {(rateErrors[rate.id] ?? []).length > 0 ? (
+              <div className="field-error" role="alert">
+                {(rateErrors[rate.id] ?? []).map((message) => (
+                  <div key={message}>{message}</div>
+                ))}
+              </div>
+            ) : null}
           </article>
         ))}
       </div>
@@ -1622,7 +1717,7 @@ function PaymentList({
   month,
   members,
   statusFor,
-  displayTotal,
+  settlementViewFor,
   onMonthChange,
   onPaid,
   onExport,
@@ -1630,7 +1725,7 @@ function PaymentList({
   month: string;
   members: readonly Member[];
   statusFor: (id: string) => SettlementStatusValue;
-  displayTotal: (id: string) => number;
+  settlementViewFor: (id: string) => SettlementView;
   onMonthChange: (month: string) => void;
   onPaid: (id: string) => void;
   onExport: () => void;
@@ -1670,7 +1765,7 @@ function PaymentList({
               </span>
               <span>
                 <small>Freigegebener Betrag</small>
-                <strong>{formatEuro(displayTotal(member.id))}</strong>
+                <strong>{formatEuro(settlementViewFor(member.id).totalCents)}</strong>
               </span>
               <StatusTag tone={statusTone(statusFor(member.id))}>
                 {statusLabels[statusFor(member.id)]}

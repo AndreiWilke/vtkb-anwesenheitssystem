@@ -1560,6 +1560,17 @@ button.data-card:hover {
   font-size: 0.76rem;
   font-weight: 750;
 }
+.field-error {
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid #efaaa5;
+  border-radius: 8px;
+  color: #7b1711;
+  background: #fff1f0;
+  font-size: 0.78rem;
+  font-weight: 750;
+  line-height: 1.4;
+}
 .member-profile {
   display: flex;
   align-items: center;

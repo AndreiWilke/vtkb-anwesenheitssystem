@@ -128,7 +128,44 @@ describe("klickbarer Paket-1-Prototyp", () => {
     const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
     expect(nav).toBeInTheDocument();
     await user.click(within(nav).getByRole("button", { name: "Auswertung" }));
-    expect(screen.getByRole("heading", { name: "Auswertung · Demo" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Auswertung und Aufwandsentschädigung" }),
+    ).toBeInTheDocument();
+  });
+
+  it("öffnet Mitgliederübersicht und berechnetes Mitgliedsdetail", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
+    await user.click(within(nav).getByRole("button", { name: "Auswertung" }));
+    await user.click(screen.getByRole("button", { name: "Mitglieder" }));
+    expect(
+      screen.getByRole("heading", { name: "Auswertung – Mitglieder und Schüler" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Aiko Beispiel/ }));
+    expect(screen.getByRole("heading", { name: "Aiko Beispiel" })).toBeInTheDocument();
+    expect(screen.getAllByText(/Einheiten/).length).toBeGreaterThan(0);
+  });
+
+  it("begrenzt die Trainer-Demoansicht auf die eigene Abrechnung", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Demo-Rolle wechseln"), "TRAINER");
+    const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
+    await user.click(within(nav).getByRole("button", { name: "Auswertung" }));
+    expect(screen.getByRole("button", { name: "Meine Übersicht" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Vergütungssätze" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Aiko Beispiel · Juni 2026/ })).toBeInTheDocument();
+  });
+
+  it("zeigt dem Kassenwart die Zahlungsliste statt Vorstandsfunktionen", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Demo-Rolle wechseln"), "TREASURER");
+    const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
+    await user.click(within(nav).getByRole("button", { name: "Auswertung" }));
+    expect(screen.getByRole("heading", { name: "Zahlungsliste" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Vergütungssätze" })).not.toBeInTheDocument();
   });
 
   it("verhindert das Umgehen der Erfassung über die Hauptnavigation", async () => {

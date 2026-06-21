@@ -1,10 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { chromium } from "playwright";
 
 const baseUrl = "http://127.0.0.1:4173";
-const screenshotDir = new URL("../docs/screenshots/package1/", import.meta.url);
-const resultsFile = new URL("../docs/screenshots/package1/qa-results.json", import.meta.url);
+const screenshotDir = join(tmpdir(), "vtkb-package-1-1-browser-qa");
+const resultsFile = join(screenshotDir, "qa-results.json");
 
 await mkdir(screenshotDir, { recursive: true });
 
@@ -17,7 +18,7 @@ page.on("console", (message) => {
 page.on("pageerror", (error) => consoleErrors.push(error.message));
 
 const results = [];
-const screenshotPath = (name) => fileURLToPath(new URL(name, screenshotDir));
+const screenshotPath = (name) => join(screenshotDir, name);
 
 async function checkViewport(name, width, height) {
   await page.setViewportSize({ width, height });
@@ -129,12 +130,124 @@ results.push({
 });
 
 await page.getByRole("button", { name: "Auswertung" }).click();
-await page.getByRole("heading", { name: "Auswertung · Demo" }).waitFor();
+await page.getByRole("heading", { name: "Auswertung und Aufwandsentschädigung" }).waitFor();
 await page.evaluate(() => window.scrollTo(0, 0));
 await page.screenshot({ path: screenshotPath("statistics-390.png") });
+await assertNoHorizontalOverflow("Dashboard 390");
 results.push({ screen: "statistics", reachable: true });
 
+async function assertNoHorizontalOverflow(label) {
+  const dimensions = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  if (dimensions.scrollWidth > dimensions.clientWidth) {
+    throw new Error(`${label}: horizontaler Overflow ${JSON.stringify(dimensions)}`);
+  }
+}
+
+await page.setViewportSize({ width: 1280, height: 900 });
+await page.getByRole("button", { name: "Dashboard" }).click();
+await page.getByRole("heading", { name: "Auswertungsdashboard" }).waitFor();
+await page.getByText("Abgeschlossene Einheiten").waitFor();
+await assertNoHorizontalOverflow("Dashboard Desktop");
+await page.screenshot({ path: screenshotPath("dashboard-desktop.png"), fullPage: true });
+results.push({ screen: "board-dashboard", completed: true });
+
+await page.getByRole("button", { name: "Mitglieder" }).click();
+await page.getByRole("heading", { name: "Auswertung – Mitglieder und Schüler" }).waitFor();
+await page.getByLabel("Person filtern").fill("Aiko");
+await page.getByRole("button", { name: /Aiko Beispiel/ }).click();
+await page.getByRole("heading", { name: "Aiko Beispiel" }).waitFor();
+await page.getByLabel("Funktion filtern").selectOption("RESPONSIBLE_TRAINER");
+await assertNoHorizontalOverflow("Mitgliedsdetail Desktop");
+await page.setViewportSize({ width: 390, height: 844 });
+await assertNoHorizontalOverflow("Mitgliedsdetail 390");
+await page.screenshot({ path: screenshotPath("member-detail-390.png"), fullPage: true });
+await page.setViewportSize({ width: 1280, height: 900 });
+results.push({ flow: "member-reporting", completed: true });
+
+await page.getByRole("button", { name: "Trainer" }).click();
+await page.getByRole("heading", { name: "Auswertung – Trainer und Assistenztrainer" }).waitFor();
+await page.getByRole("button", { name: /Aiko Beispiel/ }).click();
+await page.getByText(/Abrechnungsfähig Juni 2026/).waitFor();
+results.push({ flow: "trainer-reporting", completed: true });
+
+await page.getByRole("button", { name: "Vergütungssätze" }).click();
+await page.getByRole("heading", { name: "Vergütungssätze" }).waitFor();
+const responsibleRate = page.getByLabel(/Betrag Verantwortlicher Trainer/);
+await responsibleRate.fill("25,00");
+await page.getByRole("button", { name: "Satz lokal speichern" }).first().click();
+
+await page.getByRole("button", { name: "Abrechnung" }).click();
+await page.getByRole("heading", { name: "Aufwandsentschädigung", exact: true }).waitFor();
+const compensationDownloadPromise = page.waitForEvent("download");
+await page.getByRole("button", { name: /CSV Aufwandsentschädigung/ }).click();
+const compensationDownload = await compensationDownloadPromise;
+if (compensationDownload.suggestedFilename() !== "aufwandsentschaedigung.csv") {
+  throw new Error("Unerwarteter CSV-Dateiname für Aufwandsentschädigung");
+}
+await page.getByRole("button", { name: /Aiko Beispiel/ }).click();
+await page.getByRole("heading", { name: /Aiko Beispiel · Juni 2026/ }).waitFor();
+const totalBeforeCorrection = await page.locator(".grand-total dd").innerText();
+await page.getByRole("button", { name: "Korrektur hinzufügen" }).click();
+await page.getByLabel("Korrekturbetrag").fill("5,00");
+await page.getByLabel("Korrekturbegründung").fill("Zusätzliche Lehrgangsvergütung · fiktive QA");
+await page.getByRole("button", { name: "Korrektur speichern" }).click();
+const totalAfterCorrection = await page.locator(".grand-total dd").innerText();
+if (totalBeforeCorrection === totalAfterCorrection)
+  throw new Error("Korrektur änderte den Entwurf nicht");
+await page.getByRole("button", { name: "Als geprüft markieren" }).click();
+page.once("dialog", (dialog) => dialog.accept());
+await page.getByRole("button", { name: "Freigeben" }).click();
+await page.getByText("Freigegebener Snapshot – unveränderlich").waitFor();
+const approvedTotal = await page.locator(".grand-total dd").innerText();
+
+await page.getByRole("button", { name: "Vergütungssätze" }).click();
+await responsibleRate.fill("30,00");
+await page.getByRole("button", { name: "Satz lokal speichern" }).first().click();
+await page.getByRole("button", { name: "Abrechnung" }).click();
+await page.getByRole("button", { name: /Aiko Beispiel/ }).click();
+if ((await page.locator(".grand-total dd").innerText()) !== approvedTotal) {
+  throw new Error("Freigegebener Snapshot änderte sich nach Satzänderung");
+}
+results.push({ flow: "draft-rate-correction-approval-snapshot", completed: true });
+
+await page.getByLabel("Demo-Rolle wechseln").selectOption("TREASURER");
+await page.getByRole("button", { name: "Als bezahlt markieren" }).waitFor();
+page.once("dialog", (dialog) => dialog.accept());
+await page.getByRole("button", { name: "Als bezahlt markieren" }).click();
+await page.getByText("bezahlt", { exact: true }).waitFor();
+await page.getByRole("button", { name: "Zahlungsliste" }).click();
+await page.getByRole("heading", { name: "Zahlungsliste" }).waitFor();
+const paymentDownloadPromise = page.waitForEvent("download");
+await page.getByRole("button", { name: /Zahlungsliste CSV/ }).click();
+const paymentDownload = await paymentDownloadPromise;
+if (paymentDownload.suggestedFilename() !== "zahlungsliste.csv") {
+  throw new Error("Unerwarteter CSV-Dateiname der Zahlungsliste");
+}
+results.push({ flow: "treasurer-payment", completed: true });
+
+await page.getByLabel("Demo-Rolle wechseln").selectOption("TRAINER");
+await page.getByRole("button", { name: "Meine Übersicht" }).waitFor();
+if ((await page.getByRole("button", { name: "Vergütungssätze" }).count()) !== 0) {
+  throw new Error("Trainer sieht unzulässig die Vergütungssatzverwaltung");
+}
+await page.setViewportSize({ width: 375, height: 812 });
+await assertNoHorizontalOverflow("Eigene Trainerübersicht 375");
+await page.screenshot({ path: screenshotPath("own-trainer-375.png"), fullPage: true });
+results.push({ flow: "role-switching", completed: true });
+
+await page.emulateMedia({ media: "print" });
+if (await page.locator(".app-header").isVisible())
+  throw new Error("App-Header bleibt im Druck sichtbar");
+await page.emulateMedia({ media: "screen" });
+results.push({ flow: "print-view", completed: true });
+
 if (consoleErrors.length) throw new Error(`Browser-Konsole: ${consoleErrors.join(" | ")}`);
-await writeFile(resultsFile, `${JSON.stringify({ results, consoleErrors }, null, 2)}\n`);
+await writeFile(
+  resultsFile,
+  `${JSON.stringify({ results, consoleErrors, artifacts: screenshotDir }, null, 2)}\n`,
+);
 await browser.close();
 console.log(JSON.stringify({ results, consoleErrors }, null, 2));

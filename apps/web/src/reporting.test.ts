@@ -18,12 +18,15 @@ import {
   attendanceCsv,
   calculateDashboardMetrics,
   calculateSettlement,
+  canRoleViewSettlement,
   canTransitionSettlement,
   compensationCsv,
   createCancellationSnapshot,
+  createCompensationRateIdGenerator,
   createCorrection,
   createSettlementSnapshot,
   filterSessionsByPeriod,
+  filterSettlementsForRole,
   findCompensationRate,
   formatEuro,
   isSettlementRelevant,
@@ -722,5 +725,158 @@ describe("Korrekturen: relevante Monatsabrechnungen", () => {
         snapshot: createCancellationSnapshot(empty, [], "Vorstand Test", "2026-01-31T10:00:00Z"),
       }),
     ).toBe(true);
+  });
+});
+
+describe("Letzte Korrekturen: stornierte Abrechnungen", () => {
+  const completed = session("2026-06-15", SessionRole.RESPONSIBLE_TRAINER);
+  const hundredEuroRate: CompensationRate[] = [
+    {
+      id: "rate-100",
+      label: "Fiktiver Testsatz",
+      role: SessionRole.RESPONSIBLE_TRAINER,
+      billingType: CompensationBillingType.PER_COMPLETED_SESSION,
+      amountCents: 10_000,
+      validFrom: "2026-01-01",
+      validUntil: null,
+      active: true,
+    },
+  ];
+  const calculation = calculateSettlement("member-05", "2026-06", [completed], hundredEuroRate);
+  const snapshot = createSettlementSnapshot(
+    calculation,
+    [],
+    "Vorstand Test",
+    "2026-06-30T10:00:00Z",
+  );
+
+  it("zählt 100 Euro im Entwurf und 0 Euro nach Stornierung", () => {
+    const draftView = resolveSettlementView(SettlementStatus.DRAFT, calculation, undefined);
+    const cancelledView = resolveSettlementView(
+      SettlementStatus.CANCELLED,
+      { ...calculation, totalCents: 99_999 },
+      snapshot,
+    );
+    expect(
+      calculateDashboardMetrics([], [{ status: SettlementStatus.DRAFT, view: draftView }])
+        .totalCompensationCents,
+    ).toBe(10_000);
+    expect(
+      calculateDashboardMetrics([], [{ status: SettlementStatus.CANCELLED, view: cancelledView }])
+        .totalCompensationCents,
+    ).toBe(0);
+    expect(cancelledView).toMatchObject({ source: "SNAPSHOT", totalCents: 10_000 });
+  });
+
+  it("ignoriert Prüfhinweise stornierter Abrechnungen", () => {
+    const cancelledView = {
+      ...resolveSettlementView(SettlementStatus.CANCELLED, calculation, snapshot),
+      reviewNotes: ["Historischer Prüfhinweis"],
+    };
+    expect(
+      calculateDashboardMetrics([], [{ status: SettlementStatus.CANCELLED, view: cancelledView }])
+        .openReviewNotes,
+    ).toBe(0);
+  });
+
+  it("schließt Stornierungen aus der Zahlungsliste aus", () => {
+    const output = paymentCsv("2026-06", [
+      { member: members[4]!, totalCents: 10_000, status: SettlementStatus.CANCELLED },
+      { member: members[5]!, totalCents: 2_000, status: SettlementStatus.APPROVED },
+      { member: members[6]!, totalCents: 3_000, status: SettlementStatus.PAID },
+    ]);
+    expect(output).not.toContain(members[4]!.name);
+    expect(output).toContain(members[5]!.name);
+    expect(output).toContain(members[6]!.name);
+  });
+
+  it.each([SettlementStatus.APPROVED, SettlementStatus.PAID])(
+    "%s verwendet weiterhin den Snapshotbetrag",
+    (status) => {
+      const view = resolveSettlementView(status, { ...calculation, totalCents: 99_999 }, snapshot);
+      expect(view).toMatchObject({ source: "SNAPSHOT", totalCents: 10_000 });
+    },
+  );
+});
+
+describe("Letzte Korrekturen: zeitabhängige Vergütungssätze", () => {
+  it("vergibt lokal eindeutige IDs auch wenn ein begonnener Entwurf verworfen wird", () => {
+    const nextId = createCompensationRateIdGenerator(["rate-local-1", "fachlicher-satz"]);
+    const discardedId = nextId();
+    const createdId = nextId();
+    expect(discardedId).toBe("rate-local-2");
+    expect(createdId).toBe("rate-local-3");
+    expect(createdId).not.toBe(discardedId);
+  });
+
+  it("akzeptiert den Folgesatz, berechnet Juni alt und Juli neu", () => {
+    expect(validateCompensationRates(splitRates)).toEqual([]);
+    expect(
+      calculateSettlement(
+        "member-05",
+        "2026-06",
+        [session("2026-06-30", SessionRole.RESPONSIBLE_TRAINER)],
+        splitRates,
+      ).totalCents,
+    ).toBe(2_000);
+    expect(
+      calculateSettlement(
+        "member-05",
+        "2026-07",
+        [session("2026-07-01", SessionRole.RESPONSIBLE_TRAINER)],
+        splitRates,
+      ).totalCents,
+    ).toBe(2_500);
+  });
+
+  it("lässt einen Juni-Snapshot durch den neuen Juli-Satz unverändert", () => {
+    const june = calculateSettlement(
+      "member-05",
+      "2026-06",
+      [session("2026-06-30", SessionRole.RESPONSIBLE_TRAINER)],
+      [splitRates[0]!],
+    );
+    const snapshot = createSettlementSnapshot(june, [], "Vorstand Test", "2026-06-30T20:00:00Z");
+    const recalculated = calculateSettlement(
+      "member-05",
+      "2026-06",
+      [session("2026-06-30", SessionRole.RESPONSIBLE_TRAINER)],
+      splitRates,
+    );
+    expect(
+      resolveSettlementView(SettlementStatus.APPROVED, recalculated, snapshot).totalCents,
+    ).toBe(2_000);
+  });
+});
+
+describe("Letzte Korrekturen: zentrale Rollenfilterung", () => {
+  const settlements = [
+    { memberId: "draft", status: SettlementStatus.DRAFT },
+    { memberId: "reviewed", status: SettlementStatus.REVIEWED },
+    { memberId: "approved", status: SettlementStatus.APPROVED },
+    { memberId: "paid", status: SettlementStatus.PAID },
+    { memberId: "cancelled", status: SettlementStatus.CANCELLED },
+  ];
+
+  it("zeigt dem Vorstand alle Status", () => {
+    expect(filterSettlementsForRole(settlements, DemoRole.BOARD, "draft")).toEqual(settlements);
+  });
+
+  it("zeigt dem Kassenwart nur freigegebene und bezahlte Abrechnungen", () => {
+    expect(
+      filterSettlementsForRole(settlements, DemoRole.TREASURER, "draft").map((item) => item.status),
+    ).toEqual([SettlementStatus.APPROVED, SettlementStatus.PAID]);
+    expect(
+      canRoleViewSettlement(DemoRole.TREASURER, "draft", SettlementStatus.DRAFT, "draft"),
+    ).toBe(false);
+    expect(
+      canRoleViewSettlement(DemoRole.TREASURER, "approved", SettlementStatus.APPROVED, "draft"),
+    ).toBe(true);
+  });
+
+  it("zeigt dem Trainer ausschließlich die eigene Abrechnung", () => {
+    expect(filterSettlementsForRole(settlements, DemoRole.TRAINER, "reviewed")).toEqual([
+      settlements[1],
+    ]);
   });
 });

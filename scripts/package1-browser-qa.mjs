@@ -175,9 +175,6 @@ results.push({ flow: "trainer-reporting", completed: true });
 
 await page.getByRole("button", { name: "Vergütungssätze" }).click();
 await page.getByRole("heading", { name: "Vergütungssätze" }).waitFor();
-const responsibleRate = page.getByLabel(/Betrag Verantwortlicher Trainer/);
-await responsibleRate.fill("25,00");
-await page.getByRole("button", { name: "Satz lokal speichern" }).first().click();
 
 await page.getByRole("button", { name: "Abrechnung", exact: true }).click();
 await page.getByRole("heading", { name: "Aufwandsentschädigung", exact: true }).waitFor();
@@ -204,8 +201,27 @@ await page.getByText("Freigegebener Snapshot – unveränderlich").waitFor();
 const approvedTotal = await page.locator(".grand-total dd").innerText();
 
 await page.getByRole("button", { name: "Vergütungssätze" }).click();
-await responsibleRate.fill("30,00");
+await page.getByLabel("Gültig bis · optional").first().fill("2026-06-30");
 await page.getByRole("button", { name: "Satz lokal speichern" }).first().click();
+await page.getByRole("button", { name: "Neuen Vergütungssatz anlegen" }).click();
+await page.getByLabel("Bezeichnung neuer Vergütungssatz").fill("Überlappender Juli-Satz");
+await page.getByLabel("Betrag neuer Vergütungssatz").fill("25,00");
+await page.getByLabel("Gültig ab neuer Vergütungssatz").fill("2026-06-30");
+await page.getByRole("button", { name: "Speichern", exact: true }).click();
+await page.getByText(/überschneiden/).waitFor();
+await page.screenshot({ path: screenshotPath("rate-overlap-desktop.png"), fullPage: true });
+await page.getByRole("button", { name: "Abbrechen", exact: true }).click();
+
+await page.getByRole("button", { name: "Neuen Vergütungssatz anlegen" }).click();
+await page.getByLabel("Bezeichnung neuer Vergütungssatz").fill("Verantwortlicher Trainer · Juli");
+await page.getByLabel("Betrag neuer Vergütungssatz").fill("25,00");
+await page.getByLabel("Gültig ab neuer Vergütungssatz").fill("2026-07-01");
+await page.setViewportSize({ width: 390, height: 844 });
+await assertNoHorizontalOverflow("Neuer Vergütungssatz 390");
+await page.screenshot({ path: screenshotPath("new-rate-390.png"), fullPage: true });
+await page.getByRole("button", { name: "Speichern", exact: true }).click();
+await page.getByLabel("Betrag Verantwortlicher Trainer · Juli").waitFor();
+await page.setViewportSize({ width: 1280, height: 900 });
 await page.getByRole("button", { name: "Abrechnung", exact: true }).click();
 await page.getByRole("button", { name: /Aiko Beispiel/ }).click();
 if ((await page.locator(".grand-total dd").innerText()) !== approvedTotal) {
@@ -221,7 +237,13 @@ if (!frozenCsv.includes(approvedTotal)) {
   throw new Error("CSV verwendet nach Satzänderung nicht den freigegebenen Snapshot");
 }
 await page.getByRole("button", { name: /Aiko Beispiel/ }).click();
-results.push({ flow: "draft-rate-correction-approval-snapshot", completed: true });
+results.push({
+  flow: "rate-create-overlap-approval-snapshot",
+  completed: true,
+  validFollowUpRate: true,
+  overlapRejected: true,
+  snapshotUnchanged: true,
+});
 
 await page.getByLabel("Demo-Rolle wechseln").selectOption("TREASURER");
 await page.getByRole("button", { name: "Als bezahlt markieren" }).waitFor();
@@ -240,6 +262,13 @@ const paymentPath = await paymentDownload.path();
 const paymentContent = paymentPath ? await readFile(paymentPath, "utf8") : "";
 if (!paymentContent.includes(approvedTotal)) {
   throw new Error("Zahlungsliste verwendet nicht den freigegebenen Snapshot");
+}
+await page.getByRole("button", { name: "Abrechnungen" }).click();
+if ((await page.getByRole("button", { name: /Aiko Beispiel/ }).count()) !== 1) {
+  throw new Error("Kassenwart sieht die bezahlte Abrechnung nicht eindeutig");
+}
+if ((await page.locator(".settlement-card").count()) !== 1) {
+  throw new Error("Kassenwart sieht Entwürfe oder geprüfte Abrechnungen");
 }
 results.push({ flow: "treasurer-payment", completed: true });
 
@@ -287,6 +316,10 @@ results.push({ flow: "blocked-review-and-invalid-input", completed: true });
 
 await page.reload({ waitUntil: "networkidle" });
 await page.getByLabel("Hauptnavigation").getByRole("button", { name: "Auswertung" }).click();
+const dashboardTotalCard = page
+  .locator(".dashboard-grid article")
+  .filter({ hasText: "Voraussichtliche Gesamtvergütung" });
+const dashboardTotalBeforeCancellation = await dashboardTotalCard.locator("strong").innerText();
 await page.getByRole("button", { name: "Abrechnung", exact: true }).click();
 await page.getByRole("button", { name: /Aiko Beispiel/ }).click();
 page.once("dialog", (dialog) => dialog.accept());
@@ -297,7 +330,22 @@ for (const forbiddenAction of ["Korrektur hinzufügen", "Freigeben", "Als bezahl
     throw new Error(`Stornierte Abrechnung zeigt unzulässig: ${forbiddenAction}`);
   }
 }
-results.push({ flow: "cancelled-terminal", completed: true });
+await page.getByRole("button", { name: "Dashboard" }).click();
+const dashboardTotalAfterCancellation = await dashboardTotalCard.locator("strong").innerText();
+if (dashboardTotalAfterCancellation === dashboardTotalBeforeCancellation) {
+  throw new Error("Stornierter Betrag bleibt in der Dashboard-Gesamtsumme");
+}
+await page.getByLabel("Demo-Rolle wechseln").selectOption("TREASURER");
+await page.getByRole("button", { name: "Abrechnungen" }).click();
+if ((await page.locator(".settlement-card").count()) !== 0) {
+  throw new Error("Kassenwart sieht Entwürfe oder stornierte Abrechnungen");
+}
+results.push({
+  flow: "cancelled-dashboard-and-treasurer-filter",
+  completed: true,
+  cancelledExcludedFromDashboard: true,
+  treasurerDraftsHidden: true,
+});
 
 if (consoleErrors.length) throw new Error(`Browser-Konsole: ${consoleErrors.join(" | ")}`);
 await writeFile(

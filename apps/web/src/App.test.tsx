@@ -344,4 +344,52 @@ describe("klickbarer Paket-1-Prototyp", () => {
     expect(screen.queryByText("Mika Beispiel")).not.toBeInTheDocument();
     expect(within(screen.getByTestId("summary-total")).getByText("1")).toBeInTheDocument();
   });
+
+  it("legt einen neuen Vergütungssatz an und protokolliert ihn", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(
+      within(screen.getByRole("navigation", { name: "Hauptnavigation" })).getByRole("button", {
+        name: "Auswertung",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Vergütungssätze" }));
+    await user.click(screen.getByRole("button", { name: "Neuen Vergütungssatz anlegen" }));
+    await user.type(screen.getByLabelText("Bezeichnung neuer Vergütungssatz"), "Juli-Satz");
+    await user.selectOptions(
+      screen.getByLabelText("Rolle neuer Vergütungssatz"),
+      "RESPONSIBLE_TRAINER",
+    );
+    await user.type(screen.getByLabelText("Betrag neuer Vergütungssatz"), "25,00");
+    await user.type(screen.getByLabelText("Gültig ab neuer Vergütungssatz"), "2026-07-01");
+    await user.click(screen.getByLabelText("Neuer Vergütungssatz aktiv"));
+    await user.click(screen.getByRole("button", { name: "Speichern" }));
+    expect(screen.getByDisplayValue("Juli-Satz")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Audit" }));
+    expect(screen.getByText(/Vergütungssatz angelegt/)).toBeInTheDocument();
+    expect(screen.getByText(/Juli-Satz/)).toBeInTheDocument();
+  });
+
+  it("verwirft einen neuen Satz bei Abbruch und lehnt Überlappungen sichtbar ab", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(
+      within(screen.getByRole("navigation", { name: "Hauptnavigation" })).getByRole("button", {
+        name: "Auswertung",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Vergütungssätze" }));
+    await user.click(screen.getByRole("button", { name: "Neuen Vergütungssatz anlegen" }));
+    await user.type(screen.getByLabelText("Bezeichnung neuer Vergütungssatz"), "Abbruch-Satz");
+    await user.click(screen.getByRole("button", { name: "Abbrechen" }));
+    expect(screen.queryByDisplayValue("Abbruch-Satz")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Neuen Vergütungssatz anlegen" }));
+    await user.type(screen.getByLabelText("Bezeichnung neuer Vergütungssatz"), "Überlappung");
+    await user.type(screen.getByLabelText("Betrag neuer Vergütungssatz"), "25,00");
+    await user.type(screen.getByLabelText("Gültig ab neuer Vergütungssatz"), "2026-06-01");
+    await user.click(screen.getByRole("button", { name: "Speichern" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("überschneiden");
+    expect(screen.getByRole("heading", { name: "Neuer Vergütungssatz" })).toBeInTheDocument();
+  });
 });

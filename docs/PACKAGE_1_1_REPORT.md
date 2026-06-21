@@ -48,7 +48,7 @@ Die lokalen Beispielsätze sind:
 - verantwortlicher Trainer: 20,00 EUR je abgeschlossener Einheit,
 - Assistenztrainer: 10,00 EUR je abgeschlossener Einheit.
 
-Die Oberfläche kennzeichnet sie mit „Fiktive Vergütungssätze für den lokalen Prototyp“. Betrag, Gültig-ab, optionales Gültig-bis und Aktivstatus sind lokal bearbeitbar. Entwürfe berechnen sich danach automatisch neu. Sätze werden anhand des fachlichen Einheitsdatums inklusive Gültigkeitsgrenzen bestimmt. Betrag, Bezeichnung und Datumswerte werden fachlich validiert; aktive Zeiträume derselben Rolle dürfen sich nicht überschneiden. `findCompensationRate` verwirft Mehrdeutigkeiten ausdrücklich. Fehlt ein Satz, bleibt die Position ohne Betrag und erzeugt einen sichtbaren Prüfhinweis; es wird nicht stillschweigend mit 0,00 EUR abgerechnet.
+Die Oberfläche kennzeichnet sie mit „Fiktive Vergütungssätze für den lokalen Prototyp“. Vorhandene Sätze sind bearbeitbar; zusätzlich können neue zeitabhängige Sätze mit lokal eindeutigen, monoton vergebenen IDs angelegt oder vor dem Speichern verworfen werden. Rolle, Abrechnungsart, Betrag, Gültig-ab, optionales Gültig-bis und Aktivstatus sind vollständig erfassbar. Entwürfe berechnen sich danach automatisch neu. Sätze werden anhand des fachlichen Einheitsdatums inklusive Gültigkeitsgrenzen bestimmt. Betrag, Bezeichnung und Datumswerte werden fachlich validiert; aktive Zeiträume derselben Rolle dürfen sich nicht überschneiden, unmittelbar aufeinanderfolgende Zeiträume sind zulässig. So kann ein Satzwechsel ab dem 1. Juli abgebildet werden, ohne eine bereits freigegebene Juni-Abrechnung rückwirkend zu verändern. `findCompensationRate` verwirft Mehrdeutigkeiten ausdrücklich. Fehlt ein Satz, bleibt die Position ohne Betrag und erzeugt einen sichtbaren Prüfhinweis; es wird nicht stillschweigend mit 0,00 EUR abgerechnet.
 
 Alle Geldbeträge werden intern als ganze Centwerte verarbeitet und in Euro mit zwei Nachkommastellen dargestellt.
 
@@ -66,17 +66,19 @@ Freigabe, Bezahlt-Markierung und Stornierung verlangen eine Bestätigung. Eine z
 
 `resolveSettlementView` ist die einzige Auflösung zwischen aktueller Berechnung und Snapshot. Einzelansicht, Monatsübersicht, Zahlungsliste, beide Abrechnungs-CSV, Druckansicht und Dashboard verwenden dadurch bei `APPROVED`, `PAID` und nach Freigabe `CANCELLED` konsistent den eingefrorenen Stand. Eine Stornierung ist terminal. Eine vor Freigabe stornierte Abrechnung erhält einen eigenen Stornierungssnapshot; eine nach Freigabe stornierte Abrechnung behält den historischen Freigabesnapshot. Danach sind Korrekturen, Beträge, erneute Freigabe und Bezahlt-Markierung ausgeschlossen.
 
+Stornierte Abrechnungen bleiben mit ihrem historischen Snapshot für Dokumentation und Audit sichtbar, zählen aber mit 0,00 EUR zur aktuellen erwarteten Auszahlung. Sie erscheinen weder in der Zahlungsliste noch als offener Auszahlungsbetrag und ihre historischen Prüfhinweise erhöhen nicht die Dashboardkennzahl „Offene Prüfhinweise“. `DRAFT`, `REVIEWED`, `APPROVED` und `PAID` fließen weiterhin mit dem jeweils verbindlichen aktuellen oder eingefrorenen Betrag in die erwartete Gesamtvergütung ein.
+
 Monatsabrechnung und Dashboard behandeln nur Personen mit Trainer-/Assistenzeinsatz, Korrektur, gespeichertem Status oder Snapshot als relevante Abrechnung. Personen ohne jede Monatsposition erhöhen nicht künstlich die Zahl der Entwürfe.
 
 ## Auditprotokoll
 
-Die lokale Sitzung protokolliert Satzänderung, hinzugefügte oder entfernte Korrektur sowie geprüft, freigegeben, bezahlt, storniert und zurück in Entwurf. Jeder Eintrag enthält ID, Zeitpunkt, fiktive Bearbeitung, Aktion, Objekt, vorherigen und neuen Wert sowie optional eine Begründung. Das Protokoll ist ausdrücklich kein produktiver Sicherheitsnachweis.
+Die lokale Sitzung protokolliert Satzanlage und Satzänderung, hinzugefügte oder entfernte Korrektur sowie geprüft, freigegeben, bezahlt, storniert und zurück in Entwurf. Jeder Eintrag enthält ID, Zeitpunkt, fiktive Bearbeitung, Aktion, Objekt, vorherigen und neuen Wert sowie optional eine Begründung. Das Protokoll ist ausdrücklich kein produktiver Sicherheitsnachweis.
 
 ## Rollenansichten
 
 - Trainer: ausschließlich eigene Anwesenheiten, Einsätze, berechnete Entschädigung und Status; keine Satz- oder Freigabefunktion.
 - Vorstand: alle Auswertungen und Abrechnungen, Sätze, Korrekturen, Prüfung, Freigabe und Stornierung.
-- Kassenwart: freigegebene und bezahlte Abrechnungen, Zahlungsliste, Export und Bezahlt-Markierung.
+- Kassenwart: zentral gefiltert ausschließlich freigegebene und bezahlte Abrechnungen, Zahlungsliste, Export und Bezahlt-Markierung; Entwürfe, geprüfte und stornierte Abrechnungen sind auch über den Detailpfad nicht zugänglich.
 
 Der Rollenumschalter ist deutlich als lokale Demo ohne echte Anmeldung oder Rechteprüfung gekennzeichnet.
 
@@ -96,11 +98,11 @@ Vite-Produktionsergebnis:
 
 | Datei      |  Rohgröße |     gzip |
 | ---------- | --------: | -------: |
-| JavaScript | 281,05 kB | 84,75 kB |
+| JavaScript | 284,83 kB | 85,47 kB |
 | CSS        |  26,03 kB |  6,23 kB |
 | HTML       |   0,76 kB |  0,44 kB |
 
-Der PWA-Precache enthält sechs Einträge mit zusammen 300,77 KiB. Source Maps sind Buildartefakte und werden nicht committed.
+Der PWA-Precache enthält sechs Einträge mit zusammen 304,47 KiB. Source Maps sind Buildartefakte und werden nicht committed.
 
 ## Testbefehle und Ergebnisse
 
@@ -112,8 +114,8 @@ Ausführungsumgebung: Node.js `v24.17.0`, npm `11.4.2`.
 | `npm run format:check` | erfolgreich                                                     |
 | `npm run lint`         | erfolgreich                                                     |
 | `npm run typecheck`    | erfolgreich                                                     |
-| `npm test`             | erfolgreich, 5 Testdateien und 110 Tests                        |
-| UTC: `npm test`        | erfolgreich, 5 Testdateien und 110 Tests bei `TZ=UTC`           |
+| `npm test`             | erfolgreich, 5 Testdateien und 123 Tests                        |
+| UTC: `npm test`        | erfolgreich, 5 Testdateien und 123 Tests bei `TZ=UTC`           |
 | `npm run check`        | erfolgreich                                                     |
 | `npm run build`        | erfolgreich                                                     |
 | `npm audit`            | erfolgreich, 0 Schwachstellen                                   |
@@ -126,7 +128,7 @@ Die Tests decken Anwesenheits- und Rollenaggregation, strikte `PRESENT`-/`COMPLE
 
 Der eingebettete Browser konnte wegen fehlender Sandbox-Metadaten der Desktop-Sitzung nicht initialisiert werden. Der ausdrücklich geforderte reproduzierbare Fallback lief mit dem vorhandenen Playwright 1.60.0 und lokalem Microsoft Edge.
 
-Geprüft wurden Startansicht und Überlauf bei 375, 390, 430, 768 und 1280 Pixel sowie manueller und Foto-Demo-Ablauf, Vorstands-Dashboard, Monats-/Mitglieder-/Traineransichten, Mitgliedsdetail, Satzänderung und Satzfehler, automatische Neuberechnung, gültige und ungültige Korrekturbeträge, blockierte Prüfung bei fehlendem Satz, Freigabe, eingefrorener Snapshot nach erneuter Satzänderung, Snapshotwerte in Abrechnungs- und Zahlungs-CSV, terminale Stornierung ohne Bearbeitungsschaltflächen, Kassenwart-Zahlung, Druckmedium, Rollenwechsel und eigene Trainerübersicht. Die Browserkonsole enthielt keine Fehler.
+Geprüft wurden Startansicht und Überlauf bei 375, 390, 430, 768 und 1280 Pixel sowie manueller und Foto-Demo-Ablauf, Vorstands-Dashboard, Monats-/Mitglieder-/Traineransichten, Mitgliedsdetail, Anlage eines gültigen Folgesatzes auf Smartphone und Desktop, verständliche Ablehnung eines überlappenden Satzes, automatische Neuberechnung, gültige und ungültige Korrekturbeträge, blockierte Prüfung bei fehlendem Satz, Freigabe, eingefrorener Juni-Snapshot nach Anlage des Juli-Satzes, Snapshotwerte in Abrechnungs- und Zahlungs-CSV, terminale Stornierung ohne Bearbeitungsschaltflächen, Ausschluss des stornierten Betrags aus der Dashboard-Gesamtsumme, Kassenwart-Zahlung und zentral gefilterte Kassenwart-Abrechnungsliste, Druckmedium, Rollenwechsel und eigene Trainerübersicht. Die Browserkonsole enthielt keine Fehler.
 
 ## Bekannte Einschränkungen
 

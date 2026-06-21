@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
+  CompensationBillingType,
   DemoRole,
   MemberQualification,
   PresenceStatus,
@@ -44,10 +45,13 @@ import {
   attendanceCsv,
   calculateSettlement,
   calculateDashboardMetrics,
+  canRoleViewSettlement,
   compensationCsv,
   createCancellationSnapshot,
+  createCompensationRateIdGenerator,
   createCorrection,
   createSettlementSnapshot,
+  filterSettlementsForRole,
   filterSessionsByPeriod,
   formatEuro,
   isSettlementEditable,
@@ -170,6 +174,9 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
   const [rates, setRates] = useState<CompensationRate[]>(() =>
     initialCompensationRates.map((rate) => ({ ...rate })),
   );
+  const nextRateId = useRef(
+    createCompensationRateIdGenerator(initialCompensationRates.map((rate) => rate.id)),
+  );
   const [statuses, setStatuses] = useState<Record<string, SettlementStatusValue>>({});
   const [corrections, setCorrections] = useState<Record<string, CompensationCorrection[]>>({});
   const [snapshots, setSnapshots] = useState<Record<string, SettlementSnapshot>>({});
@@ -252,6 +259,19 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
     );
   const relevantSettlementMembers = trainerMembers.filter((member) =>
     isRelevantSettlement(member.id),
+  );
+  const visibleSettlementIds = new Set(
+    filterSettlementsForRole(
+      relevantSettlementMembers.map((member) => ({
+        memberId: member.id,
+        status: statusFor(member.id),
+      })),
+      demoRole,
+      "member-01",
+    ).map((settlement) => settlement.memberId),
+  );
+  const visibleSettlementMembers = relevantSettlementMembers.filter((member) =>
+    visibleSettlementIds.has(member.id),
   );
 
   function isRelevantSettlement(memberId: string): boolean {
@@ -409,6 +429,7 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
     setView("MEMBER_DETAIL");
   };
   const openSettlement = (memberId: string) => {
+    if (!canRoleViewSettlement(demoRole, memberId, statusFor(memberId), "member-01")) return;
     setSelectedMemberId(memberId);
     setView("SETTLEMENT_DETAIL");
   };
@@ -419,7 +440,15 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
       : demoRole === DemoRole.TREASURER &&
           view !== "PAYMENTS" &&
           view !== "SETTLEMENTS" &&
-          view !== "SETTLEMENT_DETAIL"
+          !(
+            view === "SETTLEMENT_DETAIL" &&
+            canRoleViewSettlement(
+              demoRole,
+              selectedMemberId,
+              statusFor(selectedMemberId),
+              "member-01",
+            )
+          )
         ? "PAYMENTS"
         : view;
 
@@ -718,7 +747,7 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
                   "aufwandsentschaedigung.csv",
                   compensationCsv(
                     month,
-                    relevantSettlementMembers.map((member) => ({
+                    visibleSettlementMembers.map((member) => ({
                       member,
                       settlement: settlementViewFor(member.id),
                       status: statusFor(member.id),
@@ -734,7 +763,7 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
             </SecondaryButton>
           </div>
           <SettlementList
-            members={relevantSettlementMembers}
+            members={visibleSettlementMembers}
             statusFor={statusFor}
             settlementViewFor={settlementViewFor}
             onOpen={openSettlement}
@@ -783,6 +812,16 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
               formatEuro(updated.amountCents),
             );
           }}
+          onCreate={(created) => {
+            setRates((current) => [...current, created]);
+            addAudit(
+              "Vergütungssatz angelegt",
+              created.label,
+              null,
+              `${formatEuro(created.amountCents)} · gültig ab ${created.validFrom}`,
+            );
+          }}
+          nextId={() => nextRateId.current()}
         />
       ) : null}
 
@@ -790,7 +829,7 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
 
       {activeView === "PAYMENTS" ? (
         <PaymentList
-          members={relevantSettlementMembers}
+          members={visibleSettlementMembers}
           month={month}
           settlementViewFor={settlementViewFor}
           statusFor={statusFor}
@@ -799,7 +838,7 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
               "zahlungsliste.csv",
               paymentCsv(
                 month,
-                relevantSettlementMembers
+                visibleSettlementMembers
                   .filter((member) => isPayableStatus(statusFor(member.id)))
                   .map((member) => ({
                     member,
@@ -1525,10 +1564,14 @@ function RateEditor({
   rates,
   disabled,
   onSave,
+  onCreate,
+  nextId,
 }: {
   rates: readonly CompensationRate[];
   disabled: boolean;
   onSave: (rate: CompensationRate, previous: CompensationRate) => void;
+  onCreate: (rate: CompensationRate) => void;
+  nextId: () => string;
 }) {
   const [drafts, setDrafts] = useState(() => rates.map((rate) => ({ ...rate })));
   const [amountInputs, setAmountInputs] = useState<Record<string, string>>(() =>
@@ -1537,6 +1580,8 @@ function RateEditor({
     ),
   );
   const [rateErrors, setRateErrors] = useState<Record<string, string[]>>({});
+  const [newRate, setNewRate] = useState<CompensationRate | null>(null);
+  const [newAmountInput, setNewAmountInput] = useState("");
 
   const saveRate = (rate: CompensationRate) => {
     const parsed = parseEuroToCents(amountInputs[rate.id] ?? "");
@@ -1558,6 +1603,43 @@ function RateEditor({
       [rate.id]: (updated.amountCents / 100).toFixed(2).replace(".", ","),
     }));
   };
+
+  const startNewRate = () => {
+    setNewRate({
+      id: nextId(),
+      label: "",
+      role: SessionRole.RESPONSIBLE_TRAINER,
+      billingType: CompensationBillingType.PER_COMPLETED_SESSION,
+      amountCents: 0,
+      validFrom: "",
+      validUntil: null,
+      active: true,
+    });
+    setNewAmountInput("");
+  };
+
+  const saveNewRate = () => {
+    if (!newRate) return;
+    const parsed = parseEuroToCents(newAmountInput);
+    const created = { ...newRate, amountCents: parsed.cents ?? Number.NaN };
+    const messages = [
+      ...(parsed.ok ? [] : [parsed.error ?? "Betrag ist ungültig."]),
+      ...validateCompensationRates([...rates, created])
+        .filter((issue) => issue.rateId === created.id)
+        .map((issue) => issue.message),
+    ];
+    const uniqueMessages = [...new Set(messages)];
+    setRateErrors((current) => ({ ...current, [created.id]: uniqueMessages }));
+    if (uniqueMessages.length > 0 || parsed.cents === undefined) return;
+    onCreate(created);
+    setDrafts((current) => [...current, created]);
+    setAmountInputs((current) => ({
+      ...current,
+      [created.id]: (created.amountCents / 100).toFixed(2).replace(".", ","),
+    }));
+    setNewRate(null);
+    setNewAmountInput("");
+  };
   return (
     <section>
       <SectionTitle
@@ -1571,6 +1653,114 @@ function RateEditor({
           Verfälschung.
         </span>
       </div>
+      <div className="export-actions no-print">
+        <PrimaryButton disabled={disabled || newRate !== null} onClick={startNewRate}>
+          Neuen Vergütungssatz anlegen
+        </PrimaryButton>
+      </div>
+      {newRate ? (
+        <article className="rate-card data-card new-rate-card">
+          <h3>Neuer Vergütungssatz</h3>
+          <label>
+            <span>Bezeichnung</span>
+            <input
+              aria-label="Bezeichnung neuer Vergütungssatz"
+              value={newRate.label}
+              onChange={(event) => setNewRate({ ...newRate, label: event.target.value })}
+            />
+          </label>
+          <label>
+            <span>Rolle</span>
+            <select
+              aria-label="Rolle neuer Vergütungssatz"
+              value={newRate.role}
+              onChange={(event) =>
+                setNewRate({
+                  ...newRate,
+                  role: event.target.value as CompensationRate["role"],
+                })
+              }
+            >
+              <option value={SessionRole.RESPONSIBLE_TRAINER}>Verantwortlicher Trainer</option>
+              <option value={SessionRole.ASSISTANT_TRAINER}>Assistenztrainer</option>
+            </select>
+          </label>
+          <label>
+            <span>Abrechnungsart</span>
+            <select
+              aria-label="Abrechnungsart neuer Vergütungssatz"
+              value={newRate.billingType}
+              onChange={(event) =>
+                setNewRate({
+                  ...newRate,
+                  billingType: event.target.value as CompensationRate["billingType"],
+                })
+              }
+            >
+              <option value={CompensationBillingType.PER_COMPLETED_SESSION}>
+                Je abgeschlossener Trainingseinheit
+              </option>
+            </select>
+          </label>
+          <label>
+            <span>Betrag in Euro</span>
+            <input
+              aria-label="Betrag neuer Vergütungssatz"
+              inputMode="decimal"
+              value={newAmountInput}
+              onChange={(event) => setNewAmountInput(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>Gültig ab</span>
+            <input
+              aria-label="Gültig ab neuer Vergütungssatz"
+              type="date"
+              value={newRate.validFrom}
+              onChange={(event) => setNewRate({ ...newRate, validFrom: event.target.value })}
+            />
+          </label>
+          <label>
+            <span>Gültig bis · optional</span>
+            <input
+              aria-label="Gültig bis neuer Vergütungssatz"
+              type="date"
+              value={newRate.validUntil ?? ""}
+              onChange={(event) =>
+                setNewRate({ ...newRate, validUntil: event.target.value || null })
+              }
+            />
+          </label>
+          <label className="check-row">
+            <input
+              aria-label="Neuer Vergütungssatz aktiv"
+              checked={newRate.active}
+              type="checkbox"
+              onChange={(event) => setNewRate({ ...newRate, active: event.target.checked })}
+            />{" "}
+            aktiv
+          </label>
+          <div className="export-actions">
+            <PrimaryButton onClick={saveNewRate}>Speichern</PrimaryButton>
+            <SecondaryButton
+              onClick={() => {
+                setRateErrors((current) => ({ ...current, [newRate.id]: [] }));
+                setNewRate(null);
+                setNewAmountInput("");
+              }}
+            >
+              Abbrechen
+            </SecondaryButton>
+          </div>
+          {(rateErrors[newRate.id] ?? []).length > 0 ? (
+            <div className="field-error" role="alert">
+              {(rateErrors[newRate.id] ?? []).map((message) => (
+                <div key={message}>{message}</div>
+              ))}
+            </div>
+          ) : null}
+        </article>
+      ) : null}
       <div className="responsive-data-list">
         {drafts.map((rate) => (
           <article className="rate-card data-card" key={rate.id}>

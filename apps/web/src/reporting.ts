@@ -184,15 +184,53 @@ export function calculateDashboardMetrics(
     assistantAssignments: records.filter(
       (record) => record.sessionRole === SessionRole.ASSISTANT_TRAINER,
     ).length,
-    totalCompensationCents: settlements.reduce((sum, item) => sum + item.view.totalCents, 0),
+    totalCompensationCents: settlements.reduce(
+      (sum, item) =>
+        item.status === SettlementStatus.CANCELLED ? sum : sum + item.view.totalCents,
+      0,
+    ),
     draftSettlements: settlements.filter((item) => item.status === SettlementStatus.DRAFT).length,
     reviewedSettlements: settlements.filter((item) => item.status === SettlementStatus.REVIEWED)
       .length,
     approvedSettlements: settlements.filter((item) => item.status === SettlementStatus.APPROVED)
       .length,
     paidSettlements: settlements.filter((item) => item.status === SettlementStatus.PAID).length,
-    openReviewNotes: settlements.reduce((sum, item) => sum + item.view.reviewNotes.length, 0),
+    openReviewNotes: settlements.reduce(
+      (sum, item) =>
+        item.status === SettlementStatus.CANCELLED ? sum : sum + item.view.reviewNotes.length,
+      0,
+    ),
   };
+}
+
+export interface SettlementAccessItem {
+  memberId: string;
+  status: SettlementStatusValue;
+}
+
+export function filterSettlementsForRole<T extends SettlementAccessItem>(
+  settlements: readonly T[],
+  role: DemoRoleValue,
+  ownMemberId: string,
+): T[] {
+  if (role === DemoRole.BOARD) return [...settlements];
+  if (role === DemoRole.TREASURER) {
+    return settlements.filter(
+      (settlement) =>
+        settlement.status === SettlementStatus.APPROVED ||
+        settlement.status === SettlementStatus.PAID,
+    );
+  }
+  return settlements.filter((settlement) => settlement.memberId === ownMemberId);
+}
+
+export function canRoleViewSettlement(
+  role: DemoRoleValue,
+  memberId: string,
+  status: SettlementStatusValue,
+  ownMemberId: string,
+): boolean {
+  return filterSettlementsForRole([{ memberId, status }], role, ownMemberId).length === 1;
 }
 
 export function aggregateAttendance(
@@ -634,6 +672,21 @@ export function validateCompensationRates(
   return issues;
 }
 
+export function createCompensationRateIdGenerator(existingIds: readonly string[]): () => string {
+  const issuedIds = new Set(existingIds);
+  let sequence = 1;
+  return () => {
+    let candidate = `rate-local-${sequence}`;
+    while (issuedIds.has(candidate)) {
+      sequence += 1;
+      candidate = `rate-local-${sequence}`;
+    }
+    issuedIds.add(candidate);
+    sequence += 1;
+    return candidate;
+  };
+}
+
 export function formatEuro(cents: number): string {
   return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(cents / 100);
 }
@@ -728,11 +781,15 @@ export function paymentCsv(
 ): string {
   return csv([
     ["Person", "Abrechnungsmonat", "freigegebener Betrag", "Zahlungsstatus"],
-    ...rows.map(({ member, totalCents, status }) => [
-      member.name,
-      month,
-      formatEuro(totalCents),
-      status,
-    ]),
+    ...rows
+      .filter(
+        ({ status }) => status === SettlementStatus.APPROVED || status === SettlementStatus.PAID,
+      )
+      .map(({ member, totalCents, status }) => [
+        member.name,
+        month,
+        formatEuro(totalCents),
+        status,
+      ]),
   ]);
 }

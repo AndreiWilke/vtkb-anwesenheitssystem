@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { PresenceStatus, SessionRole } from "@vtkb/shared";
+import {
+  ContractStatus,
+  MemberQualification,
+  PersonMembershipStatus,
+  PresenceStatus,
+  SessionRole,
+  TrialOverrideStatus,
+  checkConversionEligibility,
+  convertTrialParticipantToMember,
+  createDirectMember,
+  grantBoardOverride,
+} from "@vtkb/shared";
 
-import { createTodaySessions, members } from "./mockData";
+import { createTodaySessions, demoAuditEntries, members, trialParticipants } from "./mockData";
 import {
   canCompleteSession,
   createInitialAttendance,
@@ -93,5 +104,137 @@ describe("Paket-1-Workflow", () => {
     remaining.push(third);
     expect(new Set([first, ...remaining]).size).toBe(3);
     expect([first, second, third]).toEqual(["guest-001", "guest-002", "guest-003"]);
+  });
+
+  it("blockiert den Abschluss, wenn ein gesperrter Probetrainingsteilnehmer anwesend ist", () => {
+    const session = createTodaySessions(new Date("2026-06-20T18:00:00+02:00"))[1]!;
+    const attendance = createInitialAttendance(members, session);
+    const blockedEntries = [
+      {
+        displayName: "Noah Beispiel-Probe",
+        reason: "Vier kostenlose Probetrainings wurden bereits genutzt.",
+      },
+    ];
+    const result = canCompleteSession(session, attendance, [], 0, blockedEntries);
+    expect(result.allowed).toBe(false);
+    expect(result.messages.join(" ")).toMatch(/Probetraining gesperrt/);
+  });
+
+  it("erlaubt Abschluss, wenn keine gesperrten Probetrainingsteilnehmer anwesend sind", () => {
+    const session = createTodaySessions(new Date("2026-06-20T18:00:00+02:00"))[1]!;
+    const attendance = createInitialAttendance(members, session);
+    const result = canCompleteSession(session, attendance, [], 0, []);
+    expect(result.allowed).toBe(true);
+  });
+
+  it("Demo-Probetrainingsteilnehmer sind 6 fiktive Profile", () => {
+    expect(trialParticipants).toHaveLength(6);
+    expect(trialParticipants.every((p) => p.id.startsWith("trial-"))).toBe(true);
+    expect(trialParticipants.every((p) => p.lastName.includes("Probetraining") || p.lastName.includes("Probe"))).toBe(true);
+  });
+
+  it("trial-006 hat Vorstandsausnahme genutzt und ist gesperrt", () => {
+    const noah = trialParticipants.find((p) => p.id === "trial-006")!;
+    expect(noah).toBeDefined();
+    expect(noah.overrideStatus).toBe(TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED);
+    expect(noah.overrideUsed).toBe(true);
+    expect(noah.contractStatus).toBe(ContractStatus.NOT_ISSUED);
+    expect(noah.membershipStatus).toBe(PersonMembershipStatus.TRIAL);
+  });
+
+  it("trial-005 wurde zum Mitglied umgewandelt (Paket 1.3 Demo)", () => {
+    const mia = trialParticipants.find((p) => p.id === "trial-005")!;
+    expect(mia).toBeDefined();
+    expect(mia.membershipStatus).toBe(PersonMembershipStatus.ACTIVE_MEMBER);
+    expect(mia.contractStatus).toBe(ContractStatus.MEMBERSHIP_ACTIVATED);
+    expect(mia.memberId).toBe("member-41");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Paket 1.3 – Konvertierungs- und Direktanlagetests
+// ---------------------------------------------------------------------------
+
+describe("Paket-1.3-Konvertierung", () => {
+  const trialBase = {
+    id: "trial-003",
+    firstName: "Sara",
+    lastName: "Probetraining",
+    displayName: "Probetraining, Sara",
+    ageGroup: "ERWACHSEN" as const,
+    birthYear: 1998,
+    createdAt: "2026-04-01T11:00:00.000Z",
+    firstTrialDate: "2026-04-05",
+    lastTrialDate: "2026-04-19",
+    contractStatus: ContractStatus.RECEIVED,
+    overrideStatus: TrialOverrideStatus.NONE,
+    overrideUsed: false,
+    membershipStatus: PersonMembershipStatus.TRIAL,
+    active: true,
+  };
+
+  it("checkConversionEligibility erlaubt RECEIVED-Vertrag", () => {
+    const result = checkConversionEligibility(trialBase);
+    expect(result.eligible).toBe(true);
+  });
+
+  it("checkConversionEligibility blockiert bei NOT_ISSUED", () => {
+    const result = checkConversionEligibility({
+      ...trialBase,
+      contractStatus: ContractStatus.NOT_ISSUED,
+    });
+    expect(result.eligible).toBe(false);
+  });
+
+  it("convertTrialParticipantToMember erzeugt korrektes Ergebnis", () => {
+    const result = convertTrialParticipantToMember({
+      participant: trialBase,
+      newMemberId: "member-099",
+      memberNumber: "M-1099",
+      qualification: MemberQualification.NONE,
+      convertedBy: "Vorstand Demo",
+      convertedAt: "2026-06-21T10:00:00.000Z",
+    });
+    expect(result.updatedParticipant.membershipStatus).toBe(PersonMembershipStatus.ACTIVE_MEMBER);
+    expect(result.updatedParticipant.memberId).toBe("member-099");
+    expect(result.auditEntry.action).toBe("TRIAL_CONVERTED_TO_MEMBER");
+  });
+
+  it("grantBoardOverride erzeugt Audit-Eintrag mit Begruendung", () => {
+    const participant = trialParticipants.find((p) => p.id === "trial-004")!;
+    const result = grantBoardOverride({
+      participant,
+      grantedBy: "Vorstand Demo",
+      grantedAt: "2026-06-21T12:00:00.000Z",
+      reason: "Ausnahme fuer Demo-Test",
+    });
+    expect(result.updatedParticipant.overrideStatus).toBe(
+      TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED,
+    );
+    expect(result.auditEntry.reason).toBe("Ausnahme fuer Demo-Test");
+  });
+
+  it("createDirectMember erzeugt aktives Mitglied ohne Probetraining", () => {
+    const result = createDirectMember({
+      id: "member-099",
+      firstName: "Klaus",
+      lastName: "Direktmitglied",
+      ageGroup: "ERWACHSEN",
+      birthYear: 1985,
+      memberNumber: "M-1099",
+      createdBy: "Vorstand Demo",
+      createdAt: "2026-06-21T11:00:00.000Z",
+    });
+    expect(result.membershipStatus).toBe(PersonMembershipStatus.ACTIVE_MEMBER);
+    expect(result.active).toBe(true);
+    expect(result.auditEntry.action).toBe("DIRECT_MEMBER_CREATED");
+  });
+
+  it("demoAuditEntries enthalten drei fiktive Eintraege", () => {
+    expect(demoAuditEntries).toHaveLength(3);
+    const actions = demoAuditEntries.map((e) => e.action);
+    expect(actions).toContain("TRIAL_CONVERTED_TO_MEMBER");
+    expect(actions).toContain("BOARD_OVERRIDE_GRANTED");
+    expect(actions).toContain("DIRECT_MEMBER_CREATED");
   });
 });

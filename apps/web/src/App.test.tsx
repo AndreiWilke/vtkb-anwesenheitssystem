@@ -4,11 +4,14 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 async function openCaptureMethod(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: /Training starten/ }));
@@ -142,6 +145,7 @@ describe("klickbarer Paket-1-Prototyp", () => {
     expect(
       screen.getByRole("heading", { name: "Auswertung – Mitglieder und Schüler" }),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText("Dauerhafte Qualifikation filtern")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Aiko Beispiel/ }));
     expect(screen.getByRole("heading", { name: "Aiko Beispiel" })).toBeInTheDocument();
     expect(screen.getAllByText(/Einheiten/).length).toBeGreaterThan(0);
@@ -166,6 +170,48 @@ describe("klickbarer Paket-1-Prototyp", () => {
     await user.click(within(nav).getByRole("button", { name: "Auswertung" }));
     expect(screen.getByRole("heading", { name: "Zahlungsliste" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Vergütungssätze" })).not.toBeInTheDocument();
+  });
+
+  it("zeigt ungültige Korrekturbeträge verständlich und stürzt nicht ab", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
+    await user.click(within(nav).getByRole("button", { name: "Auswertung" }));
+    await user.click(screen.getByRole("button", { name: "Abrechnung" }));
+    await user.click(screen.getByRole("button", { name: /Aiko Beispiel/ }));
+    await user.click(screen.getByRole("button", { name: "Korrektur hinzufügen" }));
+    await user.type(screen.getByLabelText("Korrekturbetrag"), "abc");
+    expect(screen.getByRole("alert")).toHaveTextContent("gültigen Eurobetrag");
+    expect(screen.getByRole("button", { name: "Korrektur speichern" })).toBeDisabled();
+  });
+
+  it("blockiert die Prüfung sichtbar bei fehlendem Vergütungssatz", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
+    await user.click(within(nav).getByRole("button", { name: "Auswertung" }));
+    await user.click(screen.getByRole("button", { name: "Vergütungssätze" }));
+    await user.click(screen.getAllByRole("checkbox", { name: "aktiv" })[0]!);
+    await user.click(screen.getAllByRole("button", { name: "Satz lokal speichern" })[0]!);
+    await user.click(screen.getByRole("button", { name: "Abrechnung" }));
+    await user.click(screen.getByRole("button", { name: /Aiko Beispiel/ }));
+    expect(screen.getAllByText(/Kein aktiver Vergütungssatz/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Als geprüft markieren" })).toBeDisabled();
+  });
+
+  it("zeigt nach Stornierung keine Bearbeitungsaktionen", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<App />);
+    const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
+    await user.click(within(nav).getByRole("button", { name: "Auswertung" }));
+    await user.click(screen.getByRole("button", { name: "Abrechnung" }));
+    await user.click(screen.getByRole("button", { name: /Aiko Beispiel/ }));
+    await user.click(screen.getByRole("button", { name: "Stornieren" }));
+    expect(screen.getByText(/Storniert vor Freigabe/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Korrektur hinzufügen" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Freigeben" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Als bezahlt markieren" })).not.toBeInTheDocument();
   });
 
   it("verhindert das Umgehen der Erfassung über die Hauptnavigation", async () => {

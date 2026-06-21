@@ -35,7 +35,7 @@ Die gemeinsamen Fachtypen wurden um Statuswerte für geplante, laufende und stor
 
 ## Anwesenheitsaggregation
 
-Die Funktionen in `apps/web/src/reporting.ts` filtern Monat, Jahr oder freien Zeitraum und aggregieren ausschließlich tatsächlich gespeicherte Anwesenheiten. Teilnehmer-, Trainer- und Assistenzeinsätze ergeben zusammen exakt die Gesamtanwesenheit. Trainer- und Assistenzfunktionen zählen allgemein als Anwesenheit, aber nie zusätzlich als Teilnehmer. Die letzte Teilnahme und die Monatswerte entstehen aus historischen Einheiten.
+Die Funktionen in `apps/web/src/reporting.ts` filtern Monat, Jahr oder freien Zeitraum und aggregieren ausschließlich Datensätze mit `presenceStatus === PRESENT` aus Einheiten mit `status === COMPLETED`. `ABSENT` sowie geplante, laufende, stornierte oder abgebrochene Einheiten verändern weder Teilnahme, letzte Teilnahme, Mitgliedsdetail, Monatsübersicht, Trainerermittlung, Dashboard noch CSV-Anwesenheit. Teilnehmer-, Trainer- und Assistenzeinsätze ergeben zusammen exakt die Gesamtanwesenheit. Trainer- und Assistenzfunktionen zählen allgemein als Anwesenheit, aber nie zusätzlich als Teilnehmer. Die letzte Teilnahme und die Monatswerte entstehen aus historischen Einheiten.
 
 Es gibt keinen festen Kader. Deshalb berechnet oder zeigt Paket 1.1 weder Fehlzeiten noch eine Anwesenheitsquote.
 
@@ -48,13 +48,13 @@ Die lokalen Beispielsätze sind:
 - verantwortlicher Trainer: 20,00 EUR je abgeschlossener Einheit,
 - Assistenztrainer: 10,00 EUR je abgeschlossener Einheit.
 
-Die Oberfläche kennzeichnet sie mit „Fiktive Vergütungssätze für den lokalen Prototyp“. Betrag, Gültig-ab, optionales Gültig-bis und Aktivstatus sind lokal bearbeitbar. Entwürfe berechnen sich danach automatisch neu. Sätze werden anhand des fachlichen Einheitsdatums inklusive Gültigkeitsgrenzen bestimmt. Fehlt ein Satz, bleibt die Position ohne Betrag und erzeugt einen sichtbaren Prüfhinweis; es wird nicht stillschweigend mit 0,00 EUR abgerechnet.
+Die Oberfläche kennzeichnet sie mit „Fiktive Vergütungssätze für den lokalen Prototyp“. Betrag, Gültig-ab, optionales Gültig-bis und Aktivstatus sind lokal bearbeitbar. Entwürfe berechnen sich danach automatisch neu. Sätze werden anhand des fachlichen Einheitsdatums inklusive Gültigkeitsgrenzen bestimmt. Betrag, Bezeichnung und Datumswerte werden fachlich validiert; aktive Zeiträume derselben Rolle dürfen sich nicht überschneiden. `findCompensationRate` verwirft Mehrdeutigkeiten ausdrücklich. Fehlt ein Satz, bleibt die Position ohne Betrag und erzeugt einen sichtbaren Prüfhinweis; es wird nicht stillschweigend mit 0,00 EUR abgerechnet.
 
 Alle Geldbeträge werden intern als ganze Centwerte verarbeitet und in Euro mit zwei Nachkommastellen dargestellt.
 
 ## Korrekturen, Status und Snapshot
 
-Positive oder negative Korrekturen besitzen Centbetrag, verpflichtende Begründung, fiktive bearbeitende Person und Zeitpunkt. Sie bleiben getrennt von Trainer- und Assistenz-Zwischensummen.
+Positive oder negative Korrekturen besitzen Centbetrag, verpflichtende Begründung, fiktive bearbeitende Person und Zeitpunkt. Sie bleiben getrennt von Trainer- und Assistenz-Zwischensummen. Eine zentrale Euro-zu-Cent-Funktion akzeptiert deutsche Eingaben wie `10`, `10,50` und `-5,00` und verwirft leere, nicht numerische, mehrdeutige, zu genaue, nicht endliche, nullwertige oder technisch zu große Beträge ohne unbehandelten Fehler.
 
 Implementierte Statuswerte und erlaubte Übergänge:
 
@@ -62,7 +62,11 @@ Implementierte Statuswerte und erlaubte Übergänge:
 - `REVIEWED` → `DRAFT`, `APPROVED` oder `CANCELLED`
 - `APPROVED` → `PAID` oder `CANCELLED`
 
-Freigabe, Bezahlt-Markierung und Stornierung verlangen eine Bestätigung. Bei `APPROVED` wird ein eingefrorener Snapshot mit Monat, Person, Positionen, Sätzen, Korrekturen, Gesamtbetrag, Freigabezeit und fiktiver freigebender Person erzeugt. `APPROVED` und `PAID` lassen keine Satz-, Positions-, Korrektur- oder Betragsänderung der Abrechnung mehr zu. Spätere Änderungen allgemeiner Mock-Sätze verändern den Snapshot nicht.
+Freigabe, Bezahlt-Markierung und Stornierung verlangen eine Bestätigung. Eine zentrale Validierung blockiert `REVIEWED` und `APPROVED`, solange Prüfhinweise oder Positionen ohne Satz beziehungsweise Betrag bestehen; die Oberfläche zeigt den Grund und deaktiviert die jeweilige Schaltfläche. Bei `APPROVED` wird ein eingefrorener Snapshot mit Monat, Person, Positionen, Sätzen, Korrekturen, Gesamtbetrag, Freigabezeit und fiktiver freigebender Person erzeugt.
+
+`resolveSettlementView` ist die einzige Auflösung zwischen aktueller Berechnung und Snapshot. Einzelansicht, Monatsübersicht, Zahlungsliste, beide Abrechnungs-CSV, Druckansicht und Dashboard verwenden dadurch bei `APPROVED`, `PAID` und nach Freigabe `CANCELLED` konsistent den eingefrorenen Stand. Eine Stornierung ist terminal. Eine vor Freigabe stornierte Abrechnung erhält einen eigenen Stornierungssnapshot; eine nach Freigabe stornierte Abrechnung behält den historischen Freigabesnapshot. Danach sind Korrekturen, Beträge, erneute Freigabe und Bezahlt-Markierung ausgeschlossen.
+
+Monatsabrechnung und Dashboard behandeln nur Personen mit Trainer-/Assistenzeinsatz, Korrektur, gespeichertem Status oder Snapshot als relevante Abrechnung. Personen ohne jede Monatsposition erhöhen nicht künstlich die Zahl der Entwürfe.
 
 ## Auditprotokoll
 
@@ -92,11 +96,11 @@ Vite-Produktionsergebnis:
 
 | Datei      |  Rohgröße |     gzip |
 | ---------- | --------: | -------: |
-| JavaScript | 274,24 kB | 82,64 kB |
-| CSS        |  25,87 kB |  6,20 kB |
+| JavaScript | 281,05 kB | 84,75 kB |
+| CSS        |  26,03 kB |  6,23 kB |
 | HTML       |   0,76 kB |  0,44 kB |
 
-Der PWA-Precache enthält sechs Einträge mit zusammen 293,96 KiB. Source Maps sind Buildartefakte und werden nicht committed.
+Der PWA-Precache enthält sechs Einträge mit zusammen 300,77 KiB. Source Maps sind Buildartefakte und werden nicht committed.
 
 ## Testbefehle und Ergebnisse
 
@@ -108,21 +112,21 @@ Ausführungsumgebung: Node.js `v24.17.0`, npm `11.4.2`.
 | `npm run format:check` | erfolgreich                                                     |
 | `npm run lint`         | erfolgreich                                                     |
 | `npm run typecheck`    | erfolgreich                                                     |
-| `npm test`             | erfolgreich, 5 Testdateien und 73 Tests                         |
-| UTC: `npm test`        | erfolgreich, 5 Testdateien und 73 Tests bei `TZ=UTC`            |
+| `npm test`             | erfolgreich, 5 Testdateien und 110 Tests                        |
+| UTC: `npm test`        | erfolgreich, 5 Testdateien und 110 Tests bei `TZ=UTC`           |
 | `npm run check`        | erfolgreich                                                     |
 | `npm run build`        | erfolgreich                                                     |
 | `npm audit`            | erfolgreich, 0 Schwachstellen                                   |
 | `npm query .workspace` | erfolgreich, vier erwartete Workspaces                          |
-| `npm run qa:browser`   | erfolgreich, 15 Viewport-/Ablaufprüfungen, keine Konsolenfehler |
+| `npm run qa:browser`   | erfolgreich, 17 Viewport-/Ablaufprüfungen, keine Konsolenfehler |
 
-Die Tests decken Anwesenheits- und Rollenaggregation, Monats-/Jahres-/Bereichsfilter, Berlin-Zeit, letzte Teilnahme, fehlende Quoten, Centgenauigkeit, Satzwechsel und Gültigkeitsgrenzen, fehlende Sätze, Korrekturen, Statusübergänge, Snapshot-Unveränderlichkeit, Rollenberechtigungen und CSV-Inhalte ab. Bestehende Paket-0- und Paket-1-Tests bleiben erhalten.
+Die Tests decken Anwesenheits- und Rollenaggregation, strikte `PRESENT`-/`COMPLETED`-Filterung, Monats-/Jahres-/Bereichsfilter, Berlin-Zeit, letzte Teilnahme, fehlende Quoten, Centgenauigkeit, Satzvalidierung und Gültigkeitsgrenzen, fehlende Sätze, sichere Euroeingaben, Korrekturen, Statussperren, terminale Stornierung, zentrale Snapshotauflösung bis Dashboard/CSV, relevante Monatsabrechnungen, Rollenberechtigungen und CSV-Inhalte ab. Die bestehenden 73 Paket-0-, Paket-1- und Paket-1.1-Tests bleiben unverändert erhalten und wurden nur ergänzt.
 
 ## Browser-QA
 
 Der eingebettete Browser konnte wegen fehlender Sandbox-Metadaten der Desktop-Sitzung nicht initialisiert werden. Der ausdrücklich geforderte reproduzierbare Fallback lief mit dem vorhandenen Playwright 1.60.0 und lokalem Microsoft Edge.
 
-Geprüft wurden Startansicht und Überlauf bei 375, 390, 430, 768 und 1280 Pixel sowie manueller und Foto-Demo-Ablauf, Vorstands-Dashboard, Monats-/Mitglieder-/Traineransichten, Mitgliedsdetail, Satzänderung, automatische Neuberechnung, Korrektur, Prüfung, Freigabe, eingefrorener Snapshot nach erneuter Satzänderung, Kassenwart-Zahlung, CSV-Downloads, Druckmedium, Rollenwechsel und eigene Trainerübersicht. Die Browserkonsole enthielt keine Fehler.
+Geprüft wurden Startansicht und Überlauf bei 375, 390, 430, 768 und 1280 Pixel sowie manueller und Foto-Demo-Ablauf, Vorstands-Dashboard, Monats-/Mitglieder-/Traineransichten, Mitgliedsdetail, Satzänderung und Satzfehler, automatische Neuberechnung, gültige und ungültige Korrekturbeträge, blockierte Prüfung bei fehlendem Satz, Freigabe, eingefrorener Snapshot nach erneuter Satzänderung, Snapshotwerte in Abrechnungs- und Zahlungs-CSV, terminale Stornierung ohne Bearbeitungsschaltflächen, Kassenwart-Zahlung, Druckmedium, Rollenwechsel und eigene Trainerübersicht. Die Browserkonsole enthielt keine Fehler.
 
 ## Bekannte Einschränkungen
 

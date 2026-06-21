@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright";
@@ -179,7 +179,7 @@ const responsibleRate = page.getByLabel(/Betrag Verantwortlicher Trainer/);
 await responsibleRate.fill("25,00");
 await page.getByRole("button", { name: "Satz lokal speichern" }).first().click();
 
-await page.getByRole("button", { name: "Abrechnung" }).click();
+await page.getByRole("button", { name: "Abrechnung", exact: true }).click();
 await page.getByRole("heading", { name: "Aufwandsentschädigung", exact: true }).waitFor();
 const compensationDownloadPromise = page.waitForEvent("download");
 await page.getByRole("button", { name: /CSV Aufwandsentschädigung/ }).click();
@@ -206,11 +206,21 @@ const approvedTotal = await page.locator(".grand-total dd").innerText();
 await page.getByRole("button", { name: "Vergütungssätze" }).click();
 await responsibleRate.fill("30,00");
 await page.getByRole("button", { name: "Satz lokal speichern" }).first().click();
-await page.getByRole("button", { name: "Abrechnung" }).click();
+await page.getByRole("button", { name: "Abrechnung", exact: true }).click();
 await page.getByRole("button", { name: /Aiko Beispiel/ }).click();
 if ((await page.locator(".grand-total dd").innerText()) !== approvedTotal) {
   throw new Error("Freigegebener Snapshot änderte sich nach Satzänderung");
 }
+await page.getByRole("button", { name: "Abrechnung", exact: true }).click();
+const frozenCsvPromise = page.waitForEvent("download");
+await page.getByRole("button", { name: /CSV Aufwandsentschädigung/ }).click();
+const frozenCsvDownload = await frozenCsvPromise;
+const frozenCsvPath = await frozenCsvDownload.path();
+const frozenCsv = frozenCsvPath ? await readFile(frozenCsvPath, "utf8") : "";
+if (!frozenCsv.includes(approvedTotal)) {
+  throw new Error("CSV verwendet nach Satzänderung nicht den freigegebenen Snapshot");
+}
+await page.getByRole("button", { name: /Aiko Beispiel/ }).click();
 results.push({ flow: "draft-rate-correction-approval-snapshot", completed: true });
 
 await page.getByLabel("Demo-Rolle wechseln").selectOption("TREASURER");
@@ -225,6 +235,11 @@ await page.getByRole("button", { name: /Zahlungsliste CSV/ }).click();
 const paymentDownload = await paymentDownloadPromise;
 if (paymentDownload.suggestedFilename() !== "zahlungsliste.csv") {
   throw new Error("Unerwarteter CSV-Dateiname der Zahlungsliste");
+}
+const paymentPath = await paymentDownload.path();
+const paymentContent = paymentPath ? await readFile(paymentPath, "utf8") : "";
+if (!paymentContent.includes(approvedTotal)) {
+  throw new Error("Zahlungsliste verwendet nicht den freigegebenen Snapshot");
 }
 results.push({ flow: "treasurer-payment", completed: true });
 
@@ -243,6 +258,46 @@ if (await page.locator(".app-header").isVisible())
   throw new Error("App-Header bleibt im Druck sichtbar");
 await page.emulateMedia({ media: "screen" });
 results.push({ flow: "print-view", completed: true });
+
+await page.reload({ waitUntil: "networkidle" });
+await page.getByLabel("Hauptnavigation").getByRole("button", { name: "Auswertung" }).click();
+await page.getByRole("button", { name: "Vergütungssätze" }).click();
+const invalidRate = page.getByLabel(/Betrag Verantwortlicher Trainer/);
+await invalidRate.fill("-1,00");
+await page.getByRole("button", { name: "Satz lokal speichern" }).first().click();
+await page.getByText(/positive ganze Centzahl/).waitFor();
+await invalidRate.fill("20,00");
+await page.getByRole("checkbox", { name: "aktiv" }).first().uncheck();
+await page.getByRole("button", { name: "Satz lokal speichern" }).first().click();
+await page.getByRole("button", { name: "Abrechnung", exact: true }).click();
+await page.getByRole("button", { name: /Aiko Beispiel/ }).click();
+const reviewButton = page.getByRole("button", { name: "Als geprüft markieren" });
+if (await reviewButton.isEnabled()) throw new Error("Fehlender Satz blockiert REVIEWED nicht");
+await page
+  .getByText(/Kein aktiver Vergütungssatz/)
+  .first()
+  .waitFor();
+await page.getByRole("button", { name: "Korrektur hinzufügen" }).click();
+await page.getByLabel("Korrekturbetrag").fill("abc");
+await page.getByRole("alert").waitFor();
+if (await page.getByRole("button", { name: "Korrektur speichern" }).isEnabled()) {
+  throw new Error("Ungültiger Korrekturbetrag ist speicherbar");
+}
+results.push({ flow: "blocked-review-and-invalid-input", completed: true });
+
+await page.reload({ waitUntil: "networkidle" });
+await page.getByLabel("Hauptnavigation").getByRole("button", { name: "Auswertung" }).click();
+await page.getByRole("button", { name: "Abrechnung", exact: true }).click();
+await page.getByRole("button", { name: /Aiko Beispiel/ }).click();
+page.once("dialog", (dialog) => dialog.accept());
+await page.getByRole("button", { name: "Stornieren" }).click();
+await page.getByText(/Storniert vor Freigabe/).waitFor();
+for (const forbiddenAction of ["Korrektur hinzufügen", "Freigeben", "Als bezahlt markieren"]) {
+  if ((await page.getByRole("button", { name: forbiddenAction }).count()) !== 0) {
+    throw new Error(`Stornierte Abrechnung zeigt unzulässig: ${forbiddenAction}`);
+  }
+}
+results.push({ flow: "cancelled-terminal", completed: true });
 
 if (consoleErrors.length) throw new Error(`Browser-Konsole: ${consoleErrors.join(" | ")}`);
 await writeFile(

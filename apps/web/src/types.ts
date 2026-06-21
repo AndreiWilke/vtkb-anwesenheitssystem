@@ -1,4 +1,11 @@
-import type { MemberQualification, PresenceStatus, SessionRole } from "@vtkb/shared";
+import type {
+  AttendanceRecord,
+  DemoRole,
+  MemberQualification,
+  PresenceStatus,
+  TrainingSessionStatus,
+  SessionRole,
+} from "@vtkb/shared";
 
 export type AgeGroup = "KIND" | "JUGEND" | "ERWACHSEN";
 export type BeltColor = "WEISS" | "GELB" | "ORANGE" | "GRUEN" | "BLAU" | "BRAUN" | "SCHWARZ";
@@ -29,10 +36,48 @@ export interface Member {
   beltColor: BeltColor;
   beltGrade: string;
   qualification: MemberQualification;
+  active: boolean;
   trainingsVisited: number;
   responsibleAssignments: number;
   assistantAssignments: number;
 }
+
+export type TrainingType =
+  | "KINDERTRAINING"
+  | "JUGENDTRAINING"
+  | "ERWACHSENENTRAINING"
+  | "GRUNDLAGENTRAINING"
+  | "FORTGESCHRITTENENTRAINING";
+
+export interface HistoricalTrainingSession {
+  id: string;
+  date: string;
+  startsAt: string;
+  endsAt: string;
+  timeZone: "Europe/Berlin";
+  name: string;
+  trainingType: TrainingType;
+  dojo: string;
+  status: TrainingSessionStatus;
+  attendance: readonly AttendanceRecord[];
+  completedAt: string | null;
+  completedBy: string | null;
+}
+
+export type ReportingView =
+  | "DASHBOARD"
+  | "MEMBERS"
+  | "MEMBER_DETAIL"
+  | "TRAINERS"
+  | "TRAINER_DETAIL"
+  | "SETTLEMENTS"
+  | "SETTLEMENT_DETAIL"
+  | "RATES"
+  | "AUDIT"
+  | "PAYMENTS"
+  | "OWN";
+
+export type DemoRoleValue = DemoRole;
 
 export interface TrainingSessionMock {
   id: string;

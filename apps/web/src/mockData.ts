@@ -79,6 +79,7 @@ export const members: Member[] = fictionalFirstNames.map((firstName, index) => {
     beltColor: belt?.color ?? "WEISS",
     beltGrade: belt?.grade ?? "9. Kyu",
     qualification: qualificationForIndex(index),
+    active: index !== 39,
     trainingsVisited: 8 + ((index * 7) % 39),
     responsibleAssignments: index < 4 ? 2 + index * 3 : 0,
     assistantAssignments: index < 8 ? 1 + ((index * 2) % 11) : 0,

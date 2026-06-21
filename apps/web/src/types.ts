@@ -1,16 +1,41 @@
 import type {
   AttendanceRecord,
+  BeltHistoryEntry as SharedBeltHistoryEntry,
+  BeltSuggestion as SharedBeltSuggestion,
   DemoRole,
   MemberQualification,
   PresenceStatus,
-  TrainingSessionStatus,
   SessionRole,
+  TrainingSessionStatus,
+  TrialParticipant as SharedTrialParticipant,
 } from "@vtkb/shared";
+
+// Re-export shared Paket-1.2 + 1.3 Typen fuer Verwendung in der Web-App
+export type {
+  AuditEntry,
+  BeltChangeSource,
+  BeltSuggestionStatus,
+  ContractStatus,
+  ConversionResult,
+  DirectMemberResult,
+  PersonMembershipStatus,
+  TrialOverrideStatus,
+} from "@vtkb/shared";
+
+export type BeltHistoryEntry = SharedBeltHistoryEntry;
+export type BeltSuggestion = SharedBeltSuggestion;
+export type TrialParticipant = SharedTrialParticipant;
 
 export type AgeGroup = "KIND" | "JUGEND" | "ERWACHSEN";
 export type BeltColor = "WEISS" | "GELB" | "ORANGE" | "GRUEN" | "BLAU" | "BRAUN" | "SCHWARZ";
 export type SessionUiStatus = "BEVORSTEHEND" | "LAEUFT" | "BEENDET";
-export type GuestKind = "GAST" | "PROBETRAINING";
+
+/**
+ * Paket 1.2: GuestKind ist nur noch "GAST".
+ * "PROBETRAINING" wurde durch TrialParticipant (eigenes Profil) ersetzt.
+ */
+export type GuestKind = "GAST";
+
 export type ProposalStatus = "EINDEUTIG" | "PRUEFEN" | "UNBEKANNT" | "DUBLETTE";
 export type ProposalResolutionAction =
   | "PRESELECTED_MEMBER"
@@ -75,7 +100,11 @@ export type ReportingView =
   | "RATES"
   | "AUDIT"
   | "PAYMENTS"
-  | "OWN";
+  | "OWN"
+  | "TRIALS"
+  | "TRIAL_DETAIL"
+  | "TRIAL_REPORT"
+  | "BELT_SUGGESTIONS";
 
 export type DemoRoleValue = DemoRole;
 
@@ -133,4 +162,15 @@ export type AppScreen =
   | "PHOTO_REVIEW"
   | "SUMMARY"
   | "COMPLETE"
-  | "STATS";
+  | "STATS"
+  // Paket 1.2
+  | "TRIAL_LIST"
+  | "TRIAL_NEW"
+  | "TRIAL_PROFILE"
+  | "TRIAL_CONTRACT"
+  | "BELT_SUGGESTION_REVIEW"
+  // Paket 1.3
+  | "TRIAL_CONVERT"
+  | "TRIAL_BOARD_OVERRIDE"
+  | "MEMBER_DIRECT_NEW"
+  | "TRIAL_REPORT";

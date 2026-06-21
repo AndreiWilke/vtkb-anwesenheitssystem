@@ -1,5 +1,10 @@
 import { useMemo, useRef, useState } from "react";
-import { PresenceStatus, SessionRole } from "@vtkb/shared";
+import {
+  DemoRole,
+  PresenceStatus,
+  SessionRole,
+  type DemoRole as DemoRoleValue,
+} from "@vtkb/shared";
 
 import { AppShell } from "./components";
 import {
@@ -13,9 +18,9 @@ import {
   PhotoReviewScreen,
   SessionSelectScreen,
   StartScreen,
-  StatsScreen,
   SummaryScreen,
 } from "./screens";
+import { ReportingScreen } from "./reportingScreens";
 import { createTodaySessions, initialPhotoProposals, members } from "./mockData";
 import type {
   AppScreen,
@@ -65,6 +70,7 @@ export default function App() {
   const [photoModeUsed, setPhotoModeUsed] = useState(false);
   const [proposals, setProposals] = useState<PhotoProposal[]>(cloneProposals);
   const [workflow, setWorkflow] = useState<WorkflowState>(initialWorkflow);
+  const [demoRole, setDemoRole] = useState<DemoRoleValue>(DemoRole.BOARD);
   const guestIdFactory = useRef(createLocalGuestIdFactory()).current;
 
   const activeProposals = photoModeUsed ? proposals : [];
@@ -485,12 +491,20 @@ export default function App() {
       );
       break;
     case "STATS":
-      content = <StatsScreen members={members} onBack={() => setScreen("START")} />;
+      content = (
+        <ReportingScreen demoRole={demoRole} members={members} onBack={() => setScreen("START")} />
+      );
       break;
   }
 
   return (
-    <AppShell reviewEnabled={workflow.attendanceReviewed} screen={screen} onNavigate={navigate}>
+    <AppShell
+      demoRole={demoRole}
+      reviewEnabled={workflow.attendanceReviewed}
+      screen={screen}
+      onDemoRoleChange={setDemoRole}
+      onNavigate={navigate}
+    >
       {content}
     </AppShell>
   );

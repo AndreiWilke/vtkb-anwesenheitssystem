@@ -47,3 +47,12 @@
 - Kein Cognito-Login, Datenbankzugriff, Foto-Upload oder Rekognition-Aufruf.
 - Keine echte Offline-Synchronisation.
 - Paket 1 beginnt erst nach einer getrennten ausdruecklichen Freigabe.
+
+## Fachliche Invarianten fuer Auswertung und Aufwandsentschaedigung
+
+- Auswertungen verwenden nur tatsaechlich gespeicherte Anwesenheiten; ohne festen Kader werden weder Fehlzeiten noch Anwesenheitsquoten abgeleitet.
+- Fuer die Verguetung gilt ausschliesslich die Funktion in der abgeschlossenen Trainingseinheit, niemals die dauerhafte Qualifikation.
+- Geldbetraege werden als ganze Centwerte berechnet.
+- Fehlt fuer einen abrechnungsfaehigen Einsatz ein gueltiger aktiver Verguetungssatz, entsteht ein Pruefhinweis und keine stillschweigende Nullabrechnung.
+- Freigegebene und bezahlte Abrechnungen beruhen auf einem unveraenderlichen Snapshot; spaetere Satz- oder Korrekturaenderungen wirken nicht rueckwirkend.
+- Manuelle Korrekturen bleiben getrennt von der automatischen Grundverguetung und benoetigen eine Begruendung.

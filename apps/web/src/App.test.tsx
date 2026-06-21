@@ -4,11 +4,14 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 async function openCaptureMethod(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: /Training starten/ }));
@@ -128,7 +131,87 @@ describe("klickbarer Paket-1-Prototyp", () => {
     const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
     expect(nav).toBeInTheDocument();
     await user.click(within(nav).getByRole("button", { name: "Auswertung" }));
-    expect(screen.getByRole("heading", { name: "Auswertung · Demo" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Auswertung und Aufwandsentschädigung" }),
+    ).toBeInTheDocument();
+  });
+
+  it("öffnet Mitgliederübersicht und berechnetes Mitgliedsdetail", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
+    await user.click(within(nav).getByRole("button", { name: "Auswertung" }));
+    await user.click(screen.getByRole("button", { name: "Mitglieder" }));
+    expect(
+      screen.getByRole("heading", { name: "Auswertung – Mitglieder und Schüler" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Dauerhafte Qualifikation filtern")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Aiko Beispiel/ }));
+    expect(screen.getByRole("heading", { name: "Aiko Beispiel" })).toBeInTheDocument();
+    expect(screen.getAllByText(/Einheiten/).length).toBeGreaterThan(0);
+  });
+
+  it("begrenzt die Trainer-Demoansicht auf die eigene Abrechnung", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Demo-Rolle wechseln"), "TRAINER");
+    const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
+    await user.click(within(nav).getByRole("button", { name: "Auswertung" }));
+    expect(screen.getByRole("button", { name: "Meine Übersicht" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Vergütungssätze" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Aiko Beispiel · Juni 2026/ })).toBeInTheDocument();
+  });
+
+  it("zeigt dem Kassenwart die Zahlungsliste statt Vorstandsfunktionen", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Demo-Rolle wechseln"), "TREASURER");
+    const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
+    await user.click(within(nav).getByRole("button", { name: "Auswertung" }));
+    expect(screen.getByRole("heading", { name: "Zahlungsliste" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Vergütungssätze" })).not.toBeInTheDocument();
+  });
+
+  it("zeigt ungültige Korrekturbeträge verständlich und stürzt nicht ab", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
+    await user.click(within(nav).getByRole("button", { name: "Auswertung" }));
+    await user.click(screen.getByRole("button", { name: "Abrechnung" }));
+    await user.click(screen.getByRole("button", { name: /Aiko Beispiel/ }));
+    await user.click(screen.getByRole("button", { name: "Korrektur hinzufügen" }));
+    await user.type(screen.getByLabelText("Korrekturbetrag"), "abc");
+    expect(screen.getByRole("alert")).toHaveTextContent("gültigen Eurobetrag");
+    expect(screen.getByRole("button", { name: "Korrektur speichern" })).toBeDisabled();
+  });
+
+  it("blockiert die Prüfung sichtbar bei fehlendem Vergütungssatz", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
+    await user.click(within(nav).getByRole("button", { name: "Auswertung" }));
+    await user.click(screen.getByRole("button", { name: "Vergütungssätze" }));
+    await user.click(screen.getAllByRole("checkbox", { name: "aktiv" })[0]!);
+    await user.click(screen.getAllByRole("button", { name: "Satz lokal speichern" })[0]!);
+    await user.click(screen.getByRole("button", { name: "Abrechnung" }));
+    await user.click(screen.getByRole("button", { name: /Aiko Beispiel/ }));
+    expect(screen.getAllByText(/Kein aktiver Vergütungssatz/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Als geprüft markieren" })).toBeDisabled();
+  });
+
+  it("zeigt nach Stornierung keine Bearbeitungsaktionen", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<App />);
+    const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
+    await user.click(within(nav).getByRole("button", { name: "Auswertung" }));
+    await user.click(screen.getByRole("button", { name: "Abrechnung" }));
+    await user.click(screen.getByRole("button", { name: /Aiko Beispiel/ }));
+    await user.click(screen.getByRole("button", { name: "Stornieren" }));
+    expect(screen.getByText(/Storniert vor Freigabe/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Korrektur hinzufügen" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Freigeben" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Als bezahlt markieren" })).not.toBeInTheDocument();
   });
 
   it("verhindert das Umgehen der Erfassung über die Hauptnavigation", async () => {
@@ -260,5 +343,53 @@ describe("klickbarer Paket-1-Prototyp", () => {
     await user.click(screen.getByRole("button", { name: "Gesamtliste öffnen" }));
     expect(screen.queryByText("Mika Beispiel")).not.toBeInTheDocument();
     expect(within(screen.getByTestId("summary-total")).getByText("1")).toBeInTheDocument();
+  });
+
+  it("legt einen neuen Vergütungssatz an und protokolliert ihn", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(
+      within(screen.getByRole("navigation", { name: "Hauptnavigation" })).getByRole("button", {
+        name: "Auswertung",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Vergütungssätze" }));
+    await user.click(screen.getByRole("button", { name: "Neuen Vergütungssatz anlegen" }));
+    await user.type(screen.getByLabelText("Bezeichnung neuer Vergütungssatz"), "Juli-Satz");
+    await user.selectOptions(
+      screen.getByLabelText("Rolle neuer Vergütungssatz"),
+      "RESPONSIBLE_TRAINER",
+    );
+    await user.type(screen.getByLabelText("Betrag neuer Vergütungssatz"), "25,00");
+    await user.type(screen.getByLabelText("Gültig ab neuer Vergütungssatz"), "2026-07-01");
+    await user.click(screen.getByLabelText("Neuer Vergütungssatz aktiv"));
+    await user.click(screen.getByRole("button", { name: "Speichern" }));
+    expect(screen.getByDisplayValue("Juli-Satz")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Audit" }));
+    expect(screen.getByText(/Vergütungssatz angelegt/)).toBeInTheDocument();
+    expect(screen.getByText(/Juli-Satz/)).toBeInTheDocument();
+  });
+
+  it("verwirft einen neuen Satz bei Abbruch und lehnt Überlappungen sichtbar ab", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(
+      within(screen.getByRole("navigation", { name: "Hauptnavigation" })).getByRole("button", {
+        name: "Auswertung",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Vergütungssätze" }));
+    await user.click(screen.getByRole("button", { name: "Neuen Vergütungssatz anlegen" }));
+    await user.type(screen.getByLabelText("Bezeichnung neuer Vergütungssatz"), "Abbruch-Satz");
+    await user.click(screen.getByRole("button", { name: "Abbrechen" }));
+    expect(screen.queryByDisplayValue("Abbruch-Satz")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Neuen Vergütungssatz anlegen" }));
+    await user.type(screen.getByLabelText("Bezeichnung neuer Vergütungssatz"), "Überlappung");
+    await user.type(screen.getByLabelText("Betrag neuer Vergütungssatz"), "25,00");
+    await user.type(screen.getByLabelText("Gültig ab neuer Vergütungssatz"), "2026-06-01");
+    await user.click(screen.getByRole("button", { name: "Speichern" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("überschneiden");
+    expect(screen.getByRole("heading", { name: "Neuer Vergütungssatz" })).toBeInTheDocument();
   });
 });

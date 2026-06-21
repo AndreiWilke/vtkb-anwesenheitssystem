@@ -1,5 +1,6 @@
 import type { ButtonHTMLAttributes, PropsWithChildren, ReactNode } from "react";
 import { BarChart3, ClipboardCheck, Home, LogOut, Menu, Users } from "lucide-react";
+import { DemoRole, type DemoRole as DemoRoleValue } from "@vtkb/shared";
 
 import type { AppScreen, BeltColor } from "./types";
 
@@ -7,6 +8,8 @@ interface AppShellProps extends PropsWithChildren {
   screen: AppScreen;
   onNavigate: (screen: AppScreen) => void;
   reviewEnabled: boolean;
+  demoRole: DemoRoleValue;
+  onDemoRoleChange: (role: DemoRoleValue) => void;
 }
 
 const navItems: ReadonlyArray<{ label: string; screen: AppScreen; icon: typeof Home }> = [
@@ -24,7 +27,14 @@ export function ToriiMark(): ReactNode {
   );
 }
 
-export function AppShell({ children, reviewEnabled, screen, onNavigate }: AppShellProps) {
+export function AppShell({
+  children,
+  reviewEnabled,
+  screen,
+  demoRole,
+  onDemoRoleChange,
+  onNavigate,
+}: AppShellProps) {
   const hideNav = screen === "LOGIN";
   return (
     <div className="app-shell">
@@ -36,14 +46,30 @@ export function AppShell({ children, reviewEnabled, screen, onNavigate }: AppShe
             <small>Anwesenheit · lokale Demo</small>
           </span>
         </button>
-        <button
-          aria-label={screen === "LOGIN" ? "Menü" : "Demo abmelden"}
-          className="icon-button"
-          type="button"
-          onClick={() => onNavigate(screen === "LOGIN" ? "START" : "LOGIN")}
-        >
-          {screen === "LOGIN" ? <Menu /> : <LogOut />}
-        </button>
+        <div className="header-actions">
+          {screen === "LOGIN" ? null : (
+            <label className="demo-role-switch">
+              <span>Demo-Rolle</span>
+              <select
+                aria-label="Demo-Rolle wechseln"
+                value={demoRole}
+                onChange={(event) => onDemoRoleChange(event.target.value as DemoRoleValue)}
+              >
+                <option value={DemoRole.BOARD}>Vorstand</option>
+                <option value={DemoRole.TRAINER}>Trainer</option>
+                <option value={DemoRole.TREASURER}>Kassenwart</option>
+              </select>
+            </label>
+          )}
+          <button
+            aria-label={screen === "LOGIN" ? "Menü" : "Demo abmelden"}
+            className="icon-button"
+            type="button"
+            onClick={() => onNavigate(screen === "LOGIN" ? "START" : "LOGIN")}
+          >
+            {screen === "LOGIN" ? <Menu /> : <LogOut />}
+          </button>
+        </div>
       </header>
       <main className="app-main">{children}</main>
       {hideNav ? null : (

@@ -1,6 +1,6 @@
 # VTKB Digitales Anwesenheitssystem
 
-> **Status:** Lokaler klickbarer UX-Prototyp (Paket 1). Es besteht keine Produktivfreigabe. Es werden keine AWS-Ressourcen bereitgestellt und keine echten Personen-, Foto- oder biometrischen Daten verarbeitet.
+> **Status:** Lokaler klickbarer UX- und Fachlogik-Prototyp (Paket 1 und 1.1). Es besteht keine Produktivfreigabe. Es werden keine AWS-Ressourcen bereitgestellt und keine echten Personen-, Zahlungs-, Foto- oder biometrischen Daten verarbeitet.
 
 ## Projektziel
 
@@ -38,6 +38,20 @@ Die Smartphone-first-PWA in `apps/web` bildet den vollständigen lokalen Bediena
 Die fachliche Vereinszeitzone ist ausdrücklich `Europe/Berlin`. Lokale Trainingseinheiten und ihre Anzeige werden unabhängig von der Prozess- oder Systemzeitzone in dieser Zeitzone erzeugt; direkt aufeinanderfolgende Einheiten verwenden halb offene Zeitintervalle und wechseln deshalb exakt am gemeinsamen Zeitpunkt.
 
 Der Prototyp speichert nur im React-Zustand des aktuellen Browser-Tabs. Ein Neuladen setzt die Demo zurück. Details und Prüfergebnisse stehen in [docs/PACKAGE_1_REPORT.md](docs/PACKAGE_1_REPORT.md).
+
+## Paket-1.1-Auswertung und Aufwandsentschaedigung
+
+Der lokale Prototyp enthaelt zusaetzlich einen vollstaendigen Auswertungs- und Abrechnungsbereich mit 60 fiktiven abgeschlossenen Einheiten von Januar bis Juni 2026:
+
+- Mitglieder- und Schuelerauswertung fuer Monat, Jahr oder freien Zeitraum ohne unzulaessige Fehlzeitenquote,
+- chronologische Mitgliedsdetails und aus Einheiten berechnete Monatswerte,
+- getrennte Trainer-/Assistenzauswertung auf Basis der Funktion je konkreter Einheit,
+- automatische Monatsabrechnung mit ganzen Centwerten und datumsabhaengigen fiktiven Verguetungssaetzen,
+- begruendete positive und negative Korrekturen, Statusworkflow, Freigabesnapshot und lokales Auditprotokoll,
+- Demo-Rollen fuer Trainer, Vorstand und Kassenwart,
+- CSV-Exporte sowie druckoptimierte Einzel- und Monatsansichten.
+
+Die Beispielsätze von 20,00 EUR fuer verantwortliche Trainer und 10,00 EUR fuer Assistenztrainer sind ausdruecklich keine echte VTKB-Regel. Details und Pruefergebnisse stehen in [docs/PACKAGE_1_1_REPORT.md](docs/PACKAGE_1_1_REPORT.md).
 
 ## Zielarchitektur spaeterer Pakete
 
@@ -95,6 +109,7 @@ npm run preview
 | ----- | ------------------------------------------------------- | ----------------------------- |
 | 0     | Repository, Regeln, ADRs, gemeinsame Typen und Tests    | keine                         |
 | 1     | lokaler klickbarer UX-Prototyp mit Mockdaten            | keine                         |
+| 1.1   | lokale Auswertung und Aufwandsentschaedigung            | keine                         |
 | 2     | Terraform-Code, nur validieren und nach Freigabe planen | kein Apply                    |
 | 3     | manuelles Backend-MVP                                   | nur nach eigener Freigabe     |
 | 4     | produktives manuelles PWA-Frontend                      | nur nach eigener Freigabe     |

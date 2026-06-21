@@ -334,6 +334,57 @@ export const beltHistory: BeltHistoryEntry[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Erweiterte Guertelhistorien – Paket 1.4 Demo-Daten (fiktiv)
+// ---------------------------------------------------------------------------
+
+// Drei weitere fiktive Guertelaenderungen fuer Demo-Zwecke
+export const beltHistoryExtended: BeltHistoryEntry[] = [
+  {
+    id: "belt-0004",
+    personId: "member-03",
+    previousBeltColor: "BLAU",
+    previousBeltGrade: "5. Kyu",
+    newBeltColor: "BRAUN",
+    newBeltGrade: "4. Kyu",
+    effectiveFrom: "2026-04-12",
+    examDate: "2026-04-12",
+    examiner: "Ren Beispiel (fiktiv)",
+    recordedBy: "Trainer Demo",
+    recordedAt: "2026-04-12T19:00:00.000Z",
+    source: BeltChangeSource.MANUAL_CONFIRMED,
+    note: "Demo-Guertelaenderung Paket 1.4",
+  },
+  {
+    id: "belt-0005",
+    personId: "member-04",
+    previousBeltColor: "GELB",
+    previousBeltGrade: "8. Kyu",
+    newBeltColor: "ORANGE",
+    newBeltGrade: "7. Kyu",
+    effectiveFrom: "2026-05-03",
+    recordedBy: "Vorstand Demo",
+    recordedAt: "2026-05-03T20:00:00.000Z",
+    source: BeltChangeSource.BOARD_CORRECTION,
+    note: "Korrektur nach Rueckfrage Demo",
+  },
+  {
+    id: "belt-0006",
+    personId: "member-10",
+    previousBeltColor: "GELB",
+    previousBeltGrade: "8. Kyu",
+    newBeltColor: "ORANGE",
+    newBeltGrade: "7. Kyu",
+    effectiveFrom: "2026-06-01",
+    examDate: "2026-06-01",
+    examiner: "Hana Beispiel (fiktiv)",
+    recordedBy: "Trainer Demo",
+    recordedAt: "2026-06-01T19:30:00.000Z",
+    source: BeltChangeSource.IMAGE_SUGGESTION_CONFIRMED,
+    note: "Demo: Bildvorschlag bestaetigt (Farbe erkannt, Grad manuell eingetragen)",
+  },
+];
+
+// ---------------------------------------------------------------------------
 // Bildvorschlaege Guertelfarbe (fiktiv, Demo-only)
 // ---------------------------------------------------------------------------
 

@@ -2212,3 +2212,206 @@ button.data-card:hover {
     padding: 0.4rem 0.35rem;
   }
 }
+
+/* ==========================================================================
+   Paket 1.4 – Gürtelverwaltung
+   ========================================================================== */
+
+/* Gürtelabzeichen */
+.belt-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+/* Aktueller Gürtel – größer hervorgehoben */
+.belt-current {
+  margin: 0.5rem 0 0.75rem;
+}
+
+.belt-current .belt-badge {
+  font-size: 1rem;
+  padding: 0.3rem 0.9rem;
+}
+
+/* Aktionsbereich unter Gürtelhistorie */
+.belt-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem 0 1rem;
+}
+
+/* Aktionsbuttons in der Vorschlag-Tabelle */
+.belt-suggestion-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+/* Simulationsbereich */
+.belt-sim-member {
+  margin: 0.5rem 0;
+}
+
+.belt-sim-result {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin: 1rem 0;
+}
+
+.belt-sim-result h3 {
+  margin: 0 0 0.75rem;
+}
+
+/* Gürtelverteilungs-Balkendiagramm */
+.belt-distribution {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.25rem 0 0.75rem;
+}
+
+.belt-dist-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.belt-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.belt-bar-label {
+  width: 70px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+
+.belt-bar-track {
+  flex: 1;
+  height: 14px;
+  background: var(--surface-soft);
+  border-radius: 7px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+.belt-bar-fill {
+  height: 100%;
+  border-radius: 7px;
+  transition: width 0.3s ease;
+  min-width: 2px;
+}
+
+.belt-bar-pct {
+  width: 38px;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  text-align: right;
+}
+
+.belt-dist-count {
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+  min-width: 90px;
+}
+
+/* Dialog */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(23, 32, 51, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1rem;
+}
+
+.dialog-box {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.5rem 1.75rem;
+  max-width: 520px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.dialog-box h3 {
+  margin: 0 0 1rem;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 1.25rem;
+}
+
+/* Notice-Varianten */
+.notice--success {
+  border-color: var(--green);
+  background: #f0fff8;
+  color: var(--green);
+}
+
+.notice--warn {
+  border-color: var(--amber);
+  background: #fffbf0;
+  color: var(--amber);
+}
+
+.notice--error {
+  border-color: var(--red);
+  background: #fff6f5;
+  color: var(--red);
+}
+
+.notice--info {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+/* Button-Varianten */
+.btn--danger {
+  background: var(--red);
+  color: #fff;
+  border: none;
+}
+
+.btn--danger:hover {
+  background: var(--red-strong);
+}
+
+/* Mobil */
+@media (max-width: 480px) {
+  .dialog-box {
+    padding: 1rem 1rem;
+  }
+
+  .belt-bar-label {
+    width: 55px;
+    font-size: 0.72rem;
+  }
+
+  .belt-dist-count {
+    display: none;
+  }
+}

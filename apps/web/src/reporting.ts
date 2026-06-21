@@ -13,7 +13,14 @@ import {
   type SettlementStatus as SettlementStatusValue,
 } from "@vtkb/shared";
 
-import type { HistoricalTrainingSession, Member, TrainingType } from "./types";
+import type {
+  HistoricalTrainingSession,
+  Member,
+  TrainingType,
+  TrialParticipant,
+} from "./types";
+import { ContractStatus, PersonMembershipStatus } from "@vtkb/shared";
+import { computeTrialSessionCount } from "./trialWorkflow";
 
 export type PeriodFilter =
   | { mode: "MONTH"; month: string }
@@ -170,12 +177,31 @@ export function calculateDashboardMetrics(
   sessions: readonly HistoricalTrainingSession[],
   settlements: ReadonlyArray<{ status: SettlementStatusValue; view: SettlementView }>,
 ): DashboardMetrics {
-  const completedSessions = sessions.filter(
+  // completedPresentAttendance filtert selbst nach COMPLETED – kein vorheriges Filtern nötig
+  const records = completedPresentAttendance(sessions);
+  const completedSessionCount = sessions.filter(
     (session) => session.status === TrainingSessionStatus.COMPLETED,
+  ).length;
+
+  // Alle Settlement-Kennzahlen in einem einzigen Durchlauf
+  const settlementTotals = settlements.reduce(
+    (acc, item) => {
+      if (item.status !== SettlementStatus.CANCELLED) {
+        acc.totalCents += item.view.totalCents;
+        acc.openReviewNotes += item.view.reviewNotes.length;
+      }
+      acc.counts[item.status] = (acc.counts[item.status] ?? 0) + 1;
+      return acc;
+    },
+    {
+      totalCents: 0,
+      openReviewNotes: 0,
+      counts: {} as Partial<Record<SettlementStatusValue, number>>,
+    },
   );
-  const records = completedPresentAttendance(completedSessions);
+
   return {
-    completedSessions: completedSessions.length,
+    completedSessions: completedSessionCount,
     uniquePresentMembers: new Set(records.map((record) => record.memberId)).size,
     totalAttendances: records.length,
     responsibleAssignments: records.filter(
@@ -184,22 +210,12 @@ export function calculateDashboardMetrics(
     assistantAssignments: records.filter(
       (record) => record.sessionRole === SessionRole.ASSISTANT_TRAINER,
     ).length,
-    totalCompensationCents: settlements.reduce(
-      (sum, item) =>
-        item.status === SettlementStatus.CANCELLED ? sum : sum + item.view.totalCents,
-      0,
-    ),
-    draftSettlements: settlements.filter((item) => item.status === SettlementStatus.DRAFT).length,
-    reviewedSettlements: settlements.filter((item) => item.status === SettlementStatus.REVIEWED)
-      .length,
-    approvedSettlements: settlements.filter((item) => item.status === SettlementStatus.APPROVED)
-      .length,
-    paidSettlements: settlements.filter((item) => item.status === SettlementStatus.PAID).length,
-    openReviewNotes: settlements.reduce(
-      (sum, item) =>
-        item.status === SettlementStatus.CANCELLED ? sum : sum + item.view.reviewNotes.length,
-      0,
-    ),
+    totalCompensationCents: settlementTotals.totalCents,
+    draftSettlements: settlementTotals.counts[SettlementStatus.DRAFT] ?? 0,
+    reviewedSettlements: settlementTotals.counts[SettlementStatus.REVIEWED] ?? 0,
+    approvedSettlements: settlementTotals.counts[SettlementStatus.APPROVED] ?? 0,
+    paidSettlements: settlementTotals.counts[SettlementStatus.PAID] ?? 0,
+    openReviewNotes: settlementTotals.openReviewNotes,
   };
 }
 
@@ -790,6 +806,146 @@ export function paymentCsv(
         month,
         formatEuro(totalCents),
         status,
+      ]),
+  ]);
+}
+
+// ---------------------------------------------------------------------------
+// Paket 1.2 – Probetraining-Auswertungen
+// ---------------------------------------------------------------------------
+
+export interface TrialSummary {
+  participant: TrialParticipant;
+  attended: number;
+  remaining: number;
+  isBlocked: boolean;
+  hasPendingContract: boolean;
+}
+
+/**
+ * Erstellt eine aggregierte Uebersicht aller Probetrainingsteilnehmer
+ * fuer Auswertungsscreens und Dashboard-Widgets.
+ */
+export function buildTrialSummaries(
+  participants: readonly TrialParticipant[],
+  history: readonly HistoricalTrainingSession[],
+): TrialSummary[] {
+  return participants.map((participant) => {
+    const { attended, remaining } = computeTrialSessionCount(participant.id, history);
+    const isBlocked =
+      attended >= 4 &&
+      participant.contractStatus === ContractStatus.NOT_ISSUED &&
+      participant.membershipStatus === PersonMembershipStatus.TRIAL &&
+      !participant.overrideUsed;
+    const hasPendingContract =
+      participant.contractStatus === ContractStatus.ISSUED ||
+      participant.contractStatus === ContractStatus.NOT_ISSUED;
+    return { participant, attended, remaining, isBlocked, hasPendingContract };
+  });
+}
+
+export interface TrialDashboardMetrics {
+  totalActive: number;
+  blocked: number;
+  contractPending: number;
+  convertedThisYear: number;
+}
+
+export function trialDashboardMetrics(
+  summaries: readonly TrialSummary[],
+  currentYear: number,
+): TrialDashboardMetrics {
+  return {
+    totalActive: summaries.filter(
+      (s) =>
+        s.participant.active &&
+        s.participant.membershipStatus === PersonMembershipStatus.TRIAL,
+    ).length,
+    blocked: summaries.filter((s) => s.isBlocked).length,
+    contractPending: summaries.filter(
+      (s) =>
+        s.participant.active &&
+        s.hasPendingContract &&
+        s.attended >= 3,
+    ).length,
+    convertedThisYear: summaries.filter(
+      (s) =>
+        s.participant.membershipStatus === PersonMembershipStatus.ACTIVE_MEMBER &&
+        !!s.participant.memberId,
+    ).length,
+  };
+}
+
+export function trialCsv(summaries: readonly TrialSummary[]): string {
+  return csv([
+    [
+      "Name",
+      "Altersgruppe",
+      "Geburtsjahr",
+      "Erstes Training",
+      "Letztes Training",
+      "Besuchte Einheiten",
+      "Vertragsstatus",
+      "Mitgliedschaftsstatus",
+    ],
+    ...summaries.map(({ participant, attended }) => [
+      participant.displayName,
+      participant.ageGroup,
+      participant.birthYear,
+      participant.firstTrialDate ?? "",
+      participant.lastTrialDate ?? "",
+      attended,
+      participant.contractStatus,
+      participant.membershipStatus,
+    ]),
+  ]);
+}
+
+// ---------------------------------------------------------------------------
+// Paket 1.4 – Gürtelauswertung
+// ---------------------------------------------------------------------------
+
+/**
+ * Erstellt einen CSV-Export der Gürtelverteilung und offenen Bildvorschläge.
+ */
+export function beltReportCsv(
+  members: readonly Member[],
+  history: readonly { personId: string; effectiveFrom: string; newBeltColor: string; newBeltGrade: string; source: string }[],
+  suggestions: readonly { memberId: string; status: string; suggestedBeltColor: string; confidencePercent: number; sessionDate: string }[],
+): string {
+  const openByMember = new Map<string, string>();
+  for (const s of suggestions) {
+    if (s.status === "OPEN") {
+      openByMember.set(s.memberId, s.suggestedBeltColor);
+    }
+  }
+  const lastChangeByMember = new Map<string, string>();
+  for (const e of [...history].sort((a, b) =>
+    b.effectiveFrom.localeCompare(a.effectiveFrom),
+  )) {
+    if (!lastChangeByMember.has(e.personId)) {
+      lastChangeByMember.set(e.personId, e.effectiveFrom);
+    }
+  }
+
+  return csv([
+    [
+      "Name",
+      "Altersgruppe",
+      "Gürtelfarbe",
+      "Gürtelgrad",
+      "Letzter Wechsel",
+      "Offener Bildvorschlag (Farbe)",
+    ],
+    ...members
+      .filter((m) => m.active)
+      .map((m) => [
+        m.name,
+        m.ageGroup,
+        m.beltColor,
+        m.beltGrade,
+        lastChangeByMember.get(m.id) ?? "",
+        openByMember.get(m.id) ?? "",
       ]),
   ]);
 }

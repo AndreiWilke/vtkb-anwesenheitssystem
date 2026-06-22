@@ -18,7 +18,7 @@ export default defineConfig({
         lang: "de",
         icons: [
           {
-            src: "/icon.svg",
+            src: "icon.svg",
             sizes: "any",
             type: "image/svg+xml",
             purpose: "any",

@@ -291,9 +291,6 @@ describe("klickbarer Paket-1-Prototyp", () => {
     });
     await user.type(within(dialog).getByLabelText("Mitglied für Vorschlag suchen"), "Maro");
     await user.click(within(dialog).getByRole("button", { name: /Maro Beispiel/ }));
-    await user.click(
-      within(dialog).getByRole("button", { name: "Ausgewähltes Mitglied übernehmen" }),
-    );
     expect(within(unknown).getByText("Andere Person gewählt")).toBeInTheDocument();
     expect(within(unknown).getByText("Maro Beispiel")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Gesamtliste öffnen" }));
@@ -324,9 +321,6 @@ describe("klickbarer Paket-1-Prototyp", () => {
     await user.clear(within(dialog).getByLabelText("Mitglied für Vorschlag suchen"));
     await user.type(within(dialog).getByLabelText("Mitglied für Vorschlag suchen"), "Nami");
     await user.click(within(dialog).getByRole("button", { name: /Nami Beispiel/ }));
-    await user.click(
-      within(dialog).getByRole("button", { name: "Ausgewähltes Mitglied übernehmen" }),
-    );
     expect(within(uncertain).getByText("Nami Beispiel")).toBeInTheDocument();
     expect(within(uncertain).getByText("Andere Person gewählt")).toBeInTheDocument();
   });

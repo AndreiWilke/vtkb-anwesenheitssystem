@@ -806,7 +806,7 @@ export function PhotoReviewScreen({
           >
             <PageHeading
               title={pickerProposal.status === "UNBEKANNT" ? "Mitglied auswählen" : "Andere Person"}
-              description="Die Auswahl wird erst nach Ihrer Bestätigung übernommen."
+              description="Mitglied antippen zum sofortigen Übernehmen."
             />
             <label className="search-field">
               <Search aria-hidden="true" />
@@ -820,29 +820,23 @@ export function PhotoReviewScreen({
             <div className="member-picker-list">
               {pickerMembers.map((member) => (
                 <button
-                  aria-pressed={pickerMemberId === member.id}
-                  className={
-                    pickerMemberId === member.id
-                      ? "member-picker-option selected"
-                      : "member-picker-option"
-                  }
+                  className="member-picker-option"
                   key={member.id}
                   type="button"
-                  onClick={() => setPickerMemberId(member.id)}
+                  onClick={() => {
+                    onResolve(pickerProposal.id, "SELECT_MEMBER", member.id);
+                    closePicker();
+                  }}
                 >
                   <MemberAvatar initials={member.initials} />
                   <span>
                     <strong>{member.name}</strong>
                     <BeltMark color={member.beltColor} grade={member.beltGrade} />
                   </span>
-                  {pickerMemberId === member.id ? <CheckCircle2 aria-label="Ausgewählt" /> : null}
                 </button>
               ))}
             </div>
             <div className="action-stack">
-              <PrimaryButton disabled={!pickerMemberId} onClick={confirmPicker}>
-                Ausgewähltes Mitglied übernehmen
-              </PrimaryButton>
               <SecondaryButton onClick={closePicker}>Abbrechen</SecondaryButton>
             </div>
           </section>

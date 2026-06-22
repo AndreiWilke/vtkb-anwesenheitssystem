@@ -585,8 +585,8 @@ export function BeltSimulationDemoScreen({
 }: BeltSimulationDemoScreenProps) {
   const [selectedMemberId, setSelectedMemberId] = useState("");
   const [simulationResult, setSimulationResult] = useState<{
-    color: string;
-    confidence: number;
+    suggestedColor: string;
+    confidencePercent: number;
   } | null>(null);
   const [suggestionCreated, setSuggestionCreated] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
@@ -616,8 +616,8 @@ export function BeltSimulationDemoScreen({
       sessionDate: new Date().toISOString().slice(0, 10),
       memberId: selectedMember.id,
       storedBeltColor: selectedMember.beltColor,
-      suggestedBeltColor: simulationResult.color,
-      confidencePercent: simulationResult.confidence,
+      suggestedBeltColor: simulationResult.suggestedColor,
+      confidencePercent: simulationResult.confidencePercent,
       status: BeltSuggestionStatus.OPEN,
     };
     onSuggestionCreated(suggestion);
@@ -628,7 +628,7 @@ export function BeltSimulationDemoScreen({
     pct >= 75 ? "badge--ok" : pct >= 55 ? "badge--neutral" : "badge--warn";
 
   const isSameColor =
-    simulationResult && selectedMember?.beltColor === simulationResult.color;
+    simulationResult && selectedMember?.beltColor === simulationResult.suggestedColor;
 
   return (
     <div className="screen">
@@ -688,12 +688,12 @@ export function BeltSimulationDemoScreen({
           <h3>Analyse-Ergebnis</h3>
           <p>
             Erkannte Farbe:{" "}
-            <BeltBadge color={simulationResult.color} grade="(Grad offen)" />
+            <BeltBadge color={simulationResult.suggestedColor} grade="(Grad offen)" />
           </p>
           <p>
             Konfidenz:{" "}
-            <span className={`badge ${confidenceClass(simulationResult.confidence)}`}>
-              {simulationResult.confidence}%
+            <span className={`badge ${confidenceClass(simulationResult.confidencePercent)}`}>
+              {simulationResult.confidencePercent}%
             </span>
           </p>
 

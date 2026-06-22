@@ -1,10 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import {
-  DemoRole,
-  PresenceStatus,
-  SessionRole,
-  type DemoRole as DemoRoleValue,
-} from "@vtkb/shared";
+import { DemoRole, PresenceStatus, SessionRole } from "@vtkb/shared";
 
 import { AppShell } from "./components";
 import {
@@ -21,14 +16,46 @@ import {
   SummaryScreen,
 } from "./screens";
 import { ReportingScreen } from "./reportingScreens";
-import { createTodaySessions, initialPhotoProposals, members } from "./mockData";
+import {
+  TrialListScreen,
+  TrialNewScreen,
+  TrialProfileScreen,
+  TrialContractScreen,
+  BoardOverrideScreen,
+  TrialConversionScreen,
+  DirectMemberNewScreen,
+} from "./trialScreens";
+import { TrialReportScreen } from "./trialReportScreen";
+import {
+  BeltChangeDialog,
+  BeltHistoryScreen,
+  BeltSuggestionReviewScreen,
+  BeltSimulationDemoScreen,
+} from "./beltScreens";
+import { BeltReportScreen } from "./beltReportScreen";
+import {
+  beltHistory as initialBeltHistory,
+  beltHistoryExtended,
+  createTodaySessions,
+  initialBeltSuggestions,
+  initialPhotoProposals,
+  members as initialMembers,
+  trialParticipants as initialTrialParticipants,
+} from "./mockData";
 import type {
   AppScreen,
   AttendanceState,
+  AuditEntry,
+  BeltHistoryEntry,
+  BeltSuggestion,
+  ConversionResult,
+  DemoRoleValue,
+  DirectMemberResult,
   LocalGuest,
-  ProposalDecision,
+  Member,
   PhotoProposal,
   TrainingSessionMock,
+  TrialParticipant,
   WorkflowState,
 } from "./types";
 import {
@@ -59,12 +86,14 @@ function proposalMemberIds(proposals: readonly PhotoProposal[]): Set<string> {
 
 export default function App() {
   const sessions = useMemo(() => createTodaySessions(), []);
+
+  // Anwesenheits-Workflow
   const [screen, setScreen] = useState<AppScreen>("START");
   const [selectedSession, setSelectedSession] = useState<TrainingSessionMock>(() =>
     suggestSession(sessions),
   );
   const [attendance, setAttendance] = useState<AttendanceState>(() =>
-    createInitialAttendance(members, suggestSession(sessions)),
+    createInitialAttendance(initialMembers, selectedSession),
   );
   const [guests, setGuests] = useState<LocalGuest[]>([]);
   const [photoModeUsed, setPhotoModeUsed] = useState(false);
@@ -73,13 +102,46 @@ export default function App() {
   const [demoRole, setDemoRole] = useState<DemoRoleValue>(DemoRole.BOARD);
   const guestIdFactory = useRef(createLocalGuestIdFactory()).current;
 
+  // Probetraining-State
+  const [trialParticipants, setTrialParticipants] = useState<TrialParticipant[]>(
+    () => [...initialTrialParticipants],
+  );
+  const [selectedTrialId, setSelectedTrialId] = useState<string | null>(null);
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
+
+  // Mitglieder-State (für neue/umgewandelte Mitglieder)
+  const [members, setMembers] = useState<Member[]>(() => [...initialMembers]);
+
+  // Gürtel-State
+  const [beltHistory, setBeltHistory] = useState<BeltHistoryEntry[]>(() => [
+    ...initialBeltHistory,
+    ...beltHistoryExtended,
+  ]);
+  const [beltSuggestions, setBeltSuggestions] = useState<BeltSuggestion[]>(
+    () => [...initialBeltSuggestions],
+  );
+  const [selectedBeltMemberId, setSelectedBeltMemberId] = useState<string | null>(null);
+
+  // Hilfsfunktionen
+  const selectedTrialParticipant = trialParticipants.find((p) => p.id === selectedTrialId) ?? null;
+  const selectedBeltMember = members.find((m) => m.id === selectedBeltMemberId) ?? null;
+  const isBoard = demoRole === DemoRole.BOARD;
+
+  const addAuditEntry = (entry: AuditEntry) => {
+    setAuditEntries((prev) => [entry, ...prev]);
+  };
+
+  // Probetraining-Helfer
+  const updateTrialParticipant = (updated: TrialParticipant) => {
+    setTrialParticipants((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+  };
+
+  // Anwesenheits-Workflow-Hilfsfunktionen
   const activeProposals = photoModeUsed ? proposals : [];
   const unresolvedProposalCount = activeProposals.filter((proposal) => !proposal.resolved).length;
-  const completion = canCompleteSession(
-    selectedSession,
-    attendance,
-    guests,
-    unresolvedProposalCount,
+  const completion = useMemo(
+    () => canCompleteSession(selectedSession, attendance, guests, unresolvedProposalCount),
+    [selectedSession, attendance, guests, unresolvedProposalCount],
   );
   const workflowMessages = [
     ...(workflow.captureMethod ? [] : ["Es wurde noch keine Erfassungsart begonnen."]),
@@ -215,7 +277,7 @@ export default function App() {
 
   const resolveProposal = (
     proposalId: string,
-    action: ProposalDecision,
+    action: import("./types").ProposalDecision,
     selectedMemberId?: string,
   ) => {
     const proposal = proposals.find((item) => item.id === proposalId);
@@ -359,8 +421,15 @@ export default function App() {
     selectSession(next);
   };
 
+  // Bestehende Mitglieds-IDs und -Nummern für ID-Generatoren
+  const existingMemberIds = members.map((m) => m.id);
+  const existingMemberNumbers = members.map((m) => m.id); // Platzhalter bis echte Nummern im Member-Modell
+
   let content;
   switch (screen) {
+    // ------------------------------------------------------------------
+    // Bestehende Anwesenheits-Screens (unverändert)
+    // ------------------------------------------------------------------
     case "LOGIN":
       content = <LoginScreen onLogin={() => setScreen("START")} />;
       break;
@@ -495,6 +564,244 @@ export default function App() {
         <ReportingScreen demoRole={demoRole} members={members} onBack={() => setScreen("START")} />
       );
       break;
+
+    // ------------------------------------------------------------------
+    // Paket 1.2 – Probetraining
+    // ------------------------------------------------------------------
+    case "TRIAL_LIST":
+      content = (
+        <TrialListScreen
+          participants={trialParticipants}
+          history={[]}
+          onSelect={(id) => {
+            setSelectedTrialId(id);
+            setScreen("TRIAL_PROFILE");
+          }}
+          onNew={() => setScreen("TRIAL_NEW")}
+          onBack={() => setScreen("START")}
+        />
+      );
+      break;
+    case "TRIAL_NEW":
+      content = (
+        <TrialNewScreen
+          existingParticipants={trialParticipants}
+          isBoard={isBoard}
+          onSave={(participant) => {
+            setTrialParticipants((prev) => [...prev, participant]);
+            setSelectedTrialId(participant.id);
+            setScreen("TRIAL_PROFILE");
+          }}
+          onBack={() => setScreen("TRIAL_LIST")}
+        />
+      );
+      break;
+    case "TRIAL_PROFILE":
+      content = selectedTrialParticipant ? (
+        <TrialProfileScreen
+          participant={selectedTrialParticipant}
+          history={[]}
+          onContractView={() => setScreen("TRIAL_CONTRACT")}
+          onBack={() => setScreen("TRIAL_LIST")}
+        />
+      ) : null;
+      break;
+    case "TRIAL_CONTRACT":
+      content = selectedTrialParticipant ? (
+        <TrialContractScreen
+          participant={selectedTrialParticipant}
+          isBoard={isBoard}
+          onUpdate={(updated) => {
+            updateTrialParticipant(updated);
+          }}
+          onBack={() => setScreen("TRIAL_PROFILE")}
+        />
+      ) : null;
+      break;
+
+    // ------------------------------------------------------------------
+    // Paket 1.3 – Vorstandsausnahme, Umwandlung, Direktanlage
+    // ------------------------------------------------------------------
+    case "TRIAL_BOARD_OVERRIDE":
+      content = selectedTrialParticipant ? (
+        <BoardOverrideScreen
+          participant={selectedTrialParticipant}
+          onSave={(updated, audit) => {
+            updateTrialParticipant(updated);
+            addAuditEntry(audit);
+            setScreen("TRIAL_PROFILE");
+          }}
+          onBack={() => setScreen("TRIAL_PROFILE")}
+        />
+      ) : null;
+      break;
+    case "TRIAL_CONVERT":
+      content = selectedTrialParticipant ? (
+        <TrialConversionScreen
+          participant={selectedTrialParticipant}
+          existingMemberIds={existingMemberIds}
+          existingMemberNumbers={existingMemberNumbers}
+          history={[]}
+          onConvert={(result: ConversionResult) => {
+            updateTrialParticipant(result.updatedParticipant);
+            addAuditEntry(result.auditEntry);
+            setScreen("TRIAL_LIST");
+          }}
+          onBack={() => setScreen("TRIAL_PROFILE")}
+        />
+      ) : null;
+      break;
+    case "MEMBER_DIRECT_NEW":
+      content = (
+        <DirectMemberNewScreen
+          existingMemberIds={existingMemberIds}
+          existingMemberNumbers={existingMemberNumbers}
+          onSave={(result: DirectMemberResult, audit: AuditEntry) => {
+            // Neues Mitglied als vereinfachtes Member-Objekt in die Liste aufnehmen
+            const newMember: Member = {
+              id: result.memberId,
+              name: result.displayName,
+              initials: result.displayName
+                .split(" ")
+                .slice(0, 2)
+                .map((w) => w[0] ?? "")
+                .join("")
+                .toUpperCase() || "??",
+              ageGroup: result.ageGroup,
+              beltColor: (result.beltColor ?? "WEISS") as Member["beltColor"],
+              beltGrade: result.beltGrade ?? "9. Kyu",
+              qualification: result.qualification,
+              active: true,
+              trainingsVisited: 0,
+              responsibleAssignments: 0,
+              assistantAssignments: 0,
+            };
+            setMembers((prev) => [...prev, newMember]);
+            addAuditEntry(audit);
+            setScreen("START");
+          }}
+          onBack={() => setScreen("START")}
+        />
+      );
+      break;
+    case "TRIAL_REPORT":
+      content = (
+        <TrialReportScreen
+          participants={trialParticipants}
+          history={[]}
+          onSelectParticipant={(id) => {
+            setSelectedTrialId(id);
+            setScreen("TRIAL_PROFILE");
+          }}
+          onBack={() => setScreen("STATS")}
+        />
+      );
+      break;
+
+    // ------------------------------------------------------------------
+    // Paket 1.2 – Bildvorschlag-Review
+    // ------------------------------------------------------------------
+    case "BELT_SUGGESTION_REVIEW":
+      content = (
+        <BeltSuggestionReviewScreen
+          suggestions={beltSuggestions}
+          members={members}
+          existingHistoryIds={beltHistory.map((e) => e.id)}
+          actorName={demoRole}
+          canEdit={isBoard || demoRole === DemoRole.TRAINER}
+          onDecide={(updated, newEntry) => {
+            setBeltSuggestions((prev) =>
+              prev.map((s) => (s.id === updated.id ? updated : s)),
+            );
+            if (newEntry) {
+              setBeltHistory((prev) => [...prev, newEntry]);
+              // Mitglied aktualisieren
+              setMembers((prev) =>
+                prev.map((m) =>
+                  m.id === newEntry.personId
+                    ? {
+                        ...m,
+                        beltColor: newEntry.newBeltColor as Member["beltColor"],
+                        beltGrade: newEntry.newBeltGrade,
+                      }
+                    : m,
+                ),
+              );
+            }
+          }}
+          onBack={() => setScreen("START")}
+        />
+      );
+      break;
+
+    // ------------------------------------------------------------------
+    // Paket 1.4 – Gürtelverwaltung
+    // ------------------------------------------------------------------
+    case "BELT_HISTORY":
+      content = selectedBeltMember ? (
+        <BeltHistoryScreen
+          member={selectedBeltMember}
+          history={beltHistory}
+          canEdit={isBoard || demoRole === DemoRole.TRAINER}
+          onChangesBelt={() => setScreen("BELT_CHANGE")}
+          onBack={() => setScreen("BELT_REPORT")}
+        />
+      ) : null;
+      break;
+    case "BELT_CHANGE":
+      content = selectedBeltMember ? (
+        <BeltChangeDialog
+          member={selectedBeltMember}
+          existingHistoryIds={beltHistory.map((e) => e.id)}
+          actorName={demoRole}
+          onConfirm={(entry) => {
+            setBeltHistory((prev) => [...prev, entry]);
+            setMembers((prev) =>
+              prev.map((m) =>
+                m.id === entry.personId
+                  ? {
+                      ...m,
+                      beltColor: entry.newBeltColor as Member["beltColor"],
+                      beltGrade: entry.newBeltGrade,
+                    }
+                  : m,
+              ),
+            );
+            setScreen("BELT_HISTORY");
+          }}
+          onCancel={() => setScreen("BELT_HISTORY")}
+        />
+      ) : null;
+      break;
+    case "BELT_REPORT":
+      content = (
+        <BeltReportScreen
+          members={members}
+          beltHistory={beltHistory}
+          beltSuggestions={beltSuggestions}
+          onMemberSelect={(id) => {
+            setSelectedBeltMemberId(id);
+            setScreen("BELT_HISTORY");
+          }}
+          onBack={() => setScreen("STATS")}
+        />
+      );
+      break;
+    case "BELT_SIM_DEMO":
+      content = (
+        <BeltSimulationDemoScreen
+          members={members}
+          onBack={() => setScreen("BELT_REPORT")}
+          onSuggestionCreated={(suggestion) => {
+            setBeltSuggestions((prev) => [...prev, suggestion]);
+            setScreen("BELT_SUGGESTION_REVIEW");
+          }}
+        />
+      );
+      break;
+
+    default:
+      content = null;
   }
 
   return (

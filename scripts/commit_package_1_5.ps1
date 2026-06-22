@@ -23,15 +23,13 @@ if ($LASTEXITCODE -ne 0) { Write-Error "git add fehlgeschlagen (Exit $LASTEXITCO
 $status = git status --porcelain
 if ($status) {
   Write-Host "==> Commit..."
-  git commit -m "feat: Halbguertel, gender/birthDate, mobile UI-Fixes (Paket 1.5)
+  git commit -m "fix: TypeScript-Fehler behoben (effectiveFrom optional, BeltColor komplett, belt-dot CSS)
 
-- shared/belt: BELT_CATALOG auf 18 Eintraege erweitert (Halbguertel 9a-5a Kyu)
-- shared/domain: TrialParticipant.ageGroup/birthYear -> gender/birthDate
-- web/beltScreens: BeltChangeDialog vereinfacht (1 Selektor, Gueltig-ab optional)
-- web/trialScreens: TrialNew + DirectMemberNew auf gender/birthDate umgestellt
-- web/screens: Altersgruppe-Filter -> Geschlecht-Filter; session-option Bug-Fix
-- web/styles: Bottom-Nav 4->5 Spalten; table-scroll overflow-x fuer Mobile
-- web/reporting: ReportingFilters.ageGroup -> gender"
+- shared/belt: effectiveFrom per conditional spread (exactOptionalPropertyTypes)
+- web/components: beltLabels Record um alle 5 Halbguertel-Farben erweitert
+- web/beltScreens + beltReportScreen: .sort() mit (x ?? '') fuer optionales effectiveFrom
+- web/reporting: beltReportCsv-Signatur effectiveFrom optional; sort + set mit ??
+- web/styles: CSS-Klassen fuer Halbguertel-Dots (belt-weiss_rot, belt-gelb_orange etc.)"
   if ($LASTEXITCODE -ne 0) { Write-Error "Commit fehlgeschlagen (Exit $LASTEXITCODE)"; exit 1 }
 } else {
   Write-Host "==> Nichts zu committen, Branch bereits aktuell."

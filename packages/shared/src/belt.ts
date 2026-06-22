@@ -115,7 +115,7 @@ export function createBeltHistoryEntry(
     previousBeltGrade: input.previousBeltGrade,
     newBeltColor: input.newBeltColor,
     newBeltGrade: input.newBeltGrade,
-    effectiveFrom: input.effectiveFrom,
+    ...(input.effectiveFrom !== undefined ? { effectiveFrom: input.effectiveFrom } : {}),
     ...(input.examDate !== undefined ? { examDate: input.examDate } : {}),
     ...(input.examiner !== undefined ? { examiner: input.examiner } : {}),
     recordedBy: input.recordedBy,

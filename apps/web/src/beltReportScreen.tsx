@@ -109,7 +109,7 @@ export function BeltReportScreen({
   const lastBeltChange = (memberId: string): string | null => {
     const entries = beltHistory
       .filter((e) => e.personId === memberId)
-      .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
+      .sort((a, b) => (b.effectiveFrom ?? "").localeCompare(a.effectiveFrom ?? ""));
     return entries[0]?.effectiveFrom ?? null;
   };
 

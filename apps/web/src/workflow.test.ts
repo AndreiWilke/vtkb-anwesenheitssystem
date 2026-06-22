@@ -1,7 +1,33 @@
 import { describe, expect, it } from "vitest";
-import { PresenceStatus, SessionRole } from "@vtkb/shared";
+import {
+  BeltChangeSource,
+  BeltSuggestionStatus,
+  ContractStatus,
+  MemberQualification,
+  PersonMembershipStatus,
+  PresenceStatus,
+  SessionRole,
+  TrialOverrideStatus,
+  calculateBeltDistribution,
+  checkConversionEligibility,
+  convertTrialParticipantToMember,
+  createDirectMember,
+  createBeltHistoryEntry,
+  grantBoardOverride,
+  openBeltSuggestions,
+  suggestNextBelt,
+  validateBeltChange,
+} from "@vtkb/shared";
 
-import { createTodaySessions, members } from "./mockData";
+import {
+  beltHistory,
+  beltHistoryExtended,
+  createTodaySessions,
+  demoAuditEntries,
+  initialBeltSuggestions,
+  members,
+  trialParticipants,
+} from "./mockData";
 import {
   canCompleteSession,
   createInitialAttendance,
@@ -93,5 +119,221 @@ describe("Paket-1-Workflow", () => {
     remaining.push(third);
     expect(new Set([first, ...remaining]).size).toBe(3);
     expect([first, second, third]).toEqual(["guest-001", "guest-002", "guest-003"]);
+  });
+
+  it("blockiert den Abschluss, wenn ein gesperrter Probetrainingsteilnehmer anwesend ist", () => {
+    const session = createTodaySessions(new Date("2026-06-20T18:00:00+02:00"))[1]!;
+    const attendance = createInitialAttendance(members, session);
+    const blockedEntries = [
+      {
+        displayName: "Noah Beispiel-Probe",
+        reason: "Vier kostenlose Probetrainings wurden bereits genutzt.",
+      },
+    ];
+    const result = canCompleteSession(session, attendance, [], 0, blockedEntries);
+    expect(result.allowed).toBe(false);
+    expect(result.messages.join(" ")).toMatch(/Probetraining gesperrt/);
+  });
+
+  it("erlaubt Abschluss, wenn keine gesperrten Probetrainingsteilnehmer anwesend sind", () => {
+    const session = createTodaySessions(new Date("2026-06-20T18:00:00+02:00"))[1]!;
+    const attendance = createInitialAttendance(members, session);
+    const result = canCompleteSession(session, attendance, [], 0, []);
+    expect(result.allowed).toBe(true);
+  });
+
+  it("Demo-Probetrainingsteilnehmer sind 6 fiktive Profile", () => {
+    expect(trialParticipants).toHaveLength(6);
+    expect(trialParticipants.every((p) => p.id.startsWith("trial-"))).toBe(true);
+    expect(trialParticipants.every((p) => p.lastName.includes("Probetraining") || p.lastName.includes("Probe"))).toBe(true);
+  });
+
+  it("trial-006 hat Vorstandsausnahme genutzt und ist gesperrt", () => {
+    const noah = trialParticipants.find((p) => p.id === "trial-006")!;
+    expect(noah).toBeDefined();
+    expect(noah.overrideStatus).toBe(TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED);
+    expect(noah.overrideUsed).toBe(true);
+    expect(noah.contractStatus).toBe(ContractStatus.NOT_ISSUED);
+    expect(noah.membershipStatus).toBe(PersonMembershipStatus.TRIAL);
+  });
+
+  it("trial-005 wurde zum Mitglied umgewandelt (Paket 1.3 Demo)", () => {
+    const mia = trialParticipants.find((p) => p.id === "trial-005")!;
+    expect(mia).toBeDefined();
+    expect(mia.membershipStatus).toBe(PersonMembershipStatus.ACTIVE_MEMBER);
+    expect(mia.contractStatus).toBe(ContractStatus.MEMBERSHIP_ACTIVATED);
+    expect(mia.memberId).toBe("member-41");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Paket 1.3 – Konvertierungs- und Direktanlagetests
+// ---------------------------------------------------------------------------
+
+describe("Paket-1.3-Konvertierung", () => {
+  const trialBase = {
+    id: "trial-003",
+    firstName: "Sara",
+    lastName: "Probetraining",
+    displayName: "Probetraining, Sara",
+    ageGroup: "ERWACHSEN" as const,
+    birthYear: 1998,
+    createdAt: "2026-04-01T11:00:00.000Z",
+    firstTrialDate: "2026-04-05",
+    lastTrialDate: "2026-04-19",
+    contractStatus: ContractStatus.RECEIVED,
+    overrideStatus: TrialOverrideStatus.NONE,
+    overrideUsed: false,
+    membershipStatus: PersonMembershipStatus.TRIAL,
+    active: true,
+  };
+
+  it("checkConversionEligibility erlaubt RECEIVED-Vertrag", () => {
+    const result = checkConversionEligibility(trialBase);
+    expect(result.eligible).toBe(true);
+  });
+
+  it("checkConversionEligibility blockiert bei NOT_ISSUED", () => {
+    const result = checkConversionEligibility({
+      ...trialBase,
+      contractStatus: ContractStatus.NOT_ISSUED,
+    });
+    expect(result.eligible).toBe(false);
+  });
+
+  it("convertTrialParticipantToMember erzeugt korrektes Ergebnis", () => {
+    const result = convertTrialParticipantToMember({
+      participant: trialBase,
+      newMemberId: "member-099",
+      memberNumber: "M-1099",
+      qualification: MemberQualification.NONE,
+      convertedBy: "Vorstand Demo",
+      convertedAt: "2026-06-21T10:00:00.000Z",
+    });
+    expect(result.updatedParticipant.membershipStatus).toBe(PersonMembershipStatus.ACTIVE_MEMBER);
+    expect(result.updatedParticipant.memberId).toBe("member-099");
+    expect(result.auditEntry.action).toBe("TRIAL_CONVERTED_TO_MEMBER");
+  });
+
+  it("grantBoardOverride erzeugt Audit-Eintrag mit Begruendung", () => {
+    const participant = trialParticipants.find((p) => p.id === "trial-004")!;
+    const result = grantBoardOverride({
+      participant,
+      grantedBy: "Vorstand Demo",
+      grantedAt: "2026-06-21T12:00:00.000Z",
+      reason: "Ausnahme fuer Demo-Test",
+    });
+    expect(result.updatedParticipant.overrideStatus).toBe(
+      TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED,
+    );
+    expect(result.auditEntry.reason).toBe("Ausnahme fuer Demo-Test");
+  });
+
+  it("createDirectMember erzeugt aktives Mitglied ohne Probetraining", () => {
+    const result = createDirectMember({
+      id: "member-099",
+      firstName: "Klaus",
+      lastName: "Direktmitglied",
+      ageGroup: "ERWACHSEN",
+      birthYear: 1985,
+      memberNumber: "M-1099",
+      createdBy: "Vorstand Demo",
+      createdAt: "2026-06-21T11:00:00.000Z",
+    });
+    expect(result.membershipStatus).toBe(PersonMembershipStatus.ACTIVE_MEMBER);
+    expect(result.active).toBe(true);
+    expect(result.auditEntry.action).toBe("DIRECT_MEMBER_CREATED");
+  });
+
+  it("demoAuditEntries enthalten drei fiktive Eintraege", () => {
+    expect(demoAuditEntries).toHaveLength(3);
+    const actions = demoAuditEntries.map((e) => e.action);
+    expect(actions).toContain("TRIAL_CONVERTED_TO_MEMBER");
+    expect(actions).toContain("BOARD_OVERRIDE_GRANTED");
+    expect(actions).toContain("DIRECT_MEMBER_CREATED");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Paket 1.4 – Gürtelverwaltung
+// ---------------------------------------------------------------------------
+
+describe("Paket-1.4-Guertelverwaltung", () => {
+  it("beltHistory enthaelt drei fiktive Eintraege", () => {
+    expect(beltHistory).toHaveLength(3);
+    expect(beltHistory.every((e) => e.id.startsWith("belt-"))).toBe(true);
+  });
+
+  it("beltHistoryExtended enthaelt drei weitere fiktive Eintraege", () => {
+    expect(beltHistoryExtended).toHaveLength(3);
+    expect(beltHistoryExtended[0]!.personId).toBe("member-03");
+    expect(beltHistoryExtended[2]!.source).toBe(BeltChangeSource.IMAGE_SUGGESTION_CONFIRMED);
+  });
+
+  it("validateBeltChange akzeptiert GRUEN → BLAU mit Datum", () => {
+    const result = validateBeltChange({
+      personId: "member-01",
+      previousBeltColor: "GRUEN",
+      previousBeltGrade: "6. Kyu",
+      newBeltColor: "BLAU",
+      newBeltGrade: "5. Kyu",
+      effectiveFrom: "2026-06-21",
+      recordedBy: "Trainer Demo",
+      recordedAt: "2026-06-21T19:00:00.000Z",
+      source: BeltChangeSource.MANUAL_CONFIRMED,
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("createBeltHistoryEntry liefert unveraenderte Felder", () => {
+    const entry = createBeltHistoryEntry("belt-test-01", {
+      personId: "member-05",
+      previousBeltColor: "ORANGE",
+      previousBeltGrade: "7. Kyu",
+      newBeltColor: "GRUEN",
+      newBeltGrade: "6. Kyu",
+      effectiveFrom: "2026-06-21",
+      recordedBy: "Trainer Demo",
+      recordedAt: "2026-06-21T19:00:00.000Z",
+      source: BeltChangeSource.MANUAL_CONFIRMED,
+    });
+    expect(entry.id).toBe("belt-test-01");
+    expect(entry.newBeltColor).toBe("GRUEN");
+    expect(entry.personId).toBe("member-05");
+  });
+
+  it("suggestNextBelt gibt GELB nach WEISS zurueck", () => {
+    const hint = suggestNextBelt("WEISS", "9. Kyu");
+    expect(hint.nextLevel?.color).toBe("GELB");
+    expect(hint.isHighest).toBe(false);
+  });
+
+  it("suggestNextBelt markiert 3. Dan als hoechsten Grad", () => {
+    const hint = suggestNextBelt("SCHWARZ", "3. Dan");
+    expect(hint.isHighest).toBe(true);
+    expect(hint.nextLevel).toBeNull();
+  });
+
+  it("calculateBeltDistribution liefert sieben Eintraege", () => {
+    const dist = calculateBeltDistribution(
+      members.filter((m) => m.active).map((m) => m.beltColor),
+    );
+    expect(dist).toHaveLength(7);
+    const total = dist.reduce((sum, e) => sum + e.count, 0);
+    expect(total).toBe(members.filter((m) => m.active).length);
+  });
+
+  it("openBeltSuggestions filtert korrekt auf OPEN", () => {
+    const open = openBeltSuggestions(initialBeltSuggestions);
+    expect(open).toHaveLength(2);
+    expect(open.every((s) => s.status === BeltSuggestionStatus.OPEN)).toBe(true);
+  });
+
+  it("initialBeltSuggestions enthalten 2 offene und 2 geschlossene Vorschlaege", () => {
+    const closed = initialBeltSuggestions.filter(
+      (s) => s.status !== BeltSuggestionStatus.OPEN,
+    );
+    expect(initialBeltSuggestions).toHaveLength(4);
+    expect(closed).toHaveLength(2);
   });
 });

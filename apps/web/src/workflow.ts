@@ -50,9 +50,9 @@ export function createInitialAttendance(
 }
 
 export function presentMemberIds(attendance: AttendanceState): string[] {
-  return Object.entries(attendance).flatMap(([memberId, selection]) =>
-    selection.presenceStatus === PresenceStatus.PRESENT ? [memberId] : [],
-  );
+  return Object.entries(attendance)
+    .filter(([, selection]) => selection.presenceStatus === PresenceStatus.PRESENT)
+    .map(([memberId]) => memberId);
 }
 
 export function createLocalGuestIdFactory(prefix = "guest"): () => string {
@@ -68,6 +68,7 @@ export function canCompleteSession(
   attendance: AttendanceState,
   guests: readonly LocalGuest[],
   unresolvedProposalCount: number,
+  blockedTrialParticipants: ReadonlyArray<{ displayName: string; reason: string }> = [],
 ): { allowed: boolean; messages: string[] } {
   const attendanceRecords: AttendanceRecord[] = Object.entries(attendance).map(
     ([memberId, selection]) => ({
@@ -106,6 +107,9 @@ export function canCompleteSession(
     messages.push(
       `${unresolvedProposalCount} Foto-Demovorschlag/-vorschlaege sind noch ungeklaert.`,
     );
+  }
+  for (const blocked of blockedTrialParticipants) {
+    messages.push(`Probetraining gesperrt – ${blocked.displayName}: ${blocked.reason}`);
   }
   return { allowed: messages.length === 0, messages };
 }

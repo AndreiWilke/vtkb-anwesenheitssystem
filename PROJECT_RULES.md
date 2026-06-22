@@ -40,6 +40,26 @@
 - Gaeste und Probetrainingsteilnehmer werden manuell erfasst und nie biometrisch aufgenommen.
 - Trainer und Assistenztrainer duerfen aktuelle Einheiten erfassen. Aeltere Korrekturen erfordern eine besonders berechtigte Vorstand-/Administratorrolle und ein Auditprotokoll.
 - Guertelfarbe und Guertelgrad stammen aus Mitgliederstammdaten, nicht aus Bilderkennung.
+- Die Bildanalyse darf ausschliesslich eine sichtbare Guertelfarbe als unverbindlichen Pruefhinweis vorschlagen.
+- Die Bildanalyse darf niemals automatisch Stammdaten aendern.
+- Sie darf niemals einen Kyu- oder Dan-Grad bestimmen oder das Bestehen einer Pruefung feststellen.
+- Die endgueltige Aenderung von Guertelfarbe und Guertelgrad erfolgt ausschliesslich nach ausdruecklicher Bestaetigung durch einen berechtigten Trainer, Assistenztrainer oder Vorstand.
+- Jede bestaetigte Guertelaenderung erzeugt einen Historieneintrag und einen Audit-Eintrag.
+- Gaeste und Probetrainingsteilnehmer werden nicht biometrisch identifiziert; ein Bildvorschlag darf bei ihnen keiner Person automatisch zugeordnet werden.
+
+## Fachliche Invarianten fuer Personen und Probetraining (ab Paket 1.2)
+
+- Ein Probetrainingsteilnehmer besitzt ein dauerhaftes lokales Profil und ist kein gewoehnlicher Tagesgast.
+- Es stehen grundsaetzlich vier kostenlose, tatsaechlich besuchte Probetrainings zur Verfuegung.
+- Als Probetraining zaehlt ausschliesslich: `PersonMembershipStatus.TRIAL`, `PresenceStatus.PRESENT` in einer `TrainingSessionStatus.COMPLETED`-Einheit.
+- Abwesenheit, Abbruch oder stornierte Einheiten zaehlen nicht; doppelte Anwesenheit zaehlt nur einmal.
+- Tagesgaeste zaehlen nicht als Probetrainingsteilnehmer.
+- Der Zaehler besuchter Probetrainings wird aus der Anwesenheitshistorie berechnet, nie als frei aenderbares Feld gespeichert.
+- Nach dem vierten besuchten Probetraining ist fuer weitere Teilnahme mindestens eines erforderlich: Vertragsstatus RECEIVED, aktives Mitglied oder eine begruendete Vorstandsausnahme.
+- Die Vorstandsausnahme erlaubt genau eine zusaetzliche Einheit und erzeugt einen Audit-Eintrag.
+- Die Umwandlung zum Mitglied erhaelt Personen-ID, Probetrainingsteilnahmen, den gesamten Anwesenheitsverlauf, Guerteldaten, Guertelhistorie, Auditverlauf und interne Bemerkungen.
+- Ein Tagesgast (GuestKind.GAST) hat kein dauerhaftes Profil und kein Probetraining-Konto.
+- Keine biometrische Registrierung von Gaesten oder Probetrainingsteilnehmern.
 
 ## Grenzen von Paket 0
 

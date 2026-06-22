@@ -1,6 +1,7 @@
 import { useDeferredValue, useMemo, useState } from "react";
 import {
   ArrowRight,
+  Award,
   CalendarDays,
   Camera,
   Check,
@@ -437,9 +438,16 @@ export function ManualAttendanceScreen({
           const present = selection?.presenceStatus === PresenceStatus.PRESENT;
           const locked = member.id === responsibleId;
           return (
-            <article className={present ? "member-row present" : "member-row"} key={member.id}>
+            <article
+              className={`${present ? "member-row present" : "member-row"}${locked ? " locked" : ""}`}
+              key={member.id}
+            >
               <button
-                aria-label={`${member.name} ${present ? "abwesend setzen" : "anwesend setzen"}`}
+                aria-label={
+                  locked
+                    ? `${member.name} – Verantwortlicher Trainer, immer anwesend`
+                    : `${member.name} ${present ? "abwesend setzen" : "anwesend setzen"}`
+                }
                 className="member-main"
                 disabled={locked}
                 type="button"
@@ -449,11 +457,13 @@ export function ManualAttendanceScreen({
                 <span>
                   <strong>{member.name}</strong>
                   <small>
-                    {member.ageGroup === "KIND"
-                      ? "Kind"
-                      : member.ageGroup === "JUGEND"
-                        ? "Jugendlich"
-                        : "Erwachsen"}
+                    {locked
+                      ? "Verantwortlicher Trainer"
+                      : member.ageGroup === "KIND"
+                        ? "Kind"
+                        : member.ageGroup === "JUGEND"
+                          ? "Jugendlich"
+                          : "Erwachsen"}
                   </small>
                   <BeltMark color={member.beltColor} grade={member.beltGrade} />
                 </span>
@@ -558,7 +568,6 @@ export function GuestScreen({
             onChange={(event) => setKind(event.target.value as LocalGuest["kind"])}
           >
             <option value="GAST">Gast</option>
-            <option value="PROBETRAINING">Probetraining</option>
           </select>
         </label>
         <PrimaryButton disabled={!firstName.trim()} onClick={submit}>
@@ -760,28 +769,31 @@ export function PhotoReviewScreen({
                 {proposal.resolutionAction ? resolutionLabels[proposal.resolutionAction] : "Offen"}
               </StatusTag>
               <div className="proposal-actions">
-                {proposal.status !== "UNBEKANNT" && proposal.candidateMemberId ? (
-                  <button type="button" onClick={() => onResolve(proposal.id, "CONFIRM_CANDIDATE")}>
-                    Bestätigen
-                  </button>
-                ) : null}
-                <button type="button" onClick={() => openPicker(proposal)}>
-                  {proposal.status === "UNBEKANNT" ? "Mitglied auswählen" : "Andere Person"}
-                </button>
-                <button type="button" onClick={() => onResolve(proposal.id, "MARK_UNKNOWN")}>
-                  Als unbekannt markieren
-                </button>
-                <button type="button" onClick={() => onResolve(proposal.id, "DISCARD")}>
-                  Verwerfen
-                </button>
-                <button type="button" onClick={() => onResolve(proposal.id, "CREATE_GUEST")}>
-                  Als Gast erfassen
-                </button>
-                {proposal.resolved ? (
+                {!proposal.resolved ? (
+                  <>
+                    {proposal.status !== "UNBEKANNT" && proposal.candidateMemberId ? (
+                      <button type="button" onClick={() => onResolve(proposal.id, "CONFIRM_CANDIDATE")}>
+                        Bestätigen
+                      </button>
+                    ) : null}
+                    <button type="button" onClick={() => openPicker(proposal)}>
+                      {proposal.status === "UNBEKANNT" ? "Mitglied auswählen" : "Andere Person"}
+                    </button>
+                    <button type="button" onClick={() => onResolve(proposal.id, "MARK_UNKNOWN")}>
+                      Als unbekannt markieren
+                    </button>
+                    <button type="button" onClick={() => onResolve(proposal.id, "DISCARD")}>
+                      Verwerfen
+                    </button>
+                    <button type="button" onClick={() => onResolve(proposal.id, "CREATE_GUEST")}>
+                      Als Gast erfassen
+                    </button>
+                  </>
+                ) : (
                   <button type="button" onClick={() => onResolve(proposal.id, "RESET")}>
                     Entscheidung zurücknehmen
                   </button>
-                ) : null}
+                )}
               </div>
             </article>
           );
@@ -804,7 +816,7 @@ export function PhotoReviewScreen({
           >
             <PageHeading
               title={pickerProposal.status === "UNBEKANNT" ? "Mitglied auswählen" : "Andere Person"}
-              description="Die Auswahl wird erst nach Ihrer Bestätigung übernommen."
+              description="Mitglied antippen zum sofortigen Übernehmen."
             />
             <label className="search-field">
               <Search aria-hidden="true" />
@@ -818,29 +830,23 @@ export function PhotoReviewScreen({
             <div className="member-picker-list">
               {pickerMembers.map((member) => (
                 <button
-                  aria-pressed={pickerMemberId === member.id}
-                  className={
-                    pickerMemberId === member.id
-                      ? "member-picker-option selected"
-                      : "member-picker-option"
-                  }
+                  className="member-picker-option"
                   key={member.id}
                   type="button"
-                  onClick={() => setPickerMemberId(member.id)}
+                  onClick={() => {
+                    onResolve(pickerProposal.id, "SELECT_MEMBER", member.id);
+                    closePicker();
+                  }}
                 >
                   <MemberAvatar initials={member.initials} />
                   <span>
                     <strong>{member.name}</strong>
                     <BeltMark color={member.beltColor} grade={member.beltGrade} />
                   </span>
-                  {pickerMemberId === member.id ? <CheckCircle2 aria-label="Ausgewählt" /> : null}
                 </button>
               ))}
             </div>
             <div className="action-stack">
-              <PrimaryButton disabled={!pickerMemberId} onClick={confirmPicker}>
-                Ausgewähltes Mitglied übernehmen
-              </PrimaryButton>
               <SecondaryButton onClick={closePicker}>Abbrechen</SecondaryButton>
             </div>
           </section>
@@ -1128,6 +1134,77 @@ export function StatsScreen({
             ))}
         </div>
       </section>
+    </section>
+  );
+}
+
+export function ManagementScreen({
+  openBeltSuggestionsCount,
+  onTrialList,
+  onNewMember,
+  onBeltReport,
+  onBeltSuggestions,
+}: {
+  openBeltSuggestionsCount: number;
+  onTrialList: () => void;
+  onNewMember: () => void;
+  onBeltReport: () => void;
+  onBeltSuggestions: () => void;
+}) {
+  return (
+    <section className="management-screen">
+      <PageHeading
+        title="Verwaltung"
+        description="Mitglieder, Probetraining und Gürtelverwaltung"
+      />
+
+      <div className="mgmt-section">
+        <h2>Probetraining</h2>
+        <button className="mgmt-card" type="button" onClick={onTrialList}>
+          <Users aria-hidden="true" />
+          <span>
+            <strong>Probetraining-Liste</strong>
+            <small>Teilnehmer verwalten, Vertrag erfassen, Mitglied anlegen</small>
+          </span>
+          <ChevronRight aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className="mgmt-section">
+        <h2>Mitglieder</h2>
+        <button className="mgmt-card" type="button" onClick={onNewMember}>
+          <UserPlus aria-hidden="true" />
+          <span>
+            <strong>Neues Mitglied anlegen</strong>
+            <small>Direktaufnahme ohne Probetraining</small>
+          </span>
+          <ChevronRight aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className="mgmt-section">
+        <h2>Gürtel</h2>
+        <button className="mgmt-card" type="button" onClick={onBeltReport}>
+          <Award aria-hidden="true" />
+          <span>
+            <strong>Gürtelauswertung</strong>
+            <small>Gürteleintrag ändern, Gürtelhistorie einsehen</small>
+          </span>
+          <ChevronRight aria-hidden="true" />
+        </button>
+        <button className="mgmt-card" type="button" onClick={onBeltSuggestions}>
+          <ShieldCheck aria-hidden="true" />
+          <span>
+            <strong>Bildvorschläge prüfen</strong>
+            <small>
+              {openBeltSuggestionsCount > 0
+                ? `${openBeltSuggestionsCount} offene Vorschläge`
+                : "Keine offenen Vorschläge"}
+            </small>
+          </span>
+          <ChevronRight aria-hidden="true" />
+        </button>
+      </div>
     </section>
   );
 }

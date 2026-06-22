@@ -8,6 +8,7 @@ import {
   GuestScreen,
   LeadershipScreen,
   LoginScreen,
+  ManagementScreen,
   ManualAttendanceScreen,
   PhotoDemoScreen,
   PhotoReviewScreen,
@@ -796,6 +797,21 @@ export default function App() {
             setBeltSuggestions((prev) => [...prev, suggestion]);
             setScreen("BELT_SUGGESTION_REVIEW");
           }}
+        />
+      );
+      break;
+
+    // ------------------------------------------------------------------
+    // Verwaltungs-Hub
+    // ------------------------------------------------------------------
+    case "MANAGEMENT":
+      content = (
+        <ManagementScreen
+          openBeltSuggestionsCount={beltSuggestions.filter((s) => s.status === "OPEN").length}
+          onTrialList={() => setScreen("TRIAL_LIST")}
+          onNewMember={() => setScreen("MEMBER_DIRECT_NEW")}
+          onBeltReport={() => setScreen("BELT_REPORT")}
+          onBeltSuggestions={() => setScreen("BELT_SUGGESTION_REVIEW")}
         />
       );
       break;

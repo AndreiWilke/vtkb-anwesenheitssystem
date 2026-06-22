@@ -1243,6 +1243,61 @@ input {
 .stats-section {
   margin-top: 28px;
 }
+
+/* Verwaltungs-Hub */
+.management-screen {
+  padding: 0 16px 32px;
+}
+.mgmt-section {
+  margin-top: 28px;
+}
+.mgmt-section h2 {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.mgmt-card {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  cursor: pointer;
+  color: var(--ink);
+}
+.mgmt-card:first-of-type {
+  border-top: 1px solid var(--line);
+}
+.mgmt-card > svg:first-child {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  color: var(--accent);
+}
+.mgmt-card > span {
+  flex: 1;
+}
+.mgmt-card strong {
+  display: block;
+  font-size: 0.95rem;
+}
+.mgmt-card small {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+.mgmt-card > svg:last-child {
+  flex-shrink: 0;
+  color: var(--muted);
+}
 .ranking-list,
 .role-stats {
   border-top: 1px solid var(--line);

@@ -180,4 +180,6 @@ export type AppScreen =
   | "BELT_HISTORY"
   | "BELT_CHANGE"
   | "BELT_REPORT"
-  | "BELT_SIM_DEMO";
+  | "BELT_SIM_DEMO"
+  // Verwaltungs-Hub
+  | "MANAGEMENT";

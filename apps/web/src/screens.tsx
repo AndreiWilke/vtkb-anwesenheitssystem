@@ -1,6 +1,7 @@
 import { useDeferredValue, useMemo, useState } from "react";
 import {
   ArrowRight,
+  Award,
   CalendarDays,
   Camera,
   Check,
@@ -1133,6 +1134,77 @@ export function StatsScreen({
             ))}
         </div>
       </section>
+    </section>
+  );
+}
+
+export function ManagementScreen({
+  openBeltSuggestionsCount,
+  onTrialList,
+  onNewMember,
+  onBeltReport,
+  onBeltSuggestions,
+}: {
+  openBeltSuggestionsCount: number;
+  onTrialList: () => void;
+  onNewMember: () => void;
+  onBeltReport: () => void;
+  onBeltSuggestions: () => void;
+}) {
+  return (
+    <section className="management-screen">
+      <PageHeading
+        title="Verwaltung"
+        description="Mitglieder, Probetraining und Gürtelverwaltung"
+      />
+
+      <div className="mgmt-section">
+        <h2>Probetraining</h2>
+        <button className="mgmt-card" type="button" onClick={onTrialList}>
+          <Users aria-hidden="true" />
+          <span>
+            <strong>Probetraining-Liste</strong>
+            <small>Teilnehmer verwalten, Vertrag erfassen, Mitglied anlegen</small>
+          </span>
+          <ChevronRight aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className="mgmt-section">
+        <h2>Mitglieder</h2>
+        <button className="mgmt-card" type="button" onClick={onNewMember}>
+          <UserPlus aria-hidden="true" />
+          <span>
+            <strong>Neues Mitglied anlegen</strong>
+            <small>Direktaufnahme ohne Probetraining</small>
+          </span>
+          <ChevronRight aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className="mgmt-section">
+        <h2>Gürtel</h2>
+        <button className="mgmt-card" type="button" onClick={onBeltReport}>
+          <Award aria-hidden="true" />
+          <span>
+            <strong>Gürtelauswertung</strong>
+            <small>Gürteleintrag ändern, Gürtelhistorie einsehen</small>
+          </span>
+          <ChevronRight aria-hidden="true" />
+        </button>
+        <button className="mgmt-card" type="button" onClick={onBeltSuggestions}>
+          <ShieldCheck aria-hidden="true" />
+          <span>
+            <strong>Bildvorschläge prüfen</strong>
+            <small>
+              {openBeltSuggestionsCount > 0
+                ? `${openBeltSuggestionsCount} offene Vorschläge`
+                : "Keine offenen Vorschläge"}
+            </small>
+          </span>
+          <ChevronRight aria-hidden="true" />
+        </button>
+      </div>
     </section>
   );
 }

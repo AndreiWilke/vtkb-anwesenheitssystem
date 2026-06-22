@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, PropsWithChildren, ReactNode } from "react";
-import { BarChart3, ClipboardCheck, Home, LogOut, Menu, Users } from "lucide-react";
+import { BarChart3, ClipboardCheck, Home, LogOut, Menu, Settings, Users } from "lucide-react";
 import { DemoRole, type DemoRole as DemoRoleValue } from "@vtkb/shared";
 
 import type { AppScreen, BeltColor } from "./types";
@@ -12,12 +12,21 @@ interface AppShellProps extends PropsWithChildren {
   onDemoRoleChange: (role: DemoRoleValue) => void;
 }
 
-const navItems: ReadonlyArray<{ label: string; screen: AppScreen; icon: typeof Home }> = [
+const MANAGEMENT_SCREENS: readonly AppScreen[] = [
+  "MANAGEMENT",
+  "TRIAL_LIST", "TRIAL_NEW", "TRIAL_PROFILE", "TRIAL_CONTRACT",
+  "TRIAL_BOARD_OVERRIDE", "TRIAL_CONVERT", "MEMBER_DIRECT_NEW",
+  "BELT_HISTORY", "BELT_CHANGE", "BELT_SIM_DEMO", "BELT_SUGGESTION_REVIEW",
+];
+
+const BASE_NAV: ReadonlyArray<{ label: string; screen: AppScreen; icon: typeof Home }> = [
   { label: "Start", screen: "START", icon: Home },
   { label: "Erfassung", screen: "MANUAL", icon: Users },
   { label: "Prüfung", screen: "SUMMARY", icon: ClipboardCheck },
   { label: "Auswertung", screen: "STATS", icon: BarChart3 },
 ];
+
+const MGMT_NAV_ITEM = { label: "Verwaltung", screen: "MANAGEMENT" as AppScreen, icon: Settings };
 
 export function ToriiMark(): ReactNode {
   return (
@@ -74,7 +83,12 @@ export function AppShell({
       <main className="app-main">{children}</main>
       {hideNav ? null : (
         <nav aria-label="Hauptnavigation" className="bottom-nav">
-          {navItems.map((item) => {
+          {[
+            ...BASE_NAV,
+            ...(demoRole === DemoRole.BOARD || demoRole === DemoRole.TRAINER
+              ? [MGMT_NAV_ITEM]
+              : []),
+          ].map((item) => {
             const Icon = item.icon;
             const disabled = item.screen === "SUMMARY" && !reviewEnabled;
             const active =
@@ -82,7 +96,8 @@ export function AppShell({
               (item.screen === "MANUAL" &&
                 ["LEADERSHIP", "CAPTURE_METHOD", "GUESTS", "PHOTO_DEMO", "PHOTO_REVIEW"].includes(
                   screen,
-                ));
+                )) ||
+              (item.screen === "MANAGEMENT" && MANAGEMENT_SCREENS.includes(screen));
             return (
               <button
                 aria-current={active ? "page" : undefined}

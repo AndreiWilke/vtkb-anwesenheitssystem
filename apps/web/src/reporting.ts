@@ -910,7 +910,7 @@ export function trialCsv(summaries: readonly TrialSummary[]): string {
  */
 export function beltReportCsv(
   members: readonly Member[],
-  history: readonly { personId: string; effectiveFrom: string; newBeltColor: string; newBeltGrade: string; source: string }[],
+  history: readonly { personId: string; effectiveFrom?: string; newBeltColor: string; newBeltGrade: string; source: string }[],
   suggestions: readonly { memberId: string; status: string; suggestedBeltColor: string; confidencePercent: number; sessionDate: string }[],
 ): string {
   const openByMember = new Map<string, string>();
@@ -921,10 +921,10 @@ export function beltReportCsv(
   }
   const lastChangeByMember = new Map<string, string>();
   for (const e of [...history].sort((a, b) =>
-    b.effectiveFrom.localeCompare(a.effectiveFrom),
+    (b.effectiveFrom ?? "").localeCompare(a.effectiveFrom ?? ""),
   )) {
     if (!lastChangeByMember.has(e.personId)) {
-      lastChangeByMember.set(e.personId, e.effectiveFrom);
+      lastChangeByMember.set(e.personId, e.effectiveFrom ?? "");
     }
   }
 

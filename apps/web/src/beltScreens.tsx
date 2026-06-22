@@ -119,7 +119,7 @@ export function BeltHistoryScreen({
 }: BeltHistoryScreenProps) {
   const memberHistory = [...history]
     .filter((e) => e.personId === member.id)
-    .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
+    .sort((a, b) => (b.effectiveFrom ?? "").localeCompare(a.effectiveFrom ?? ""));
 
   const hint = suggestNextBelt(member.beltColor, member.beltGrade);
 

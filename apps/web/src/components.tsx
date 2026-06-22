@@ -162,10 +162,15 @@ export function MemberAvatar({ initials, muted = false }: { initials: string; mu
 
 const beltLabels: Record<BeltColor, string> = {
   WEISS: "Weiß",
+  WEISS_ROT: "Weiß-Rot",
   GELB: "Gelb",
+  GELB_ORANGE: "Gelb-Orange",
   ORANGE: "Orange",
+  ORANGE_GRUEN: "Orange-Grün",
   GRUEN: "Grün",
+  GRUEN_BLAU: "Grün-Blau",
   BLAU: "Blau",
+  BLAU_BRAUN: "Blau-Braun",
   BRAUN: "Braun",
   SCHWARZ: "Schwarz",
 };

@@ -38,8 +38,6 @@ jobs:
 
       - name: Build
         run: npm run build --workspace=apps/web
-        env:
-          VITE_BASE_URL: /vtkb-anwesenheitssystem/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

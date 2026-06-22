@@ -45,8 +45,8 @@ export interface DirectMemberInput {
   id: string;
   firstName: string;
   lastName: string;
-  ageGroup: "KIND" | "JUGEND" | "ERWACHSEN";
-  birthYear: number;
+  gender: "MAENNLICH" | "WEIBLICH";
+  birthDate: string;
   beltColor?: string;
   beltGrade?: string;
   qualification?: MemberQualificationValue;
@@ -60,8 +60,8 @@ export interface DirectMemberResult {
   memberId: string;
   memberNumber: string;
   displayName: string;
-  ageGroup: "KIND" | "JUGEND" | "ERWACHSEN";
-  birthYear: number;
+  gender: "MAENNLICH" | "WEIBLICH";
+  birthDate: string;
   beltColor: string;
   beltGrade: string;
   qualification: MemberQualificationValue;
@@ -187,7 +187,7 @@ export function createDirectMember(input: DirectMemberInput): DirectMemberResult
 
   const displayName = `${input.lastName.trim()}, ${input.firstName.trim()}`;
   const beltColor = input.beltColor ?? "WEISS";
-  const beltGrade = input.beltGrade ?? "9. Kyu";
+  const beltGrade = input.beltGrade ?? "10. Kyu";
   const qualification = input.qualification ?? MemberQualification.NONE;
 
   const auditEntry: AuditEntry = {
@@ -205,8 +205,8 @@ export function createDirectMember(input: DirectMemberInput): DirectMemberResult
     memberId: input.id,
     memberNumber: input.memberNumber,
     displayName,
-    ageGroup: input.ageGroup,
-    birthYear: input.birthYear,
+    gender: input.gender,
+    birthDate: input.birthDate,
     beltColor,
     beltGrade,
     qualification,

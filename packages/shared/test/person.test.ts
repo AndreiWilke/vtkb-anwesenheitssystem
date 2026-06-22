@@ -35,13 +35,13 @@ describe("normalizeName", () => {
 
 describe("checkForDuplicates", () => {
   const existing = [
-    { id: "trial-001", firstName: "Lina", lastName: "Probetraining", birthYear: 2012 },
-    { id: "trial-002", firstName: "Max", lastName: "Muster", birthYear: 2010 },
+    { id: "trial-001", firstName: "Lina", lastName: "Probetraining", birthDate: "2012-05-15" },
+    { id: "trial-002", firstName: "Max", lastName: "Muster", birthDate: "2010-03-20" },
   ];
 
   it("erkennt exakte Dublette", () => {
     const result = checkForDuplicates(
-      { firstName: "Lina", lastName: "Probetraining", birthYear: 2012 },
+      { firstName: "Lina", lastName: "Probetraining", birthDate: "2012-05-15" },
       existing,
     );
     expect(result.hasProbableDuplicate).toBe(true);
@@ -49,9 +49,17 @@ describe("checkForDuplicates", () => {
     expect(result.matches[0]?.id).toBe("trial-001");
   });
 
+  it("erkennt Dublette bei gleichem Jahr aber anderem Tag", () => {
+    const result = checkForDuplicates(
+      { firstName: "Lina", lastName: "Probetraining", birthDate: "2012-11-01" },
+      existing,
+    );
+    expect(result.hasProbableDuplicate).toBe(true);
+  });
+
   it("ignoriert Gross-/Kleinschreibung", () => {
     const result = checkForDuplicates(
-      { firstName: "lina", lastName: "probetraining", birthYear: 2012 },
+      { firstName: "lina", lastName: "probetraining", birthDate: "2012-05-15" },
       existing,
     );
     expect(result.hasProbableDuplicate).toBe(true);
@@ -59,7 +67,7 @@ describe("checkForDuplicates", () => {
 
   it("ignoriert fuehrende und nachfolgende Leerzeichen", () => {
     const result = checkForDuplicates(
-      { firstName: " Lina ", lastName: " Probetraining ", birthYear: 2012 },
+      { firstName: " Lina ", lastName: " Probetraining ", birthDate: "2012-05-15" },
       existing,
     );
     expect(result.hasProbableDuplicate).toBe(true);
@@ -67,7 +75,7 @@ describe("checkForDuplicates", () => {
 
   it("findet keine Dublette bei anderem Geburtsjahr", () => {
     const result = checkForDuplicates(
-      { firstName: "Lina", lastName: "Probetraining", birthYear: 2013 },
+      { firstName: "Lina", lastName: "Probetraining", birthDate: "2013-05-15" },
       existing,
     );
     expect(result.hasProbableDuplicate).toBe(false);
@@ -75,7 +83,7 @@ describe("checkForDuplicates", () => {
 
   it("findet keine Dublette bei anderem Nachnamen", () => {
     const result = checkForDuplicates(
-      { firstName: "Lina", lastName: "Anders", birthYear: 2012 },
+      { firstName: "Lina", lastName: "Anders", birthDate: "2012-05-15" },
       existing,
     );
     expect(result.hasProbableDuplicate).toBe(false);
@@ -83,7 +91,7 @@ describe("checkForDuplicates", () => {
 
   it("gibt leeres Array zurueck bei keiner Dublette", () => {
     const result = checkForDuplicates(
-      { firstName: "Neu", lastName: "Person", birthYear: 2015 },
+      { firstName: "Neu", lastName: "Person", birthDate: "2015-01-01" },
       existing,
     );
     expect(result.matches).toHaveLength(0);

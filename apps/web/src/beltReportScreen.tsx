@@ -235,7 +235,7 @@ export function BeltReportScreen({
               return (
                 <tr key={m.id}>
                   <td>{m.name}</td>
-                  <td>{m.ageGroup}</td>
+                  <td>{m.gender === "WEIBLICH" ? "W" : "M"}</td>
                   <td>
                     <span
                       className="belt-badge"

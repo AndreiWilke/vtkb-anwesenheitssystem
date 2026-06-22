@@ -15,6 +15,7 @@
  */
 
 import {
+  BELT_CATALOG,
   ContractStatus,
   MemberQualification,
   PersonMembershipStatus,
@@ -63,12 +64,11 @@ function membershipStatusLabel(status: string): string {
   }
 }
 
-function ageGroupLabel(group: string): string {
-  switch (group) {
-    case "KIND": return "Kind";
-    case "JUGEND": return "Jugend";
-    case "ERWACHSEN": return "Erwachsener";
-    default: return group;
+function genderLabel(gender: string): string {
+  switch (gender) {
+    case "MAENNLICH": return "Männlich";
+    case "WEIBLICH": return "Weiblich";
+    default: return gender;
   }
 }
 
@@ -142,7 +142,7 @@ export function TrialListScreen({
             >
               <div className="trial-list__name">{p.displayName}</div>
               <div className="trial-list__meta">
-                {ageGroupLabel(p.ageGroup)} · {p.birthYear} ·{" "}
+                {genderLabel(p.gender)} · {p.birthDate?.slice(0, 4) ?? "–"} ·{" "}
                 {attended}/{4} Einheiten
                 {remaining > 0 && ` (${remaining} verbl.)`}
               </div>
@@ -178,8 +178,8 @@ interface TrialNewScreenProps {
 interface NewForm {
   firstName: string;
   lastName: string;
-  ageGroup: "KIND" | "JUGEND" | "ERWACHSEN";
-  birthYear: string;
+  gender: "MAENNLICH" | "WEIBLICH";
+  birthDate: string;
   contactName: string;
   contactPhone: string;
   contactEmail: string;
@@ -189,8 +189,8 @@ interface NewForm {
 const emptyForm: NewForm = {
   firstName: "",
   lastName: "",
-  ageGroup: "ERWACHSEN",
-  birthYear: String(new Date().getFullYear() - 10),
+  gender: "MAENNLICH",
+  birthDate: "",
   contactName: "",
   contactPhone: "",
   contactEmail: "",
@@ -212,10 +212,7 @@ export function TrialNewScreen({
     const errs: Partial<NewForm> = {};
     if (!form.firstName.trim()) errs.firstName = "Pflichtfeld";
     if (!form.lastName.trim()) errs.lastName = "Pflichtfeld";
-    const year = Number(form.birthYear);
-    if (!year || year < 1900 || year > new Date().getFullYear()) {
-      errs.birthYear = "Ungültiges Geburtsjahr";
-    }
+    if (!form.birthDate) errs.birthDate = "Pflichtfeld";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -226,7 +223,7 @@ export function TrialNewScreen({
       {
         firstName: form.firstName,
         lastName: form.lastName,
-        birthYear: Number(form.birthYear),
+        birthDate: form.birthDate,
       },
       existingParticipants,
     );
@@ -245,8 +242,8 @@ export function TrialNewScreen({
       {
         firstName: form.firstName,
         lastName: form.lastName,
-        ageGroup: form.ageGroup,
-        birthYear: Number(form.birthYear),
+        gender: form.gender,
+        birthDate: form.birthDate,
         contactName: form.contactName || undefined,
         contactPhone: form.contactPhone || undefined,
         contactEmail: form.contactEmail || undefined,
@@ -290,18 +287,17 @@ export function TrialNewScreen({
           {field("firstName", "Vorname")}
           {field("lastName", "Nachname")}
           <label className="form-field">
-            <span className="form-field__label">Altersgruppe</span>
+            <span className="form-field__label">Geschlecht</span>
             <select
               className="form-field__input"
-              value={form.ageGroup}
-              onChange={(e) => setForm((prev) => ({ ...prev, ageGroup: e.target.value as "KIND" | "JUGEND" | "ERWACHSEN" }))}
+              value={form.gender}
+              onChange={(e) => setForm((prev) => ({ ...prev, gender: e.target.value as "MAENNLICH" | "WEIBLICH" }))}
             >
-              <option value="KIND">Kind</option>
-              <option value="JUGEND">Jugend</option>
-              <option value="ERWACHSEN">Erwachsener</option>
+              <option value="MAENNLICH">Männlich</option>
+              <option value="WEIBLICH">Weiblich</option>
             </select>
           </label>
-          {field("birthYear", "Geburtsjahr", "number")}
+          {field("birthDate", "Geburtsdatum", "date")}
         </fieldset>
 
         <fieldset className="form-group">
@@ -319,7 +315,7 @@ export function TrialNewScreen({
             <ul>
               {duplicates.map((d) => (
                 <li key={d.id}>
-                  {d.displayName} ({d.birthYear})
+                  {d.displayName} ({d.birthDate?.slice(0, 4) ?? "–"})
                 </li>
               ))}
             </ul>
@@ -384,8 +380,8 @@ export function TrialProfileScreen({
       <section className="detail-section">
         <h2 className="detail-section__title">Stammdaten</h2>
         <dl className="detail-list">
-          <dt>Altersgruppe</dt><dd>{ageGroupLabel(participant.ageGroup)}</dd>
-          <dt>Geburtsjahr</dt><dd>{participant.birthYear}</dd>
+          <dt>Geschlecht</dt><dd>{genderLabel(participant.gender)}</dd>
+          <dt>Geburtsdatum</dt><dd>{participant.birthDate}</dd>
           <dt>Erstellt am</dt><dd>{participant.createdAt.slice(0, 10)}</dd>
           {participant.beltColor && <><dt>Gürtel</dt><dd>{participant.beltColor} – {participant.beltGrade}</dd></>}
           {participant.note && <><dt>Notiz</dt><dd>{participant.note}</dd></>}
@@ -793,10 +789,9 @@ interface DirectMemberNewScreenProps {
 interface DirectForm {
   firstName: string;
   lastName: string;
-  ageGroup: "KIND" | "JUGEND" | "ERWACHSEN";
-  birthYear: string;
-  beltColor: string;
-  beltGrade: string;
+  gender: "MAENNLICH" | "WEIBLICH";
+  birthDate: string;
+  beltIndex: string;
   qualification: string;
   note: string;
 }
@@ -804,10 +799,9 @@ interface DirectForm {
 const emptyDirectForm: DirectForm = {
   firstName: "",
   lastName: "",
-  ageGroup: "ERWACHSEN",
-  birthYear: String(new Date().getFullYear() - 20),
-  beltColor: "WEISS",
-  beltGrade: "9. Kyu",
+  gender: "MAENNLICH",
+  birthDate: "",
+  beltIndex: "0",
   qualification: MemberQualification.NONE,
   note: "",
 };
@@ -825,16 +819,14 @@ export function DirectMemberNewScreen({
     const errs: Partial<DirectForm> = {};
     if (!form.firstName.trim()) errs.firstName = "Pflichtfeld";
     if (!form.lastName.trim()) errs.lastName = "Pflichtfeld";
-    const year = Number(form.birthYear);
-    if (!year || year < 1900 || year > new Date().getFullYear()) {
-      errs.birthYear = "Ungültiges Geburtsjahr";
-    }
+    if (!form.birthDate) errs.birthDate = "Pflichtfeld";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
 
   function handleSubmit() {
     if (!validate()) return;
+    const beltEntry = BELT_CATALOG[Number(form.beltIndex)] ?? BELT_CATALOG[0];
     const nextId = createPersonIdGenerator(existingMemberIds)();
     const nextNumber = createMemberNumberGenerator(existingMemberNumbers)();
     try {
@@ -842,10 +834,10 @@ export function DirectMemberNewScreen({
         id: nextId,
         firstName: form.firstName,
         lastName: form.lastName,
-        ageGroup: form.ageGroup,
-        birthYear: Number(form.birthYear),
-        beltColor: form.beltColor,
-        beltGrade: form.beltGrade,
+        gender: form.gender,
+        birthDate: form.birthDate,
+        beltColor: beltEntry?.color,
+        beltGrade: beltEntry?.grade,
         qualification: form.qualification as typeof MemberQualification[keyof typeof MemberQualification],
         memberNumber: nextNumber,
         createdBy: "Vorstand Demo",
@@ -900,35 +892,35 @@ export function DirectMemberNewScreen({
           {field("firstName", "Vorname")}
           {field("lastName", "Nachname")}
           <label className="form-field">
-            <span className="form-field__label">Altersgruppe</span>
+            <span className="form-field__label">Geschlecht</span>
             <select
               className="form-field__input"
-              value={form.ageGroup}
-              onChange={(e) => setForm((prev) => ({ ...prev, ageGroup: e.target.value as "KIND" | "JUGEND" | "ERWACHSEN" }))}
+              value={form.gender}
+              onChange={(e) => setForm((prev) => ({ ...prev, gender: e.target.value as "MAENNLICH" | "WEIBLICH" }))}
             >
-              <option value="KIND">Kind</option>
-              <option value="JUGEND">Jugend</option>
-              <option value="ERWACHSEN">Erwachsener</option>
+              <option value="MAENNLICH">Männlich</option>
+              <option value="WEIBLICH">Weiblich</option>
             </select>
           </label>
-          {field("birthYear", "Geburtsjahr", "number")}
+          {field("birthDate", "Geburtsdatum", "date")}
         </fieldset>
 
         <fieldset className="form-group">
           <legend>Karate</legend>
           <label className="form-field">
-            <span className="form-field__label">Gürtelfarbe</span>
+            <span className="form-field__label">Gürtel</span>
             <select
               className="form-field__input"
-              value={form.beltColor}
-              onChange={(e) => setForm((prev) => ({ ...prev, beltColor: e.target.value }))}
+              value={form.beltIndex}
+              onChange={(e) => setForm((prev) => ({ ...prev, beltIndex: e.target.value }))}
             >
-              {["WEISS", "GELB", "ORANGE", "GRUEN", "BLAU", "BRAUN", "SCHWARZ"].map((c) => (
-                <option key={c} value={c}>{c}</option>
+              {BELT_CATALOG.map((level, idx) => (
+                <option key={idx} value={idx}>
+                  {level.grade} – {level.color.replace("_", "-")}
+                </option>
               ))}
             </select>
           </label>
-          {field("beltGrade", "Gürtelgrad (z. B. 5. Kyu)")}
           <label className="form-field">
             <span className="form-field__label">Qualifikation</span>
             <select

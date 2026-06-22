@@ -33,7 +33,8 @@ export interface PersonForDuplicateCheck {
   id: string;
   firstName: string;
   lastName: string;
-  birthYear: number;
+  /** ISO-Datum (JJJJ-MM-TT) oder nur Jahr (JJJJ) */
+  birthDate: string;
 }
 
 export interface DuplicateCheckResult {
@@ -50,17 +51,18 @@ export interface DuplicateCheckResult {
  * durchfuehren.
  */
 export function checkForDuplicates(
-  candidate: { firstName: string; lastName: string; birthYear: number },
+  candidate: { firstName: string; lastName: string; birthDate: string },
   existingPersons: readonly PersonForDuplicateCheck[],
 ): DuplicateCheckResult {
   const normalFirst = normalizeName(candidate.firstName);
   const normalLast = normalizeName(candidate.lastName);
+  const candidateYear = candidate.birthDate.slice(0, 4);
 
   const matches = existingPersons.filter((person) => {
     return (
       normalizeName(person.firstName) === normalFirst &&
       normalizeName(person.lastName) === normalLast &&
-      person.birthYear === candidate.birthYear
+      person.birthDate.slice(0, 4) === candidateYear
     );
   });
 

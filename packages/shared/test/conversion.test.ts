@@ -24,8 +24,8 @@ function baseParticipant(overrides: Partial<TrialParticipant> = {}): TrialPartic
     firstName: "Mia",
     lastName: "Probetraining",
     displayName: "Probetraining, Mia",
-    ageGroup: "ERWACHSEN",
-    birthYear: 2000,
+    gender: "WEIBLICH",
+    birthDate: "2000-06-15",
     createdAt: "2026-01-01T10:00:00.000Z",
     firstTrialDate: "2026-01-10",
     lastTrialDate: "2026-02-14",
@@ -34,7 +34,7 @@ function baseParticipant(overrides: Partial<TrialParticipant> = {}): TrialPartic
     overrideUsed: false,
     membershipStatus: PersonMembershipStatus.TRIAL,
     beltColor: "WEISS",
-    beltGrade: "9. Kyu",
+    beltGrade: "10. Kyu",
     active: true,
     ...overrides,
   };
@@ -176,8 +176,8 @@ describe("createDirectMember", () => {
     id: "member-050",
     firstName: "Klaus",
     lastName: "Direktmitglied",
-    ageGroup: "ERWACHSEN" as const,
-    birthYear: 1985,
+    gender: "MAENNLICH" as const,
+    birthDate: "1985-03-10",
     memberNumber: "M-1050",
     createdBy: "Vorstand Demo",
     createdAt: "2026-06-21T11:00:00.000Z",
@@ -192,20 +192,20 @@ describe("createDirectMember", () => {
     expect(result.membershipStatus).toBe(PersonMembershipStatus.ACTIVE_MEMBER);
   });
 
-  it("setzt Standardguerteel WEISS / 9. Kyu wenn nicht angegeben", () => {
+  it("setzt Standardguerteel WEISS / 10. Kyu wenn nicht angegeben", () => {
     const result = createDirectMember(input);
     expect(result.beltColor).toBe("WEISS");
-    expect(result.beltGrade).toBe("9. Kyu");
+    expect(result.beltGrade).toBe("10. Kyu");
   });
 
   it("uebernimmt angegebene Guertelfarbe und -grad", () => {
     const result = createDirectMember({
       ...input,
       beltColor: "BLAU",
-      beltGrade: "5. Kyu",
+      beltGrade: "6. Kyu",
     });
     expect(result.beltColor).toBe("BLAU");
-    expect(result.beltGrade).toBe("5. Kyu");
+    expect(result.beltGrade).toBe("6. Kyu");
   });
 
   it("setzt Standard-Qualifikation NONE wenn nicht angegeben", () => {

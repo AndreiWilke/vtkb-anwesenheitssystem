@@ -19,11 +19,11 @@ import React, { useState } from "react";
 import {
   BeltChangeSource,
   BeltSuggestionStatus,
+  BELT_CATALOG,
   BELT_COLORS,
   applyBeltSuggestionDecision,
   createBeltHistoryEntry,
   createBeltHistoryIdGenerator,
-  gradesForColor,
   simulateBeltColorSuggestion,
   suggestNextBelt,
   validateBeltChange,
@@ -47,35 +47,65 @@ export interface BeltHistoryScreenProps {
   canEdit: boolean;
 }
 
+// Primärfarbe für einfarbige und Halbgürtel
 const BELT_COLOR_CSS: Record<string, string> = {
-  WEISS: "#f5f5f5",
-  GELB: "#f5e642",
-  ORANGE: "#f5a623",
-  GRUEN: "#4caf50",
-  BLAU: "#2196f3",
-  BRAUN: "#795548",
-  SCHWARZ: "#212121",
+  WEISS:        "#f5f5f5",
+  WEISS_ROT:    "#f5f5f5",
+  GELB:         "#f5e642",
+  GELB_ORANGE:  "#f5e642",
+  ORANGE:       "#f5a623",
+  ORANGE_GRUEN: "#f5a623",
+  GRUEN:        "#4caf50",
+  GRUEN_BLAU:   "#4caf50",
+  BLAU:         "#2196f3",
+  BLAU_BRAUN:   "#2196f3",
+  BRAUN:        "#795548",
+  SCHWARZ:      "#212121",
+};
+
+// Sekundärfarbe (rechte Hälfte) für Halbgürtel
+const BELT_COLOR2_CSS: Record<string, string> = {
+  WEISS_ROT:    "#e53935",
+  GELB_ORANGE:  "#f5a623",
+  ORANGE_GRUEN: "#4caf50",
+  GRUEN_BLAU:   "#2196f3",
+  BLAU_BRAUN:   "#795548",
 };
 
 const BELT_TEXT_COLOR: Record<string, string> = {
-  WEISS: "#333",
-  GELB: "#333",
-  ORANGE: "#333",
-  GRUEN: "#fff",
-  BLAU: "#fff",
+  WEISS: "#333", WEISS_ROT: "#333",
+  GELB: "#333",  GELB_ORANGE: "#333",
+  ORANGE: "#333", ORANGE_GRUEN: "#333",
+  GRUEN: "#fff",  GRUEN_BLAU: "#fff",
+  BLAU: "#fff",   BLAU_BRAUN: "#fff",
   BRAUN: "#fff",
   SCHWARZ: "#fff",
 };
 
+const BELT_LABEL: Record<string, string> = {
+  WEISS: "Weiß", WEISS_ROT: "Weiß-Rot",
+  GELB: "Gelb",  GELB_ORANGE: "Gelb-Orange",
+  ORANGE: "Orange", ORANGE_GRUEN: "Orange-Grün",
+  GRUEN: "Grün", GRUEN_BLAU: "Grün-Blau",
+  BLAU: "Blau",  BLAU_BRAUN: "Blau-Braun",
+  BRAUN: "Braun",
+  SCHWARZ: "Schwarz",
+};
+
 function BeltBadge({ color, grade }: { color: string; grade: string }) {
-  const bg = BELT_COLOR_CSS[color] ?? "#ccc";
+  const c1 = BELT_COLOR_CSS[color] ?? "#ccc";
+  const c2 = BELT_COLOR2_CSS[color];
   const fg = BELT_TEXT_COLOR[color] ?? "#333";
+  const bg = c2
+    ? `linear-gradient(90deg, ${c1} 50%, ${c2} 50%)`
+    : c1;
+  const label = BELT_LABEL[color] ?? color;
   return (
     <span
       className="belt-badge"
-      style={{ backgroundColor: bg, color: fg }}
+      style={{ background: bg, color: fg }}
     >
-      {color} – {grade}
+      {label} – {grade}
     </span>
   );
 }
@@ -200,35 +230,31 @@ export function BeltChangeDialog({
   actorName,
   suggestedColor,
 }: BeltChangeDialogProps) {
-  const [newColor, setNewColor] = useState(suggestedColor ?? member.beltColor);
-  const [newGrade, setNewGrade] = useState("");
-  const [effectiveFrom, setEffectiveFrom] = useState(
-    new Date().toISOString().slice(0, 10),
-  );
-  const [examDate, setExamDate] = useState("");
-  const [examiner, setExaminer] = useState("");
-  const [note, setNote] = useState("");
+  // Initialauswahl: wenn Bildvorschlag → Einträge dieser Farbe, sonst nächster Grad
+  const initialEntry = BELT_CATALOG.find(
+    (l) => l.color === (suggestedColor ?? member.beltColor) && l.grade !== member.beltGrade,
+  ) ?? BELT_CATALOG[0];
+
+  const [selectedIndex, setSelectedIndex] = useState<number>(() => {
+    const idx = BELT_CATALOG.findIndex(
+      (l) => l.color === initialEntry?.color && l.grade === initialEntry?.grade,
+    );
+    return idx >= 0 ? idx : 0;
+  });
+  const [effectiveFrom, setEffectiveFrom] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
 
-  const availableGrades = gradesForColor(newColor);
-
-  // Wenn Farbe wechselt, Grad zurücksetzen
-  const handleColorChange = (color: string) => {
-    setNewColor(color);
-    setNewGrade("");
-  };
+  const selected = BELT_CATALOG[selectedIndex];
 
   const handleSubmit = () => {
+    if (!selected) return;
     const input = {
       personId: member.id,
       previousBeltColor: member.beltColor,
       previousBeltGrade: member.beltGrade,
-      newBeltColor: newColor,
-      newBeltGrade: newGrade,
-      effectiveFrom,
-      examDate: examDate || undefined,
-      examiner: examiner.trim() || undefined,
-      note: note.trim() || undefined,
+      newBeltColor: selected.color,
+      newBeltGrade: selected.grade,
+      ...(effectiveFrom ? { effectiveFrom } : {}),
       recordedBy: actorName,
       recordedAt: new Date().toISOString(),
       source: suggestedColor
@@ -254,70 +280,31 @@ export function BeltChangeDialog({
 
         {suggestedColor && (
           <div className="notice notice--info">
-            <strong>Hinweis:</strong> Diese Änderung basiert auf einem simulierten
-            Bildvorschlag (Farbe: {suggestedColor}). Der Grad muss manuell bestätigt werden.
-            Bildanalyse bestimmt niemals den Kyu-/Dan-Grad.
+            <strong>Hinweis:</strong> Bildvorschlag (Farbe: {BELT_LABEL[suggestedColor] ?? suggestedColor}).
+            Grad wird niemals automatisch bestimmt.
           </div>
         )}
 
         <div className="form-field">
-          <label>Neue Farbe</label>
-          <select value={newColor} onChange={(e) => handleColorChange(e.target.value)}>
-            {BELT_COLORS.map((c) => (
-              <option key={c} value={c}>{c}</option>
+          <label>Neuer Gürtel</label>
+          <select
+            value={selectedIndex}
+            onChange={(e) => setSelectedIndex(Number(e.target.value))}
+          >
+            {BELT_CATALOG.map((level, idx) => (
+              <option key={idx} value={idx}>
+                {level.grade} – {BELT_LABEL[level.color] ?? level.color}
+              </option>
             ))}
           </select>
         </div>
 
         <div className="form-field">
-          <label>Neuer Grad</label>
-          {availableGrades.length === 0 ? (
-            <p className="notice notice--warn">Unbekannte Farbe – keine Grade verfügbar.</p>
-          ) : (
-            <select value={newGrade} onChange={(e) => setNewGrade(e.target.value)}>
-              <option value="">– bitte wählen –</option>
-              {availableGrades.map((g) => (
-                <option key={g} value={g}>{g}</option>
-              ))}
-            </select>
-          )}
-        </div>
-
-        <div className="form-field">
-          <label>Gültig ab</label>
+          <label>Gültig ab (optional)</label>
           <input
             type="date"
             value={effectiveFrom}
             onChange={(e) => setEffectiveFrom(e.target.value)}
-          />
-        </div>
-
-        <div className="form-field">
-          <label>Prüfungsdatum (optional)</label>
-          <input
-            type="date"
-            value={examDate}
-            onChange={(e) => setExamDate(e.target.value)}
-          />
-        </div>
-
-        <div className="form-field">
-          <label>Prüfer (optional)</label>
-          <input
-            type="text"
-            value={examiner}
-            placeholder="Name des Prüfers (fiktiv)"
-            onChange={(e) => setExaminer(e.target.value)}
-          />
-        </div>
-
-        <div className="form-field">
-          <label>Notiz (optional)</label>
-          <textarea
-            className="form-field__textarea"
-            value={note}
-            placeholder="Ergänzende Hinweise zur Änderung"
-            onChange={(e) => setNote(e.target.value)}
           />
         </div>
 
@@ -440,6 +427,7 @@ export function BeltSuggestionReviewScreen({
       {openSuggestions.length === 0 ? (
         <p className="notice">Keine offenen Bildvorschläge.</p>
       ) : (
+        <div className="table-scroll">
         <table className="report-table">
           <thead>
             <tr>
@@ -498,12 +486,14 @@ export function BeltSuggestionReviewScreen({
             })}
           </tbody>
         </table>
+        </div>
       )}
 
       <h3>Abgeschlossene Vorschläge ({closedSuggestions.length})</h3>
       {closedSuggestions.length === 0 ? (
         <p className="notice">Keine abgeschlossenen Bildvorschläge.</p>
       ) : (
+        <div className="table-scroll">
         <table className="report-table">
           <thead>
             <tr>
@@ -533,6 +523,7 @@ export function BeltSuggestionReviewScreen({
             })}
           </tbody>
         </table>
+        </div>
       )}
 
       {showChangeDialog && activeSuggestion && (
@@ -542,9 +533,9 @@ export function BeltSuggestionReviewScreen({
               id: activeSuggestion.memberId,
               name: activeSuggestion.memberId,
               initials: "?",
-              ageGroup: "ERWACHSEN",
+              gender: "MAENNLICH",
               beltColor: activeSuggestion.storedBeltColor as Member["beltColor"],
-              beltGrade: "9. Kyu",
+              beltGrade: "10. Kyu",
               qualification: "NONE",
               active: true,
               trainingsVisited: 0,

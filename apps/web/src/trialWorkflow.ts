@@ -112,8 +112,8 @@ export function buildNewTrialParticipant(
   input: {
     firstName: string;
     lastName: string;
-    ageGroup: "KIND" | "JUGEND" | "ERWACHSEN";
-    birthYear: number;
+    gender: "MAENNLICH" | "WEIBLICH";
+    birthDate: string;
     contactName?: string;
     contactPhone?: string;
     contactEmail?: string;
@@ -126,8 +126,8 @@ export function buildNewTrialParticipant(
     firstName: input.firstName.trim(),
     lastName: input.lastName.trim(),
     displayName: `${input.lastName.trim()}, ${input.firstName.trim()}`,
-    ageGroup: input.ageGroup,
-    birthYear: input.birthYear,
+    gender: input.gender,
+    birthDate: input.birthDate,
     contactName: input.contactName?.trim(),
     contactPhone: input.contactPhone?.trim(),
     contactEmail: input.contactEmail?.trim(),

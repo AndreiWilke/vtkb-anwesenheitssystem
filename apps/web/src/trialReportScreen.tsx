@@ -190,7 +190,7 @@ export function TrialReportScreen({
                   style={{ cursor: "pointer" }}
                 >
                   <td className="report-table__name">{participant.displayName}</td>
-                  <td>{participant.ageGroup}</td>
+                  <td>{participant.gender === "WEIBLICH" ? "W" : "M"}</td>
                   <td>
                     <span
                       className={`trial-count${attended >= 4 ? " trial-count--full" : ""}`}

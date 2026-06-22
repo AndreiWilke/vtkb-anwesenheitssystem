@@ -180,8 +180,8 @@ export interface TrialParticipant {
   firstName: string;
   lastName: string;
   displayName: string;
-  ageGroup: "KIND" | "JUGEND" | "ERWACHSEN";
-  birthYear: number;
+  gender: "MAENNLICH" | "WEIBLICH";
+  birthDate: string;
   /** Fiktiver Ansprechpartner – nur bei Minderjaehrigen angeben */
   contactName?: string;
   /** Fiktive Telefonnummer */
@@ -214,7 +214,7 @@ export interface BeltHistoryEntry {
   previousBeltGrade: string | null;
   newBeltColor: string;
   newBeltGrade: string;
-  effectiveFrom: string;
+  effectiveFrom?: string;
   examDate?: string;
   examiner?: string;
   recordedBy: string;

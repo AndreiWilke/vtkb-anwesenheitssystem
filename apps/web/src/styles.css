@@ -199,7 +199,7 @@ svg {
   left: 50%;
   display: grid;
   width: min(100%, 900px);
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   border-top: 1px solid var(--line);
   background: rgb(255 255 255 / 97%);
   box-shadow: 0 -12px 30px rgb(23 32 51 / 8%);
@@ -508,11 +508,15 @@ svg {
 .session-option > span:not(.status-tag) {
   grid-column: 1;
 }
-.session-option svg,
-.session-option .status-tag {
+.session-option-right {
   grid-column: 2;
   grid-row: 1 / span 3;
-  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-left: 10px;
 }
 .session-option.selected {
   border: 2px solid var(--red);
@@ -2410,9 +2414,18 @@ button.data-card:hover {
   padding: 0.5rem 0 1rem;
 }
 
+/* Horizontaler Scroll-Wrapper für breite Tabellen auf Mobile */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -16px;
+  padding: 0 16px;
+}
+
 /* Aktionsbuttons in der Vorschlag-Tabelle */
 .belt-suggestion-actions {
   display: flex;
+  flex-direction: column;
   gap: 0.35rem;
   flex-wrap: wrap;
 }

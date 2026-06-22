@@ -776,6 +776,13 @@ input {
   cursor: default;
   opacity: 1;
 }
+.member-row.locked {
+  background: var(--surface, #f5f5f5);
+}
+.member-row.locked .member-main small {
+  color: var(--accent, #c00);
+  font-weight: 600;
+}
 .member-main strong,
 .member-main small {
   display: block;

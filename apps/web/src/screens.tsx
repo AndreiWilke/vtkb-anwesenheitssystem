@@ -437,9 +437,16 @@ export function ManualAttendanceScreen({
           const present = selection?.presenceStatus === PresenceStatus.PRESENT;
           const locked = member.id === responsibleId;
           return (
-            <article className={present ? "member-row present" : "member-row"} key={member.id}>
+            <article
+              className={`${present ? "member-row present" : "member-row"}${locked ? " locked" : ""}`}
+              key={member.id}
+            >
               <button
-                aria-label={`${member.name} ${present ? "abwesend setzen" : "anwesend setzen"}`}
+                aria-label={
+                  locked
+                    ? `${member.name} – Verantwortlicher Trainer, immer anwesend`
+                    : `${member.name} ${present ? "abwesend setzen" : "anwesend setzen"}`
+                }
                 className="member-main"
                 disabled={locked}
                 type="button"
@@ -449,11 +456,13 @@ export function ManualAttendanceScreen({
                 <span>
                   <strong>{member.name}</strong>
                   <small>
-                    {member.ageGroup === "KIND"
-                      ? "Kind"
-                      : member.ageGroup === "JUGEND"
-                        ? "Jugendlich"
-                        : "Erwachsen"}
+                    {locked
+                      ? "Verantwortlicher Trainer"
+                      : member.ageGroup === "KIND"
+                        ? "Kind"
+                        : member.ageGroup === "JUGEND"
+                          ? "Jugendlich"
+                          : "Erwachsen"}
                   </small>
                   <BeltMark color={member.beltColor} grade={member.beltGrade} />
                 </span>

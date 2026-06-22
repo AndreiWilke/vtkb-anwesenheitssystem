@@ -3,6 +3,7 @@ import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  base: process.env.CI === "true" ? "/vtkb-anwesenheitssystem/" : "/",
   plugins: [
     react(),
     VitePWA({
@@ -17,10 +18,10 @@ export default defineConfig({
         lang: "de",
         icons: [
           {
-            src: "/icon.svg",
+            src: "icon.svg",
             sizes: "any",
             type: "image/svg+xml",
-            purpose: "any maskable",
+            purpose: "any",
           },
         ],
       },

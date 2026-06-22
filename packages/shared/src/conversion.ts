@@ -141,14 +141,15 @@ export function convertTrialParticipantToMember(
     throw new Error(`Umwandlung nicht moeglich: ${eligibility.reason}`);
   }
 
+  const combinedNote = input.note
+    ? `${input.participant.note ? input.participant.note + " | " : ""}${input.note}`
+    : input.participant.note;
   const updatedParticipant: TrialParticipant = {
     ...input.participant,
     membershipStatus: PersonMembershipStatus.ACTIVE_MEMBER,
     contractStatus: ContractStatus.MEMBERSHIP_ACTIVATED,
     memberId: input.newMemberId,
-    note: input.note
-      ? `${input.participant.note ? input.participant.note + " | " : ""}${input.note}`
-      : input.participant.note,
+    ...(combinedNote !== undefined ? { note: combinedNote } : {}),
   };
 
   const auditEntry: AuditEntry = {
@@ -211,7 +212,7 @@ export function createDirectMember(input: DirectMemberInput): DirectMemberResult
     qualification,
     membershipStatus: PersonMembershipStatus.ACTIVE_MEMBER,
     active: true,
-    note: input.note,
+    ...(input.note !== undefined ? { note: input.note } : {}),
     auditEntry,
   };
 }

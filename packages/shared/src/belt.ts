@@ -104,11 +104,11 @@ export function createBeltHistoryEntry(
     newBeltColor: input.newBeltColor,
     newBeltGrade: input.newBeltGrade,
     effectiveFrom: input.effectiveFrom,
-    examDate: input.examDate,
-    examiner: input.examiner,
+    ...(input.examDate !== undefined ? { examDate: input.examDate } : {}),
+    ...(input.examiner !== undefined ? { examiner: input.examiner } : {}),
     recordedBy: input.recordedBy,
     recordedAt: input.recordedAt,
-    note: input.note,
+    ...(input.note !== undefined ? { note: input.note } : {}),
     source: input.source,
   };
 }
@@ -144,7 +144,7 @@ export function applyBeltSuggestionDecision(
     status: statusMap[decision.action],
     decidedBy: decision.decidedBy,
     decidedAt: decision.decidedAt,
-    historyEntryId: decision.historyEntryId,
+    ...(decision.historyEntryId !== undefined ? { historyEntryId: decision.historyEntryId } : {}),
   };
 }
 

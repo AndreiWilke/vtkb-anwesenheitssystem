@@ -28,7 +28,7 @@ function trialRecord(
   overrides: {
     presenceStatus?: string;
     sessionStatus?: string;
-    membershipStatusAtTime?: string;
+    membershipStatusAtTime?: PersonMembershipStatus;
   } = {},
 ) {
   return {

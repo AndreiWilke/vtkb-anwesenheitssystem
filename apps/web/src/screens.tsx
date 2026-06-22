@@ -759,28 +759,31 @@ export function PhotoReviewScreen({
                 {proposal.resolutionAction ? resolutionLabels[proposal.resolutionAction] : "Offen"}
               </StatusTag>
               <div className="proposal-actions">
-                {proposal.status !== "UNBEKANNT" && proposal.candidateMemberId ? (
-                  <button type="button" onClick={() => onResolve(proposal.id, "CONFIRM_CANDIDATE")}>
-                    Bestätigen
-                  </button>
-                ) : null}
-                <button type="button" onClick={() => openPicker(proposal)}>
-                  {proposal.status === "UNBEKANNT" ? "Mitglied auswählen" : "Andere Person"}
-                </button>
-                <button type="button" onClick={() => onResolve(proposal.id, "MARK_UNKNOWN")}>
-                  Als unbekannt markieren
-                </button>
-                <button type="button" onClick={() => onResolve(proposal.id, "DISCARD")}>
-                  Verwerfen
-                </button>
-                <button type="button" onClick={() => onResolve(proposal.id, "CREATE_GUEST")}>
-                  Als Gast erfassen
-                </button>
-                {proposal.resolved ? (
+                {!proposal.resolved ? (
+                  <>
+                    {proposal.status !== "UNBEKANNT" && proposal.candidateMemberId ? (
+                      <button type="button" onClick={() => onResolve(proposal.id, "CONFIRM_CANDIDATE")}>
+                        Bestätigen
+                      </button>
+                    ) : null}
+                    <button type="button" onClick={() => openPicker(proposal)}>
+                      {proposal.status === "UNBEKANNT" ? "Mitglied auswählen" : "Andere Person"}
+                    </button>
+                    <button type="button" onClick={() => onResolve(proposal.id, "MARK_UNKNOWN")}>
+                      Als unbekannt markieren
+                    </button>
+                    <button type="button" onClick={() => onResolve(proposal.id, "DISCARD")}>
+                      Verwerfen
+                    </button>
+                    <button type="button" onClick={() => onResolve(proposal.id, "CREATE_GUEST")}>
+                      Als Gast erfassen
+                    </button>
+                  </>
+                ) : (
                   <button type="button" onClick={() => onResolve(proposal.id, "RESET")}>
                     Entscheidung zurücknehmen
                   </button>
-                ) : null}
+                )}
               </div>
             </article>
           );

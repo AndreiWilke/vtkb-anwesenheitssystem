@@ -99,11 +99,144 @@ export type SettlementStatus = (typeof SettlementStatus)[keyof typeof Settlement
 
 export const DemoRole = {
   TRAINER: "TRAINER",
+  ASSISTANT_TRAINER: "ASSISTANT_TRAINER",
   BOARD: "BOARD",
   TREASURER: "TREASURER",
 } as const;
 
 export type DemoRole = (typeof DemoRole)[keyof typeof DemoRole];
+
+// ---------------------------------------------------------------------------
+// Paket 1.2 – Personenmodell, Probetraining, Vertragsstatus
+// ---------------------------------------------------------------------------
+
+/**
+ * Mitgliedschaftsstatus einer Person.
+ * TRIAL            = Probetrainingsteilnehmer (dauerhaftes Profil, noch kein Mitglied)
+ * ACTIVE_MEMBER    = regulaeres aktives Mitglied
+ * INACTIVE_MEMBER  = inaktives Mitglied
+ */
+export const PersonMembershipStatus = {
+  TRIAL: "TRIAL",
+  ACTIVE_MEMBER: "ACTIVE_MEMBER",
+  INACTIVE_MEMBER: "INACTIVE_MEMBER",
+} as const;
+
+export type PersonMembershipStatus =
+  (typeof PersonMembershipStatus)[keyof typeof PersonMembershipStatus];
+
+/**
+ * Vertragsstatus eines Probetrainingsteilnehmers.
+ * NOT_ISSUED            = Vertrag noch nicht ausgegeben
+ * ISSUED                = Vertrag ausgegeben, noch nicht eingegangen
+ * RECEIVED              = Vertrag eingegangen, Aktivierung ausstehend
+ * MEMBERSHIP_ACTIVATED  = Mitglied aktiviert (Umwandlung abgeschlossen)
+ */
+export const ContractStatus = {
+  NOT_ISSUED: "NOT_ISSUED",
+  ISSUED: "ISSUED",
+  RECEIVED: "RECEIVED",
+  MEMBERSHIP_ACTIVATED: "MEMBERSHIP_ACTIVATED",
+} as const;
+
+export type ContractStatus = (typeof ContractStatus)[keyof typeof ContractStatus];
+
+/**
+ * Vorstandsausnahme fuer genau eine weitere Probetrainingseinheit nach Ausschoepfung der vier kostenlosen.
+ * NONE                            = keine Ausnahme erteilt
+ * ONE_ADDITIONAL_SESSION_APPROVED = genau eine zusaetzliche Einheit genehmigt
+ */
+export const TrialOverrideStatus = {
+  NONE: "NONE",
+  ONE_ADDITIONAL_SESSION_APPROVED: "ONE_ADDITIONAL_SESSION_APPROVED",
+} as const;
+
+export type TrialOverrideStatus =
+  (typeof TrialOverrideStatus)[keyof typeof TrialOverrideStatus];
+
+/** Quelle einer Guertelaenderung */
+export const BeltChangeSource = {
+  MANUAL_CONFIRMED: "MANUAL_CONFIRMED",
+  IMAGE_SUGGESTION_CONFIRMED: "IMAGE_SUGGESTION_CONFIRMED",
+  BOARD_CORRECTION: "BOARD_CORRECTION",
+} as const;
+
+export type BeltChangeSource = (typeof BeltChangeSource)[keyof typeof BeltChangeSource];
+
+/** Status eines lokalen Gurtvorschlags aus der Foto-Demo */
+export const BeltSuggestionStatus = {
+  OPEN: "OPEN",
+  CONFIRMED: "CONFIRMED",
+  REJECTED: "REJECTED",
+  DEFERRED: "DEFERRED",
+} as const;
+
+export type BeltSuggestionStatus =
+  (typeof BeltSuggestionStatus)[keyof typeof BeltSuggestionStatus];
+
+/** Dauerhaftes Profil eines Probetrainingsteilnehmers */
+export interface TrialParticipant {
+  id: string;
+  firstName: string;
+  lastName: string;
+  displayName: string;
+  ageGroup: "KIND" | "JUGEND" | "ERWACHSEN";
+  birthYear: number;
+  /** Fiktiver Ansprechpartner – nur bei Minderjaehrigen angeben */
+  contactName?: string;
+  /** Fiktive Telefonnummer */
+  contactPhone?: string;
+  /** Fiktive E-Mail-Adresse */
+  contactEmail?: string;
+  createdAt: string;
+  firstTrialDate: string | null;
+  lastTrialDate: string | null;
+  contractStatus: ContractStatus;
+  overrideStatus: TrialOverrideStatus;
+  overrideGrantedBy?: string;
+  overrideGrantedAt?: string;
+  overrideReason?: string;
+  overrideUsed: boolean;
+  membershipStatus: PersonMembershipStatus;
+  /** Gesetzt nach erfolgreicher Umwandlung zum regulaeren Mitglied */
+  memberId?: string;
+  beltColor?: string;
+  beltGrade?: string;
+  active: boolean;
+  note?: string;
+}
+
+/** Unveraenderlicher Eintrag in der Guertelhistorie einer Person */
+export interface BeltHistoryEntry {
+  id: string;
+  personId: string;
+  previousBeltColor: string | null;
+  previousBeltGrade: string | null;
+  newBeltColor: string;
+  newBeltGrade: string;
+  effectiveFrom: string;
+  examDate?: string;
+  examiner?: string;
+  recordedBy: string;
+  recordedAt: string;
+  note?: string;
+  source: BeltChangeSource;
+}
+
+/** Lokaler Gurtvorschlag aus der Foto-Demo fuer ein Mitglied */
+export interface BeltSuggestion {
+  id: string;
+  sessionId: string;
+  sessionDate: string;
+  memberId: string;
+  storedBeltColor: string;
+  suggestedBeltColor: string;
+  confidencePercent: number;
+  status: BeltSuggestionStatus;
+  decidedBy?: string;
+  decidedAt?: string;
+  historyEntryId?: string;
+}
 
 export interface CompensationRate {
   id: string;

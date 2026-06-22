@@ -2413,6 +2413,52 @@ button.data-card:hover {
   padding: 0 16px;
 }
 
+/* Gürtelhistorie: Card-Liste statt Tabelle */
+.belt-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.belt-history-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.875rem 1rem;
+}
+
+.belt-history-card__belts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.625rem;
+}
+
+.belt-history-card__arrow {
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+.belt-history-card__meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.75rem;
+  row-gap: 0.2rem;
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.belt-history-card__meta dt {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.belt-history-card__meta dd {
+  margin: 0;
+  color: var(--ink);
+}
+
 /* Aktionsbuttons in der Vorschlag-Tabelle */
 .belt-suggestion-actions {
   display: flex;

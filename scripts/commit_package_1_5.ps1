@@ -23,13 +23,14 @@ if ($LASTEXITCODE -ne 0) { Write-Error "git add fehlgeschlagen (Exit $LASTEXITCO
 $status = git status --porcelain
 if ($status) {
   Write-Host "==> Commit..."
-  git commit -m "fix: TypeScript-Fehler behoben (effectiveFrom optional, BeltColor komplett, belt-dot CSS)
+  git commit -m "fix: TypeScript-Fehler + UI-Verbesserungen (Paket 1.5)
 
 - shared/belt: effectiveFrom per conditional spread (exactOptionalPropertyTypes)
 - web/components: beltLabels Record um alle 5 Halbguertel-Farben erweitert
 - web/beltScreens + beltReportScreen: .sort() mit (x ?? '') fuer optionales effectiveFrom
 - web/reporting: beltReportCsv-Signatur effectiveFrom optional; sort + set mit ??
-- web/styles: CSS-Klassen fuer Halbguertel-Dots (belt-weiss_rot, belt-gelb_orange etc.)"
+- web/styles: CSS-Klassen fuer Halbguertel-Dots (belt-weiss_rot etc.) + belt-history-card Layout
+- web/beltScreens: Guertelhistorie als vertikale Card-Liste statt breite Tabelle (Mobile-fix)"
   if ($LASTEXITCODE -ne 0) { Write-Error "Commit fehlgeschlagen (Exit $LASTEXITCODE)"; exit 1 }
 } else {
   Write-Host "==> Nichts zu committen, Branch bereits aktuell."

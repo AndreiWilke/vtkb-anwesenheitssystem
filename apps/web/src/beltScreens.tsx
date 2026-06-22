@@ -164,45 +164,35 @@ export function BeltHistoryScreen({
         {memberHistory.length === 0 ? (
           <p className="notice">Noch keine Gürtelwechsel für dieses Mitglied gespeichert.</p>
         ) : (
-          <table className="report-table">
-            <thead>
-              <tr>
-                <th>Datum</th>
-                <th>Vorher</th>
-                <th>Nachher</th>
-                <th>Quelle</th>
-                <th>Prüfer</th>
-                <th>Erfasst von</th>
-              </tr>
-            </thead>
-            <tbody>
-              {memberHistory.map((entry) => (
-                <tr key={entry.id}>
-                  <td>{entry.effectiveFrom}</td>
-                  <td>
-                    {entry.previousBeltColor ? (
-                      <BeltBadge
-                        color={entry.previousBeltColor}
-                        grade={entry.previousBeltGrade ?? "–"}
-                      />
-                    ) : (
-                      <span className="badge badge--neutral">Erstanlage</span>
-                    )}
-                  </td>
-                  <td>
-                    <BeltBadge color={entry.newBeltColor} grade={entry.newBeltGrade} />
-                  </td>
-                  <td>
-                    <span className="badge">
-                      {sourceLabel[entry.source] ?? entry.source}
-                    </span>
-                  </td>
-                  <td>{entry.examiner ?? "–"}</td>
-                  <td>{entry.recordedBy}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="belt-history-list">
+            {memberHistory.map((entry) => (
+              <div key={entry.id} className="belt-history-card">
+                <div className="belt-history-card__belts">
+                  {entry.previousBeltColor ? (
+                    <BeltBadge
+                      color={entry.previousBeltColor}
+                      grade={entry.previousBeltGrade ?? "–"}
+                    />
+                  ) : (
+                    <span className="badge badge--neutral">Erstanlage</span>
+                  )}
+                  <span className="belt-history-card__arrow">→</span>
+                  <BeltBadge color={entry.newBeltColor} grade={entry.newBeltGrade} />
+                </div>
+                <dl className="belt-history-card__meta">
+                  {entry.effectiveFrom && (
+                    <><dt>Datum</dt><dd>{entry.effectiveFrom}</dd></>
+                  )}
+                  <dt>Quelle</dt>
+                  <dd><span className="badge">{sourceLabel[entry.source] ?? entry.source}</span></dd>
+                  {entry.examiner && (
+                    <><dt>Prüfer</dt><dd>{entry.examiner}</dd></>
+                  )}
+                  <dt>Erfasst von</dt><dd>{entry.recordedBy}</dd>
+                </dl>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>

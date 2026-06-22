@@ -558,7 +558,6 @@ export function GuestScreen({
             onChange={(event) => setKind(event.target.value as LocalGuest["kind"])}
           >
             <option value="GAST">Gast</option>
-            <option value="PROBETRAINING">Probetraining</option>
           </select>
         </label>
         <PrimaryButton disabled={!firstName.trim()} onClick={submit}>

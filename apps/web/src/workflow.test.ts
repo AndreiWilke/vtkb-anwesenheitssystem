@@ -1,18 +1,33 @@
 import { describe, expect, it } from "vitest";
 import {
+  BeltChangeSource,
+  BeltSuggestionStatus,
   ContractStatus,
   MemberQualification,
   PersonMembershipStatus,
   PresenceStatus,
   SessionRole,
   TrialOverrideStatus,
+  calculateBeltDistribution,
   checkConversionEligibility,
   convertTrialParticipantToMember,
   createDirectMember,
+  createBeltHistoryEntry,
   grantBoardOverride,
+  openBeltSuggestions,
+  suggestNextBelt,
+  validateBeltChange,
 } from "@vtkb/shared";
 
-import { createTodaySessions, demoAuditEntries, members, trialParticipants } from "./mockData";
+import {
+  beltHistory,
+  beltHistoryExtended,
+  createTodaySessions,
+  demoAuditEntries,
+  initialBeltSuggestions,
+  members,
+  trialParticipants,
+} from "./mockData";
 import {
   canCompleteSession,
   createInitialAttendance,
@@ -236,5 +251,89 @@ describe("Paket-1.3-Konvertierung", () => {
     expect(actions).toContain("TRIAL_CONVERTED_TO_MEMBER");
     expect(actions).toContain("BOARD_OVERRIDE_GRANTED");
     expect(actions).toContain("DIRECT_MEMBER_CREATED");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Paket 1.4 – Gürtelverwaltung
+// ---------------------------------------------------------------------------
+
+describe("Paket-1.4-Guertelverwaltung", () => {
+  it("beltHistory enthaelt drei fiktive Eintraege", () => {
+    expect(beltHistory).toHaveLength(3);
+    expect(beltHistory.every((e) => e.id.startsWith("belt-"))).toBe(true);
+  });
+
+  it("beltHistoryExtended enthaelt drei weitere fiktive Eintraege", () => {
+    expect(beltHistoryExtended).toHaveLength(3);
+    expect(beltHistoryExtended[0]!.personId).toBe("member-03");
+    expect(beltHistoryExtended[2]!.source).toBe(BeltChangeSource.IMAGE_SUGGESTION_CONFIRMED);
+  });
+
+  it("validateBeltChange akzeptiert GRUEN → BLAU mit Datum", () => {
+    const result = validateBeltChange({
+      personId: "member-01",
+      previousBeltColor: "GRUEN",
+      previousBeltGrade: "6. Kyu",
+      newBeltColor: "BLAU",
+      newBeltGrade: "5. Kyu",
+      effectiveFrom: "2026-06-21",
+      recordedBy: "Trainer Demo",
+      recordedAt: "2026-06-21T19:00:00.000Z",
+      source: BeltChangeSource.MANUAL_CONFIRMED,
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("createBeltHistoryEntry liefert unveraenderte Felder", () => {
+    const entry = createBeltHistoryEntry("belt-test-01", {
+      personId: "member-05",
+      previousBeltColor: "ORANGE",
+      previousBeltGrade: "7. Kyu",
+      newBeltColor: "GRUEN",
+      newBeltGrade: "6. Kyu",
+      effectiveFrom: "2026-06-21",
+      recordedBy: "Trainer Demo",
+      recordedAt: "2026-06-21T19:00:00.000Z",
+      source: BeltChangeSource.MANUAL_CONFIRMED,
+    });
+    expect(entry.id).toBe("belt-test-01");
+    expect(entry.newBeltColor).toBe("GRUEN");
+    expect(entry.personId).toBe("member-05");
+  });
+
+  it("suggestNextBelt gibt GELB nach WEISS zurueck", () => {
+    const hint = suggestNextBelt("WEISS", "9. Kyu");
+    expect(hint.nextLevel?.color).toBe("GELB");
+    expect(hint.isHighest).toBe(false);
+  });
+
+  it("suggestNextBelt markiert 3. Dan als hoechsten Grad", () => {
+    const hint = suggestNextBelt("SCHWARZ", "3. Dan");
+    expect(hint.isHighest).toBe(true);
+    expect(hint.nextLevel).toBeNull();
+  });
+
+  it("calculateBeltDistribution liefert sieben Eintraege", () => {
+    const dist = calculateBeltDistribution(
+      members.filter((m) => m.active).map((m) => m.beltColor),
+    );
+    expect(dist).toHaveLength(7);
+    const total = dist.reduce((sum, e) => sum + e.count, 0);
+    expect(total).toBe(members.filter((m) => m.active).length);
+  });
+
+  it("openBeltSuggestions filtert korrekt auf OPEN", () => {
+    const open = openBeltSuggestions(initialBeltSuggestions);
+    expect(open).toHaveLength(2);
+    expect(open.every((s) => s.status === BeltSuggestionStatus.OPEN)).toBe(true);
+  });
+
+  it("initialBeltSuggestions enthalten 2 offene und 2 geschlossene Vorschlaege", () => {
+    const closed = initialBeltSuggestions.filter(
+      (s) => s.status !== BeltSuggestionStatus.OPEN,
+    );
+    expect(initialBeltSuggestions).toHaveLength(4);
+    expect(closed).toHaveLength(2);
   });
 });

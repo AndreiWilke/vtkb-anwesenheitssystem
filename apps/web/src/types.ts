@@ -104,7 +104,9 @@ export type ReportingView =
   | "TRIALS"
   | "TRIAL_DETAIL"
   | "TRIAL_REPORT"
-  | "BELT_SUGGESTIONS";
+  | "BELT_SUGGESTIONS"
+  | "BELT_REPORT"
+  | "BELT_HISTORY_DETAIL";
 
 export type DemoRoleValue = DemoRole;
 
@@ -173,4 +175,9 @@ export type AppScreen =
   | "TRIAL_CONVERT"
   | "TRIAL_BOARD_OVERRIDE"
   | "MEMBER_DIRECT_NEW"
-  | "TRIAL_REPORT";
+  | "TRIAL_REPORT"
+  // Paket 1.4
+  | "BELT_HISTORY"
+  | "BELT_CHANGE"
+  | "BELT_REPORT"
+  | "BELT_SIM_DEMO";

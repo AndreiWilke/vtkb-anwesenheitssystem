@@ -668,9 +668,9 @@ export default function App() {
                 .map((w) => w[0] ?? "")
                 .join("")
                 .toUpperCase() || "??",
-              ageGroup: result.ageGroup,
+              gender: result.gender,
               beltColor: (result.beltColor ?? "WEISS") as Member["beltColor"],
-              beltGrade: result.beltGrade ?? "9. Kyu",
+              beltGrade: result.beltGrade ?? "10. Kyu",
               qualification: result.qualification,
               active: true,
               trainingsVisited: 0,

@@ -191,7 +191,7 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
   const [rangeFrom, setRangeFrom] = useState("2026-01-01");
   const [rangeUntil, setRangeUntil] = useState("2026-06-30");
   const [memberQuery, setMemberQuery] = useState("");
-  const [ageGroup, setAgeGroup] = useState("");
+  const [gender, setGender] = useState("");
   const [trainingType, setTrainingType] = useState("");
   const [dojo, setDojo] = useState("");
   const [belt, setBelt] = useState("");
@@ -211,7 +211,7 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
   const summaries = useMemo(
     () =>
       aggregateAttendance(members, historicalSessions, period, {
-        ...(ageGroup ? { ageGroup: ageGroup as Member["ageGroup"] } : {}),
+        ...(gender ? { gender: gender as Member["gender"] } : {}),
         ...(trainingType ? { trainingType: trainingType as TrainingType } : {}),
         ...(dojo ? { dojo } : {}),
         ...(belt ? { beltColor: belt as Member["beltColor"] } : {}),
@@ -231,7 +231,7 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
       ),
     [
       activeOnly,
-      ageGroup,
+      gender,
       belt,
       dojo,
       memberQuery,
@@ -591,13 +591,12 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
               />
             </label>
             <FilterSelect
-              label="Altersgruppe"
-              value={ageGroup}
-              onChange={setAgeGroup}
+              label="Geschlecht"
+              value={gender}
+              onChange={setGender}
               options={[
-                ["KIND", "Kinder"],
-                ["JUGEND", "Jugend"],
-                ["ERWACHSEN", "Erwachsene"],
+                ["MAENNLICH", "Männlich"],
+                ["WEIBLICH", "Weiblich"],
               ]}
             />
             <FilterSelect
@@ -1049,7 +1048,7 @@ function MemberSummaryList({
             <span>
               <strong>{item.member.name}</strong>
               <small>
-                {item.member.ageGroup} · {item.member.active ? "aktiv" : "inaktiv"}
+                {item.member.gender === "WEIBLICH" ? "W" : "M"} · {item.member.active ? "aktiv" : "inaktiv"}
               </small>
               <BeltMark color={item.member.beltColor} grade={item.member.beltGrade} />
             </span>
@@ -1123,7 +1122,7 @@ function MemberDetail({
         <MemberAvatar initials={member.initials} />
         <div>
           <BeltMark color={member.beltColor} grade={member.beltGrade} />
-          <span>{member.ageGroup}</span>
+          <span>{member.gender === "WEIBLICH" ? "Weiblich" : "Männlich"}</span>
         </div>
       </div>
       <div className="monthly-summary">

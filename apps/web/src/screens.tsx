@@ -29,9 +29,9 @@ import {
 } from "./components";
 import { completedSessionHistory } from "./mockData";
 import type {
-  AgeGroup,
   AttendanceState,
   BeltColor,
+  Gender,
   LocalGuest,
   Member,
   ProposalDecision,
@@ -200,16 +200,18 @@ export function SessionSelectScreen({
               <span>
                 {formatSessionTime(session)} · {session.dojo}
               </span>
-              <StatusTag
-                tone={status === "LAEUFT" ? "good" : status === "BEENDET" ? "muted" : "warn"}
-              >
-                {status === "LAEUFT" ? "Läuft" : status === "BEENDET" ? "Beendet" : "Bevorstehend"}
-              </StatusTag>
-              {session.id === selectedId ? (
-                <CheckCircle2 aria-label="Ausgewählt" />
-              ) : (
-                <ChevronRight aria-hidden="true" />
-              )}
+              <div className="session-option-right">
+                <StatusTag
+                  tone={status === "LAEUFT" ? "good" : status === "BEENDET" ? "muted" : "warn"}
+                >
+                  {status === "LAEUFT" ? "Läuft" : status === "BEENDET" ? "Beendet" : "Bevorstehend"}
+                </StatusTag>
+                {session.id === selectedId ? (
+                  <CheckCircle2 aria-label="Ausgewählt" />
+                ) : (
+                  <ChevronRight aria-hidden="true" />
+                )}
+              </div>
             </button>
           );
         })}
@@ -361,19 +363,19 @@ export function ManualAttendanceScreen({
 }) {
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
-  const [ageGroup, setAgeGroup] = useState<AgeGroup | "ALLE">("ALLE");
+  const [gender, setGender] = useState<Gender | "ALLE">("ALLE");
   const [belt, setBelt] = useState<BeltColor | "ALLE">("ALLE");
   const [trainersOnly, setTrainersOnly] = useState(false);
   const visibleMembers = useMemo(() => {
     const query = deferredSearch.trim().toLocaleLowerCase("de");
     return members.filter((member) => {
       if (query && !member.name.toLocaleLowerCase("de").includes(query)) return false;
-      if (ageGroup !== "ALLE" && member.ageGroup !== ageGroup) return false;
+      if (gender !== "ALLE" && member.gender !== gender) return false;
       if (belt !== "ALLE" && member.beltColor !== belt) return false;
       if (trainersOnly && member.qualification === MemberQualification.NONE) return false;
       return true;
     });
-  }, [ageGroup, belt, deferredSearch, members, trainersOnly]);
+  }, [gender, belt, deferredSearch, members, trainersOnly]);
   const presentCount = presentMemberIds(attendance).length + guestCount;
   return (
     <section>
@@ -395,14 +397,13 @@ export function ManualAttendanceScreen({
         </label>
         <div className="filter-grid">
           <select
-            aria-label="Altersgruppe filtern"
-            value={ageGroup}
-            onChange={(event) => setAgeGroup(event.target.value as AgeGroup | "ALLE")}
+            aria-label="Geschlecht filtern"
+            value={gender}
+            onChange={(event) => setGender(event.target.value as Gender | "ALLE")}
           >
-            <option value="ALLE">Alle Altersgruppen</option>
-            <option value="KIND">Kinder</option>
-            <option value="JUGEND">Jugendliche</option>
-            <option value="ERWACHSEN">Erwachsene</option>
+            <option value="ALLE">Alle</option>
+            <option value="MAENNLICH">Männlich</option>
+            <option value="WEIBLICH">Weiblich</option>
           </select>
           <select
             aria-label="Gürtelfarbe filtern"
@@ -459,11 +460,9 @@ export function ManualAttendanceScreen({
                   <small>
                     {locked
                       ? "Verantwortlicher Trainer"
-                      : member.ageGroup === "KIND"
-                        ? "Kind"
-                        : member.ageGroup === "JUGEND"
-                          ? "Jugendlich"
-                          : "Erwachsen"}
+                      : member.gender === "WEIBLICH"
+                        ? "Weiblich"
+                        : "Männlich"}
                   </small>
                   <BeltMark color={member.beltColor} grade={member.beltGrade} />
                 </span>

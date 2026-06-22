@@ -29,7 +29,7 @@ export type PeriodFilter =
 
 export interface ReportingFilters {
   personId?: string;
-  ageGroup?: Member["ageGroup"];
+  gender?: Member["gender"];
   trainingType?: TrainingType;
   dojo?: string;
   beltColor?: Member["beltColor"];
@@ -265,7 +265,7 @@ export function aggregateAttendance(
     .filter(
       (member) =>
         (!filters.personId || member.id === filters.personId) &&
-        (!filters.ageGroup || member.ageGroup === filters.ageGroup) &&
+        (!filters.gender || member.gender === filters.gender) &&
         (!filters.beltColor || member.beltColor === filters.beltColor) &&
         (!filters.activeOnly || member.active) &&
         (!filters.qualification || member.qualification === filters.qualification),
@@ -744,7 +744,7 @@ export function attendanceCsv(
     ],
     ...summaries.map((item) => [
       item.member.name,
-      item.member.ageGroup,
+      item.member.gender,
       item.member.beltColor,
       item.member.beltGrade,
       periodLabel,
@@ -890,8 +890,8 @@ export function trialCsv(summaries: readonly TrialSummary[]): string {
     ],
     ...summaries.map(({ participant, attended }) => [
       participant.displayName,
-      participant.ageGroup,
-      participant.birthYear,
+      participant.gender,
+      participant.birthDate,
       participant.firstTrialDate ?? "",
       participant.lastTrialDate ?? "",
       attended,
@@ -941,7 +941,7 @@ export function beltReportCsv(
       .filter((m) => m.active)
       .map((m) => [
         m.name,
-        m.ageGroup,
+        m.gender,
         m.beltColor,
         m.beltGrade,
         lastChangeByMember.get(m.id) ?? "",

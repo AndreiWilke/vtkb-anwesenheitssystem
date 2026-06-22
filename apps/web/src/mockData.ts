@@ -8,7 +8,7 @@ import {
 } from "@vtkb/shared";
 
 import type {
-  AgeGroup,
+  Gender,
   AuditEntry,
   BeltColor,
   BeltHistoryEntry,
@@ -64,19 +64,19 @@ const fictionalFirstNames = [
 ] as const;
 
 const belts: ReadonlyArray<{ color: BeltColor; grade: string }> = [
-  { color: "WEISS", grade: "9. Kyu" },
-  { color: "GELB", grade: "8. Kyu" },
-  { color: "ORANGE", grade: "7. Kyu" },
-  { color: "GRUEN", grade: "6. Kyu" },
-  { color: "BLAU", grade: "5. Kyu" },
-  { color: "BRAUN", grade: "2. Kyu" },
-  { color: "SCHWARZ", grade: "1. Dan" },
+  { color: "WEISS",        grade: "10. Kyu" },
+  { color: "WEISS_ROT",   grade: "9a. Kyu" },
+  { color: "GELB",         grade: "9. Kyu"  },
+  { color: "GELB_ORANGE",  grade: "8a. Kyu" },
+  { color: "ORANGE",       grade: "8. Kyu"  },
+  { color: "GRUEN",        grade: "7. Kyu"  },
+  { color: "BLAU",         grade: "6. Kyu"  },
+  { color: "BRAUN",        grade: "3. Kyu"  },
+  { color: "SCHWARZ",      grade: "1. Dan"  },
 ];
 
-function ageGroupForIndex(index: number): AgeGroup {
-  if (index < 14) return "KIND";
-  if (index < 27) return "JUGEND";
-  return "ERWACHSEN";
+function genderForIndex(index: number): Gender {
+  return index % 2 === 0 ? "WEIBLICH" : "MAENNLICH";
 }
 
 function qualificationForIndex(index: number): MemberQualification {
@@ -92,9 +92,9 @@ export const members: Member[] = fictionalFirstNames.map((firstName, index) => {
     id: `member-${number}`,
     name: `${firstName} Beispiel`,
     initials: `${firstName[0] ?? "M"}B`,
-    ageGroup: ageGroupForIndex(index),
+    gender: genderForIndex(index),
     beltColor: belt?.color ?? "WEISS",
-    beltGrade: belt?.grade ?? "9. Kyu",
+    beltGrade: belt?.grade ?? "10. Kyu",
     qualification: qualificationForIndex(index),
     active: index !== 39,
     trainingsVisited: 8 + ((index * 7) % 39),
@@ -157,8 +157,8 @@ export const trialParticipants: TrialParticipant[] = [
     firstName: "Lina",
     lastName: "Probetraining",
     displayName: "Lina Probetraining",
-    ageGroup: "JUGEND",
-    birthYear: 2012,
+    gender: "WEIBLICH",
+    birthDate: "2012-05-15",
     contactName: "Elternkontakt Beispiel",
     contactPhone: "030-555-0101",
     contactEmail: "trial01@example.invalid",
@@ -170,7 +170,7 @@ export const trialParticipants: TrialParticipant[] = [
     overrideUsed: false,
     membershipStatus: PersonMembershipStatus.TRIAL,
     beltColor: "WEISS",
-    beltGrade: "9. Kyu",
+    beltGrade: "10. Kyu",
     active: true,
   },
   // 1 von 4
@@ -179,8 +179,8 @@ export const trialParticipants: TrialParticipant[] = [
     firstName: "Tom",
     lastName: "Probetraining",
     displayName: "Tom Probetraining",
-    ageGroup: "KIND",
-    birthYear: 2016,
+    gender: "MAENNLICH",
+    birthDate: "2016-03-22",
     contactName: "Elternkontakt Beispiel",
     contactPhone: "030-555-0102",
     contactEmail: "trial02@example.invalid",
@@ -192,7 +192,7 @@ export const trialParticipants: TrialParticipant[] = [
     overrideUsed: false,
     membershipStatus: PersonMembershipStatus.TRIAL,
     beltColor: "WEISS",
-    beltGrade: "9. Kyu",
+    beltGrade: "10. Kyu",
     active: true,
   },
   // 2 von 4
@@ -201,8 +201,8 @@ export const trialParticipants: TrialParticipant[] = [
     firstName: "Sara",
     lastName: "Probetraining",
     displayName: "Sara Probetraining",
-    ageGroup: "ERWACHSEN",
-    birthYear: 1998,
+    gender: "WEIBLICH",
+    birthDate: "1998-11-08",
     contactEmail: "trial03@example.invalid",
     createdAt: "2026-04-01T11:00:00.000Z",
     firstTrialDate: "2026-04-05",
@@ -212,7 +212,7 @@ export const trialParticipants: TrialParticipant[] = [
     overrideUsed: false,
     membershipStatus: PersonMembershipStatus.TRIAL,
     beltColor: "WEISS",
-    beltGrade: "9. Kyu",
+    beltGrade: "10. Kyu",
     active: true,
   },
   // 3 von 4 – Vertragshinweis anzeigen
@@ -221,8 +221,8 @@ export const trialParticipants: TrialParticipant[] = [
     firstName: "Ben",
     lastName: "Probetraining",
     displayName: "Ben Probetraining",
-    ageGroup: "JUGEND",
-    birthYear: 2010,
+    gender: "MAENNLICH",
+    birthDate: "2010-07-19",
     contactName: "Elternkontakt Beispiel",
     contactPhone: "030-555-0104",
     createdAt: "2026-03-10T09:30:00.000Z",
@@ -233,7 +233,7 @@ export const trialParticipants: TrialParticipant[] = [
     overrideUsed: false,
     membershipStatus: PersonMembershipStatus.TRIAL,
     beltColor: "WEISS",
-    beltGrade: "9. Kyu",
+    beltGrade: "10. Kyu",
     active: true,
   },
   // 4 von 4 – Vertrag eingegangen, umgewandelt zum Mitglied (Demo Paket 1.3)
@@ -242,8 +242,8 @@ export const trialParticipants: TrialParticipant[] = [
     firstName: "Mia",
     lastName: "Probetraining",
     displayName: "Mia Probetraining",
-    ageGroup: "ERWACHSEN",
-    birthYear: 2000,
+    gender: "WEIBLICH",
+    birthDate: "2000-06-15",
     contactEmail: "trial05@example.invalid",
     createdAt: "2026-02-01T08:00:00.000Z",
     firstTrialDate: "2026-02-05",
@@ -254,7 +254,7 @@ export const trialParticipants: TrialParticipant[] = [
     membershipStatus: PersonMembershipStatus.ACTIVE_MEMBER,
     memberId: "member-41",
     beltColor: "WEISS",
-    beltGrade: "9. Kyu",
+    beltGrade: "10. Kyu",
     active: true,
     note: "Demo-Umwandlung Paket 1.3 – Probetrainingsteilnehmer wurde zum Mitglied.",
   },
@@ -264,8 +264,8 @@ export const trialParticipants: TrialParticipant[] = [
     firstName: "Noah",
     lastName: "Beispiel-Probe",
     displayName: "Noah Beispiel-Probe",
-    ageGroup: "JUGEND",
-    birthYear: 2009,
+    gender: "MAENNLICH",
+    birthDate: "2009-09-03",
     contactName: "Elternkontakt Beispiel",
     contactPhone: "030-555-0106",
     createdAt: "2026-01-10T09:00:00.000Z",
@@ -279,7 +279,7 @@ export const trialParticipants: TrialParticipant[] = [
     overrideUsed: true,
     membershipStatus: PersonMembershipStatus.TRIAL,
     beltColor: "WEISS",
-    beltGrade: "9. Kyu",
+    beltGrade: "10. Kyu",
     active: true,
     note: "Fiktives Demo-Profil. Vorstandsausnahme wurde genutzt.",
   },

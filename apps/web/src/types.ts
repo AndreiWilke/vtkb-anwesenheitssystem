@@ -26,8 +26,8 @@ export type BeltHistoryEntry = SharedBeltHistoryEntry;
 export type BeltSuggestion = SharedBeltSuggestion;
 export type TrialParticipant = SharedTrialParticipant;
 
-export type AgeGroup = "KIND" | "JUGEND" | "ERWACHSEN";
-export type BeltColor = "WEISS" | "GELB" | "ORANGE" | "GRUEN" | "BLAU" | "BRAUN" | "SCHWARZ";
+export type Gender = "MAENNLICH" | "WEIBLICH";
+export type BeltColor = "WEISS" | "WEISS_ROT" | "GELB" | "GELB_ORANGE" | "ORANGE" | "ORANGE_GRUEN" | "GRUEN" | "GRUEN_BLAU" | "BLAU" | "BLAU_BRAUN" | "BRAUN" | "SCHWARZ";
 export type SessionUiStatus = "BEVORSTEHEND" | "LAEUFT" | "BEENDET";
 
 /**
@@ -57,7 +57,8 @@ export interface Member {
   id: string;
   name: string;
   initials: string;
-  ageGroup: AgeGroup;
+  gender: Gender;
+  birthDate?: string;
   beltColor: BeltColor;
   beltGrade: string;
   qualification: MemberQualification;

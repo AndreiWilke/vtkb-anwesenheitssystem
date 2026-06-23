@@ -5,16 +5,9 @@ import {
   TrainingSessionStatus,
   validateTrainingSession,
   type AttendanceRecord,
-  type GuestAttendance,
 } from "@vtkb/shared";
 
-import type {
-  AttendanceState,
-  LocalGuest,
-  Member,
-  SessionUiStatus,
-  TrainingSessionMock,
-} from "./types";
+import type { AttendanceState, Member, SessionUiStatus, TrainingSessionMock } from "./types";
 
 export function sessionUiStatus(session: TrainingSessionMock, now = new Date()): SessionUiStatus {
   if (now < session.startsAt) return "BEVORSTEHEND";
@@ -55,18 +48,9 @@ export function presentMemberIds(attendance: AttendanceState): string[] {
     .map(([memberId]) => memberId);
 }
 
-export function createLocalGuestIdFactory(prefix = "guest"): () => string {
-  let nextId = 0;
-  return () => {
-    nextId += 1;
-    return `${prefix}-${String(nextId).padStart(3, "0")}`;
-  };
-}
-
 export function canCompleteSession(
   session: TrainingSessionMock,
   attendance: AttendanceState,
-  guests: readonly LocalGuest[],
   unresolvedProposalCount: number,
   blockedTrialParticipants: ReadonlyArray<{ displayName: string; reason: string }> = [],
 ): { allowed: boolean; messages: string[] } {
@@ -79,14 +63,6 @@ export function canCompleteSession(
       captureSource: CaptureSource.MANUAL,
     }),
   );
-  const guestRecords: GuestAttendance[] = guests.map((guest) => ({
-    sessionId: session.id,
-    guestId: guest.id,
-    displayName: [guest.firstName, guest.lastName].filter(Boolean).join(" "),
-    presenceStatus: PresenceStatus.PRESENT,
-    sessionRole: SessionRole.PARTICIPANT,
-    captureSource: CaptureSource.MANUAL,
-  }));
   const issues = validateTrainingSession({
     session: {
       id: session.id,
@@ -100,7 +76,6 @@ export function canCompleteSession(
       completedByUserId: "demo-user",
     },
     attendance: attendanceRecords,
-    guests: guestRecords,
   });
   const messages = issues.map((issue) => issue.message);
   if (unresolvedProposalCount > 0) {

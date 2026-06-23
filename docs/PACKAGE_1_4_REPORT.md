@@ -18,25 +18,25 @@ Paket 1.4 baut auf Paket 1.3 auf und ergänzt die vollständige Gürtelverwaltun
 
 ## Neue Dateien
 
-| Datei | Beschreibung |
-|---|---|
-| `packages/shared/test/belt.test.ts` | 36 Unit-Tests für belt.ts (Katalog, Validierung, Prüfungshinweis, Verteilung, Simulation) |
-| `apps/web/src/beltScreens.tsx` | `BeltHistoryScreen`, `BeltChangeDialog`, `BeltSuggestionReviewScreen`, `BeltSimulationDemoScreen` |
-| `apps/web/src/beltReportScreen.tsx` | `BeltReportScreen` mit Verteilungsdiagramm, Filter, Prüfungshinweisen, CSV-Export |
-| `docs/PACKAGE_1_4_REPORT.md` | Dieser Bericht |
+| Datei                               | Beschreibung                                                                                      |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `packages/shared/test/belt.test.ts` | 36 Unit-Tests für belt.ts (Katalog, Validierung, Prüfungshinweis, Verteilung, Simulation)         |
+| `apps/web/src/beltScreens.tsx`      | `BeltHistoryScreen`, `BeltChangeDialog`, `BeltSuggestionReviewScreen`, `BeltSimulationDemoScreen` |
+| `apps/web/src/beltReportScreen.tsx` | `BeltReportScreen` mit Verteilungsdiagramm, Filter, Prüfungshinweisen, CSV-Export                 |
+| `docs/PACKAGE_1_4_REPORT.md`        | Dieser Bericht                                                                                    |
 
 ---
 
 ## Geänderte Dateien
 
-| Datei | Änderung |
-|---|---|
-| `packages/shared/src/belt.ts` | + `validateBeltChange`, `suggestNextBelt`, `BeltExamHint`, `calculateBeltDistribution`, `simulateBeltColorSuggestion` |
-| `apps/web/src/types.ts` | + 4 neue AppScreens (BELT_HISTORY, BELT_CHANGE, BELT_REPORT, BELT_SIM_DEMO); + ReportingViews BELT_REPORT, BELT_HISTORY_DETAIL |
-| `apps/web/src/reporting.ts` | + `beltReportCsv` |
-| `apps/web/src/mockData.ts` | + `beltHistoryExtended` (3 weitere fiktive Einträge) |
-| `apps/web/src/workflow.test.ts` | + 8 Paket-1.4-Tests |
-| `apps/web/src/styles.css` | + Belt-Screen CSS (BeltBadge, BeltBar, Dialog, Notice-Varianten, btn--danger) |
+| Datei                           | Änderung                                                                                                                       |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `packages/shared/src/belt.ts`   | + `validateBeltChange`, `suggestNextBelt`, `BeltExamHint`, `calculateBeltDistribution`, `simulateBeltColorSuggestion`          |
+| `apps/web/src/types.ts`         | + 4 neue AppScreens (BELT_HISTORY, BELT_CHANGE, BELT_REPORT, BELT_SIM_DEMO); + ReportingViews BELT_REPORT, BELT_HISTORY_DETAIL |
+| `apps/web/src/reporting.ts`     | + `beltReportCsv`                                                                                                              |
+| `apps/web/src/mockData.ts`      | + `beltHistoryExtended` (3 weitere fiktive Einträge)                                                                           |
+| `apps/web/src/workflow.test.ts` | + 8 Paket-1.4-Tests                                                                                                            |
+| `apps/web/src/styles.css`       | + Belt-Screen CSS (BeltBadge, BeltBar, Dialog, Notice-Varianten, btn--danger)                                                  |
 
 ---
 
@@ -58,8 +58,7 @@ Paket 1.4 baut auf Paket 1.3 auf und ergänzt die vollständige Gürtelverwaltun
 
 ### Gürtelkatalog
 
-- `BELT_CATALOG` ist der fiktive Demo-Katalog (12 Stufen, 7 Farben).
-- Die endgültige Prüfungsordnung wird durch den VTKB e.V. in Paket 2+ definiert.
+- `BELT_CATALOG` bildet die verbindliche Vereinsvorgabe mit 23 Stufen und 13 Farben ab.
 - Prüfungshinweise von `suggestNextBelt` sind unverbindlich.
 
 ---
@@ -67,7 +66,8 @@ Paket 1.4 baut auf Paket 1.3 auf und ergänzt die vollständige Gürtelverwaltun
 ## Demo-Datensätze (Paket 1.4 Ergänzungen)
 
 `beltHistoryExtended` – 3 weitere fiktive Gürteländerungen:
-- `belt-0004`: member-03, BLAU → BRAUN / 4. Kyu (manuell)
+
+- `belt-0004`: member-03, GRUEN → BLAU / 5. Kyu (manuell)
 - `belt-0005`: member-04, GELB → ORANGE / 7. Kyu (Vorstandskorrektur)
 - `belt-0006`: member-10, GELB → ORANGE / 7. Kyu (Bildvorschlag bestätigt)
 

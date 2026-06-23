@@ -26,13 +26,13 @@ Jedes Paket wird einzeln freigegeben. Codex plant, implementiert, testet, dokume
 
 ## Paket 3 - Manuelles Backend-MVP
 
-**Ergebnis:** APIs und Datenmodell für Mitglieder, Qualifikationen, Gürtelgrade, Trainingsvorlagen, Einheiten, einen verantwortlichen Trainer, mehrere Assistenztrainer, Anwesenheit, Gäste, Audit und berechtigte Korrekturen.
+**Ergebnis:** APIs und Datenmodell für Mitglieder, dauerhafte Probetrainingprofile, Qualifikationen, Gürtelgrade, Trainingsvorlagen, Einheiten, einen verantwortlichen Trainer, mehrere Assistenztrainer, Anwesenheit, Audit und berechtigte Korrekturen.
 
 **Pflichttests:** genau ein Verantwortlicher, keine Doppelanwesenheit, abwesend ohne Funktion, Trainer-/Assistenzfunktion impliziert anwesend, ältere Korrektur nur durch berechtigte Rolle.
 
 ## Paket 4 - Produktives manuelles Frontend
 
-**Ergebnis:** Cognito-Login, automatische Einheitenauswahl, aufeinanderfolgende Einheiten, Rollenwahl, manuelles Bilderraster, Suche, Gäste, Bestätigung, Historie, Statistik und Offline-Zwischenspeicherung der manuellen Erfassung.
+**Ergebnis:** Cognito-Login, automatische Einheitenauswahl, aufeinanderfolgende Einheiten, Rollenwahl, manuelles Bilderraster, Suche, dauerhafte Probetrainingprofile, Bestätigung, Historie, Statistik und Offline-Zwischenspeicherung der manuellen Erfassung.
 
 **Pilot:** 4-6 Wochen realer Hallentest ohne Gesichtserkennung.
 

@@ -35,10 +35,13 @@ import type {
   ConversionResult,
   DirectMemberResult,
   HistoricalTrainingSession,
-  Member,
   TrialParticipant,
 } from "./types";
-import { buildNewTrialParticipant, computeTrialSessionCount, getTrialWarning } from "./trialWorkflow";
+import {
+  buildNewTrialParticipant,
+  computeTrialSessionCount,
+  getTrialWarning,
+} from "./trialWorkflow";
 import { createMemberNumberGenerator, createPersonIdGenerator } from "@vtkb/shared";
 
 // ---------------------------------------------------------------------------
@@ -47,28 +50,27 @@ import { createMemberNumberGenerator, createPersonIdGenerator } from "@vtkb/shar
 
 function contractStatusLabel(status: string): string {
   switch (status) {
-    case ContractStatus.NOT_ISSUED: return "Nicht ausgestellt";
-    case ContractStatus.ISSUED: return "Ausgestellt (ausstehend)";
-    case ContractStatus.RECEIVED: return "Eingegangen";
-    case ContractStatus.MEMBERSHIP_ACTIVATED: return "Mitgliedschaft aktiviert";
-    default: return status;
-  }
-}
-
-function membershipStatusLabel(status: string): string {
-  switch (status) {
-    case PersonMembershipStatus.TRIAL: return "Probetraining";
-    case PersonMembershipStatus.ACTIVE_MEMBER: return "Aktives Mitglied";
-    case PersonMembershipStatus.INACTIVE_MEMBER: return "Inaktives Mitglied";
-    default: return status;
+    case ContractStatus.NOT_ISSUED:
+      return "Nicht ausgestellt";
+    case ContractStatus.ISSUED:
+      return "Ausgestellt (ausstehend)";
+    case ContractStatus.RECEIVED:
+      return "Eingegangen";
+    case ContractStatus.MEMBERSHIP_ACTIVATED:
+      return "Mitgliedschaft aktiviert";
+    default:
+      return status;
   }
 }
 
 function genderLabel(gender: string): string {
   switch (gender) {
-    case "MAENNLICH": return "Männlich";
-    case "WEIBLICH": return "Weiblich";
-    default: return gender;
+    case "MAENNLICH":
+      return "Männlich";
+    case "WEIBLICH":
+      return "Weiblich";
+    default:
+      return gender;
   }
 }
 
@@ -110,9 +112,13 @@ export function TrialListScreen({
   return (
     <div className="screen">
       <header className="screen-header">
-        <button className="btn-back" onClick={onBack}>← Zurück</button>
+        <button className="btn-back" onClick={onBack}>
+          ← Zurück
+        </button>
         <h1>Probetraining</h1>
-        <button className="btn-primary" onClick={onNew}>+ Neu</button>
+        <button className="btn-primary" onClick={onNew}>
+          + Neu
+        </button>
       </header>
 
       <div className="filter-tabs">
@@ -128,9 +134,7 @@ export function TrialListScreen({
       </div>
 
       <ul className="trial-list">
-        {displayed.length === 0 && (
-          <li className="trial-list__empty">Keine Einträge.</li>
-        )}
+        {displayed.length === 0 && <li className="trial-list__empty">Keine Einträge.</li>}
         {displayed.map((p) => {
           const { attended, remaining } = computeTrialSessionCount(p.id, history);
           const warning = getTrialWarning(p, history);
@@ -142,8 +146,7 @@ export function TrialListScreen({
             >
               <div className="trial-list__name">{p.displayName}</div>
               <div className="trial-list__meta">
-                {genderLabel(p.gender)} · {p.birthDate?.slice(0, 4) ?? "–"} ·{" "}
-                {attended}/{4} Einheiten
+                {genderLabel(p.gender)} · {p.birthDate.slice(0, 4)} · {attended}/{4} Einheiten
                 {remaining > 0 && ` (${remaining} verbl.)`}
               </div>
               <div className="trial-list__status">
@@ -277,11 +280,19 @@ export function TrialNewScreen({
   return (
     <div className="screen">
       <header className="screen-header">
-        <button className="btn-back" onClick={onBack}>← Zurück</button>
+        <button className="btn-back" onClick={onBack}>
+          ← Zurück
+        </button>
         <h1>Neues Probetraining</h1>
       </header>
 
-      <form className="form" onSubmit={(e) => { e.preventDefault(); handleCheck(); }}>
+      <form
+        className="form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleCheck();
+        }}
+      >
         <fieldset className="form-group">
           <legend>Personalien</legend>
           {field("firstName", "Vorname")}
@@ -291,7 +302,9 @@ export function TrialNewScreen({
             <select
               className="form-field__input"
               value={form.gender}
-              onChange={(e) => setForm((prev) => ({ ...prev, gender: e.target.value as "MAENNLICH" | "WEIBLICH" }))}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, gender: e.target.value as "MAENNLICH" | "WEIBLICH" }))
+              }
             >
               <option value="MAENNLICH">Männlich</option>
               <option value="WEIBLICH">Weiblich</option>
@@ -315,7 +328,7 @@ export function TrialNewScreen({
             <ul>
               {duplicates.map((d) => (
                 <li key={d.id}>
-                  {d.displayName} ({d.birthDate?.slice(0, 4) ?? "–"})
+                  {d.displayName} ({d.birthDate.slice(0, 4)})
                 </li>
               ))}
             </ul>
@@ -323,7 +336,10 @@ export function TrialNewScreen({
               <button
                 type="button"
                 className="btn-secondary"
-                onClick={() => { setForceCreate(true); handleCreate(); }}
+                onClick={() => {
+                  setForceCreate(true);
+                  handleCreate();
+                }}
               >
                 Trotzdem neu anlegen (Vorstand)
               </button>
@@ -336,8 +352,12 @@ export function TrialNewScreen({
         )}
 
         <div className="form-actions">
-          <button type="submit" className="btn-primary">Anlegen & Dublette prüfen</button>
-          <button type="button" className="btn-secondary" onClick={onBack}>Abbrechen</button>
+          <button type="submit" className="btn-primary">
+            Anlegen & Dublette prüfen
+          </button>
+          <button type="button" className="btn-secondary" onClick={onBack}>
+            Abbrechen
+          </button>
         </div>
       </form>
     </div>
@@ -367,7 +387,9 @@ export function TrialProfileScreen({
   return (
     <div className="screen">
       <header className="screen-header">
-        <button className="btn-back" onClick={onBack}>← Zurück</button>
+        <button className="btn-back" onClick={onBack}>
+          ← Zurück
+        </button>
         <h1>{participant.displayName}</h1>
       </header>
 
@@ -380,11 +402,26 @@ export function TrialProfileScreen({
       <section className="detail-section">
         <h2 className="detail-section__title">Stammdaten</h2>
         <dl className="detail-list">
-          <dt>Geschlecht</dt><dd>{genderLabel(participant.gender)}</dd>
-          <dt>Geburtsdatum</dt><dd>{participant.birthDate}</dd>
-          <dt>Erstellt am</dt><dd>{participant.createdAt.slice(0, 10)}</dd>
-          {participant.beltColor && <><dt>Gürtel</dt><dd>{participant.beltColor} – {participant.beltGrade}</dd></>}
-          {participant.note && <><dt>Notiz</dt><dd>{participant.note}</dd></>}
+          <dt>Geschlecht</dt>
+          <dd>{genderLabel(participant.gender)}</dd>
+          <dt>Geburtsdatum</dt>
+          <dd>{participant.birthDate}</dd>
+          <dt>Erstellt am</dt>
+          <dd>{participant.createdAt.slice(0, 10)}</dd>
+          {participant.beltColor && (
+            <>
+              <dt>Gürtel</dt>
+              <dd>
+                {participant.beltColor} – {participant.beltGrade}
+              </dd>
+            </>
+          )}
+          {participant.note && (
+            <>
+              <dt>Notiz</dt>
+              <dd>{participant.note}</dd>
+            </>
+          )}
         </dl>
       </section>
 
@@ -403,15 +440,17 @@ export function TrialProfileScreen({
             </div>
             {attended} / 4 (noch {remaining} kostenfrei)
           </dd>
-          <dt>Erstes Training</dt><dd>{participant.firstTrialDate ?? "–"}</dd>
-          <dt>Letztes Training</dt><dd>{participant.lastTrialDate ?? "–"}</dd>
+          <dt>Erstes Training</dt>
+          <dd>{participant.firstTrialDate ?? "–"}</dd>
+          <dt>Letztes Training</dt>
+          <dd>{participant.lastTrialDate ?? "–"}</dd>
         </dl>
 
         {participant.overrideStatus === TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED && (
           <div className="notice notice--info">
             Vorstandsausnahme genehmigt
-            {participant.overrideReason ? `: ${participant.overrideReason}` : ""}.
-            Status: {participant.overrideUsed ? "bereits genutzt" : "noch nicht genutzt"}.
+            {participant.overrideReason ? `: ${participant.overrideReason}` : ""}. Status:{" "}
+            {participant.overrideUsed ? "bereits genutzt" : "noch nicht genutzt"}.
           </div>
         )}
       </section>
@@ -428,9 +467,24 @@ export function TrialProfileScreen({
         <section className="detail-section">
           <h2 className="detail-section__title">Kontakt</h2>
           <dl className="detail-list">
-            {participant.contactName && <><dt>Person</dt><dd>{participant.contactName}</dd></>}
-            {participant.contactPhone && <><dt>Telefon</dt><dd>{participant.contactPhone}</dd></>}
-            {participant.contactEmail && <><dt>E-Mail</dt><dd>{participant.contactEmail}</dd></>}
+            {participant.contactName && (
+              <>
+                <dt>Person</dt>
+                <dd>{participant.contactName}</dd>
+              </>
+            )}
+            {participant.contactPhone && (
+              <>
+                <dt>Telefon</dt>
+                <dd>{participant.contactPhone}</dd>
+              </>
+            )}
+            {participant.contactEmail && (
+              <>
+                <dt>E-Mail</dt>
+                <dd>{participant.contactEmail}</dd>
+              </>
+            )}
           </dl>
         </section>
       ) : null}
@@ -464,7 +518,7 @@ export function TrialContractScreen({
   isBoard,
 }: TrialContractScreenProps) {
   function advance() {
-    const currentIdx = CONTRACT_STEPS.indexOf(participant.contractStatus as typeof CONTRACT_STEPS[number]);
+    const currentIdx = CONTRACT_STEPS.indexOf(participant.contractStatus);
     const next = CONTRACT_STEPS[currentIdx + 1];
     if (!next) return;
     if (!canTransitionContract(participant.contractStatus, next)) return;
@@ -484,8 +538,9 @@ export function TrialContractScreen({
     onUpdate({ ...participant, contractStatus: ContractStatus.NOT_ISSUED });
   }
 
-  const currentIdx = CONTRACT_STEPS.indexOf(participant.contractStatus as typeof CONTRACT_STEPS[number]);
+  const currentIdx = CONTRACT_STEPS.indexOf(participant.contractStatus);
   const nextStep = CONTRACT_STEPS[currentIdx + 1];
+  const nextStepLabel = nextStep ? contractStatusLabel(nextStep) : null;
   const canAdvance =
     !!nextStep &&
     canTransitionContract(participant.contractStatus, nextStep) &&
@@ -494,7 +549,9 @@ export function TrialContractScreen({
   return (
     <div className="screen">
       <header className="screen-header">
-        <button className="btn-back" onClick={onBack}>← Zurück</button>
+        <button className="btn-back" onClick={onBack}>
+          ← Zurück
+        </button>
         <h1>Vertragsmanagement</h1>
       </header>
 
@@ -513,11 +570,11 @@ export function TrialContractScreen({
       </ol>
 
       <div className="form-actions">
-        {canAdvance && (
+        {canAdvance ? (
           <button className="btn-primary" onClick={advance}>
-            Weiter: {contractStatusLabel(nextStep!)}
+            Weiter: {nextStepLabel}
           </button>
-        )}
+        ) : null}
         {participant.contractStatus === ContractStatus.ISSUED && (
           <button className="btn-secondary" onClick={retract}>
             Zurücksetzen auf „Nicht ausgestellt"
@@ -543,11 +600,7 @@ interface BoardOverrideScreenProps {
   onBack: () => void;
 }
 
-export function BoardOverrideScreen({
-  participant,
-  onSave,
-  onBack,
-}: BoardOverrideScreenProps) {
+export function BoardOverrideScreen({ participant, onSave, onBack }: BoardOverrideScreenProps) {
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -575,7 +628,9 @@ export function BoardOverrideScreen({
   return (
     <div className="screen">
       <header className="screen-header">
-        <button className="btn-back" onClick={onBack}>← Zurück</button>
+        <button className="btn-back" onClick={onBack}>
+          ← Zurück
+        </button>
         <h1>Vorstandsausnahme</h1>
       </header>
 
@@ -595,8 +650,8 @@ export function BoardOverrideScreen({
         <>
           <div className="notice notice--warn">
             Die Vorstandsausnahme erlaubt <strong>genau eine</strong> weitere kostenlose
-            Probeeinheit über das reguläre Limit von 4 hinaus. Sie kann pro Person nur
-            einmal erteilt werden.
+            Probeeinheit über das reguläre Limit von 4 hinaus. Sie kann pro Person nur einmal
+            erteilt werden.
           </div>
 
           <form
@@ -642,7 +697,6 @@ export function BoardOverrideScreen({
 
 interface TrialConversionScreenProps {
   participant: TrialParticipant;
-  existingMemberIds: readonly string[];
   existingMemberNumbers: readonly string[];
   history: readonly HistoricalTrainingSession[];
   onConvert: (result: ConversionResult) => void;
@@ -651,7 +705,6 @@ interface TrialConversionScreenProps {
 
 export function TrialConversionScreen({
   participant,
-  existingMemberIds,
   existingMemberNumbers,
   history,
   onConvert,
@@ -665,14 +718,13 @@ export function TrialConversionScreen({
 
   function handleConvert() {
     if (!confirmed) return;
-    const nextMemberId = createPersonIdGenerator(existingMemberIds)();
     const nextMemberNumber = createMemberNumberGenerator(existingMemberNumbers)();
     try {
       const result = convertTrialParticipantToMember({
         participant,
-        newMemberId: nextMemberId,
         memberNumber: nextMemberNumber,
-        qualification: qualification as typeof MemberQualification[keyof typeof MemberQualification],
+        qualification:
+          qualification as (typeof MemberQualification)[keyof typeof MemberQualification],
         convertedBy: "Vorstand Demo",
         convertedAt: new Date().toISOString(),
         note: note.trim() || undefined,
@@ -687,13 +739,15 @@ export function TrialConversionScreen({
     return (
       <div className="screen">
         <header className="screen-header">
-          <button className="btn-back" onClick={onBack}>← Zurück</button>
+          <button className="btn-back" onClick={onBack}>
+            ← Zurück
+          </button>
           <h1>Umwandlung zum Mitglied</h1>
         </header>
-        <div className="notice notice--error">
-          Umwandlung nicht möglich: {eligibility.reason}
-        </div>
-        <button className="btn-secondary" onClick={onBack}>Zurück</button>
+        <div className="notice notice--error">Umwandlung nicht möglich: {eligibility.reason}</div>
+        <button className="btn-secondary" onClick={onBack}>
+          Zurück
+        </button>
       </div>
     );
   }
@@ -701,7 +755,9 @@ export function TrialConversionScreen({
   return (
     <div className="screen">
       <header className="screen-header">
-        <button className="btn-back" onClick={onBack}>← Zurück</button>
+        <button className="btn-back" onClick={onBack}>
+          ← Zurück
+        </button>
         <h1>Umwandlung zum Mitglied</h1>
       </header>
 
@@ -710,12 +766,21 @@ export function TrialConversionScreen({
       <section className="detail-section">
         <h2 className="detail-section__title">Probetraining-Zusammenfassung</h2>
         <dl className="detail-list">
-          <dt>Besuchte Einheiten</dt><dd>{attended}</dd>
-          <dt>Erstes Training</dt><dd>{participant.firstTrialDate ?? "–"}</dd>
-          <dt>Letztes Training</dt><dd>{participant.lastTrialDate ?? "–"}</dd>
-          <dt>Vertragsstatus</dt><dd>{participant.contractStatus}</dd>
+          <dt>Besuchte Einheiten</dt>
+          <dd>{attended}</dd>
+          <dt>Erstes Training</dt>
+          <dd>{participant.firstTrialDate ?? "–"}</dd>
+          <dt>Letztes Training</dt>
+          <dd>{participant.lastTrialDate ?? "–"}</dd>
+          <dt>Vertragsstatus</dt>
+          <dd>{participant.contractStatus}</dd>
           {participant.beltColor && (
-            <><dt>Gürtel</dt><dd>{participant.beltColor} – {participant.beltGrade}</dd></>
+            <>
+              <dt>Gürtel</dt>
+              <dd>
+                {participant.beltColor} – {participant.beltGrade}
+              </dd>
+            </>
           )}
         </dl>
       </section>
@@ -840,7 +905,8 @@ export function DirectMemberNewScreen({
         birthDate: form.birthDate,
         beltColor: beltEntry?.color,
         beltGrade: beltEntry?.grade,
-        qualification: form.qualification as typeof MemberQualification[keyof typeof MemberQualification],
+        qualification:
+          form.qualification as (typeof MemberQualification)[keyof typeof MemberQualification],
         memberNumber: nextNumber,
         createdBy: "Vorstand Demo",
         createdAt: new Date().toISOString(),
@@ -873,7 +939,9 @@ export function DirectMemberNewScreen({
   return (
     <div className="screen">
       <header className="screen-header">
-        <button className="btn-back" onClick={onBack}>← Zurück</button>
+        <button className="btn-back" onClick={onBack}>
+          ← Zurück
+        </button>
         <h1>Direkt-Mitglied anlegen</h1>
       </header>
 
@@ -898,7 +966,9 @@ export function DirectMemberNewScreen({
             <select
               className="form-field__input"
               value={form.gender}
-              onChange={(e) => setForm((prev) => ({ ...prev, gender: e.target.value as "MAENNLICH" | "WEIBLICH" }))}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, gender: e.target.value as "MAENNLICH" | "WEIBLICH" }))
+              }
             >
               <option value="MAENNLICH">Männlich</option>
               <option value="WEIBLICH">Weiblich</option>
@@ -941,8 +1011,12 @@ export function DirectMemberNewScreen({
         {field("note", "Notiz (optional)")}
 
         <div className="form-actions">
-          <button type="submit" className="btn-primary">Mitglied anlegen</button>
-          <button type="button" className="btn-secondary" onClick={onBack}>Abbrechen</button>
+          <button type="submit" className="btn-primary">
+            Mitglied anlegen
+          </button>
+          <button type="button" className="btn-secondary" onClick={onBack}>
+            Abbrechen
+          </button>
         </div>
       </form>
     </div>

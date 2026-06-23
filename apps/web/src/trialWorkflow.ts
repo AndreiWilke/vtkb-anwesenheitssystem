@@ -10,7 +10,6 @@ import {
   ContractStatus,
   PersonMembershipStatus,
   PresenceStatus,
-  TrainingSessionStatus,
   TrialOverrideStatus,
   checkTrialEligibility,
   countTrialSessionsAttended,
@@ -35,8 +34,7 @@ export function computeTrialSessionCount(
     session.attendance
       .filter(
         (record) =>
-          record.memberId === participantId &&
-          record.presenceStatus === PresenceStatus.PRESENT,
+          record.memberId === participantId && record.presenceStatus === PresenceStatus.PRESENT,
       )
       .map((record) => ({
         sessionId: session.id,
@@ -169,22 +167,22 @@ export function getTrialWarning(
   if (!eligibility.allowed) {
     return {
       kind: "BLOCKED",
-      message:
-        eligibility.reason ??
-        "Weitere Teilnahme gesperrt. Bitte Vertragsstatus pruefen.",
+      message: eligibility.reason ?? "Weitere Teilnahme gesperrt. Bitte Vertragsstatus pruefen.",
     };
   }
   if (eligibility.showContractWarning) {
     return {
       kind: "CONTRACT_NEEDED",
-      message: `${participant.displayName} nimmt heute an der 4. kostenlosen Probeeinheit teil. ` +
+      message:
+        `${participant.displayName} nimmt heute an der 4. kostenlosen Probeeinheit teil. ` +
         "Bitte Mitgliedsvertrag vorbereiten.",
     };
   }
   if (eligibility.showPrepareWarning) {
     return {
       kind: "PREPARE",
-      message: `${participant.displayName} nimmt heute an der 3. Probeeinheit teil. ` +
+      message:
+        `${participant.displayName} nimmt heute an der 3. Probeeinheit teil. ` +
         "Beim naechsten Training Vertrag mitbringen.",
     };
   }

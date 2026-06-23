@@ -8,11 +8,8 @@ import {
   ValidationCode,
   assertValidTrainingSession,
   validateAttendanceRecords,
-  validateGuestAttendance,
-  validateGuestAttendanceRecords,
   validateTrainingSession,
   type AttendanceRecord,
-  type GuestAttendance,
   type TrainingSession,
 } from "../src/index.js";
 
@@ -38,17 +35,6 @@ function attendance(
     memberId,
     presenceStatus,
     sessionRole,
-    captureSource: CaptureSource.MANUAL,
-  };
-}
-
-function guest(guestId: string, sessionId = completedSession.id): GuestAttendance {
-  return {
-    sessionId,
-    guestId,
-    displayName: "Fiktive Gastperson",
-    presenceStatus: PresenceStatus.PRESENT,
-    sessionRole: SessionRole.PARTICIPANT,
     captureSource: CaptureSource.MANUAL,
   };
 }
@@ -134,51 +120,11 @@ describe("fachliche Anwesenheitsvalidierung", () => {
     expect(issues.map((issue) => issue.code)).toContain(ValidationCode.RECORD_SESSION_MISMATCH);
   });
 
-  it("verhindert biometrische Enrollment-IDs bei Gaesten", () => {
-    const issues = validateGuestAttendance({
-      sessionId: completedSession.id,
-      guestId: "guest-example",
-      displayName: "Fiktive Gastperson",
-      presenceStatus: PresenceStatus.PRESENT,
-      sessionRole: SessionRole.PARTICIPANT,
-      captureSource: CaptureSource.MANUAL,
-      biometricEnrollmentId: "forbidden-example",
-    });
-
-    expect(issues.map((issue) => issue.code)).toEqual([
-      ValidationCode.GUEST_HAS_BIOMETRIC_ENROLLMENT,
-    ]);
-  });
-
-  it("akzeptiert einen gueltigen Gast ohne biometrische Enrollment-ID", () => {
-    expect(validateGuestAttendance(guest("guest-valid"))).toEqual([]);
-  });
-
-  it("verhindert dieselbe guestId mehrfach in derselben Einheit", () => {
-    const issues = validateGuestAttendanceRecords(
-      [guest("guest-duplicate"), guest("guest-duplicate")],
-      completedSession.id,
-    );
-
-    expect(issues.map((issue) => issue.code)).toContain(ValidationCode.DUPLICATE_GUEST_ATTENDANCE);
-  });
-
-  it("verhindert einen Gastdatensatz aus einer anderen Einheit", () => {
-    const issues = validateTrainingSession({
-      session: completedSession,
-      attendance: [attendance("member-alpha", SessionRole.RESPONSIBLE_TRAINER)],
-      guests: [guest("guest-mismatch", "session-other")],
-    });
-
-    expect(issues.map((issue) => issue.code)).toContain(ValidationCode.GUEST_SESSION_MISMATCH);
-  });
-
   it("assertValidTrainingSession akzeptiert gueltige Daten", () => {
     expect(() =>
       assertValidTrainingSession({
         session: completedSession,
         attendance: [attendance("member-alpha", SessionRole.RESPONSIBLE_TRAINER)],
-        guests: [guest("guest-valid")],
       }),
     ).not.toThrow();
   });

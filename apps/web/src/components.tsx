@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, PropsWithChildren, ReactNode } from "react";
 import { BarChart3, ClipboardCheck, Home, LogOut, Menu, Settings, Users } from "lucide-react";
-import { DemoRole, type DemoRole as DemoRoleValue } from "@vtkb/shared";
+import { BELT_LABELS, DemoRole, type DemoRole as DemoRoleValue } from "@vtkb/shared";
 
 import type { AppScreen, BeltColor } from "./types";
 
@@ -14,9 +14,19 @@ interface AppShellProps extends PropsWithChildren {
 
 const MANAGEMENT_SCREENS: readonly AppScreen[] = [
   "MANAGEMENT",
-  "TRIAL_LIST", "TRIAL_NEW", "TRIAL_PROFILE", "TRIAL_CONTRACT",
-  "TRIAL_BOARD_OVERRIDE", "TRIAL_CONVERT", "MEMBER_DIRECT_NEW",
-  "BELT_HISTORY", "BELT_CHANGE", "BELT_SIM_DEMO", "BELT_SUGGESTION_REVIEW",
+  "TRIAL_LIST",
+  "TRIAL_NEW",
+  "TRIAL_PROFILE",
+  "TRIAL_CONTRACT",
+  "TRIAL_BOARD_OVERRIDE",
+  "TRIAL_CONVERT",
+  "MEMBER_DIRECT_NEW",
+  "BELT_HISTORY",
+  "BELT_CHANGE",
+  "BELT_SIM_DEMO",
+  "BELT_SUGGESTION_REVIEW",
+  "RETRO_DATE_SELECT",
+  "RETRO_CREATE",
 ];
 
 const BASE_NAV: ReadonlyArray<{ label: string; screen: AppScreen; icon: typeof Home }> = [
@@ -29,15 +39,17 @@ const BASE_NAV: ReadonlyArray<{ label: string; screen: AppScreen; icon: typeof H
 const MGMT_NAV_ITEM = { label: "Verwaltung", screen: "MANAGEMENT" as AppScreen, icon: Settings };
 
 export function ToriiMark(): ReactNode {
-  // Paket 1.7: VTKBLogo.png wird bevorzugt; ToriiMark als Fallback beibehalten
   return (
     <img
       src={`${import.meta.env.BASE_URL}VTKBLogo.png`}
-      alt=""
-      aria-hidden="true"
-      width="36"
-      height="36"
-      style={{ objectFit: "contain", borderRadius: "4px" }}
+      alt="VTKB Berlin Vereinslogo"
+      className="vtkb-logo"
+      width="42"
+      height="42"
+      onError={(event) => {
+        event.currentTarget.onerror = null;
+        event.currentTarget.src = `${import.meta.env.BASE_URL}icon.svg`;
+      }}
     />
   );
 }
@@ -100,9 +112,7 @@ export function AppShell({
             const active =
               screen === item.screen ||
               (item.screen === "MANUAL" &&
-                ["LEADERSHIP", "CAPTURE_METHOD", "GUESTS", "PHOTO_DEMO", "PHOTO_REVIEW"].includes(
-                  screen,
-                )) ||
+                ["LEADERSHIP", "CAPTURE_METHOD", "PHOTO_DEMO", "PHOTO_REVIEW"].includes(screen)) ||
               (item.screen === "MANAGEMENT" && MANAGEMENT_SCREENS.includes(screen));
             return (
               <button
@@ -166,29 +176,12 @@ export function MemberAvatar({ initials, muted = false }: { initials: string; mu
   return <span className={muted ? "avatar muted" : "avatar"}>{initials}</span>;
 }
 
-const beltLabels: Record<BeltColor, string> = {
-  WEISS: "Weiß",
-  WEISS_ROT: "Weiß-Rot",
-  WEISS_GELB: "Weiß-Gelb",
-  GELB: "Gelb",
-  GELB_ORANGE: "Gelb-Orange",
-  ORANGE: "Orange",
-  ORANGE_GRUEN: "Orange-Grün",
-  GRUEN: "Grün",
-  GRUEN_BLAU: "Grün-Blau",
-  BLAU: "Blau",
-  BLAU_BRAUN: "Blau-Braun",
-  BRAUN: "Braun",
-  VIOLETT: "Violett",
-  SCHWARZ: "Schwarz",
-};
-
 export function BeltMark({ color, grade }: { color: BeltColor; grade: string }) {
   return (
     <span className="belt-mark">
       <span aria-hidden="true" className={`belt-dot belt-${color.toLowerCase()}`} />
       <span>
-        {beltLabels[color]} · {grade}
+        {BELT_LABELS[color]} · {grade}
       </span>
     </span>
   );

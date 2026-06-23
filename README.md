@@ -31,7 +31,7 @@ Die Smartphone-first-PWA in `apps/web` bildet den vollständigen lokalen Bediena
 
 - vorgeschlagene oder frei gewählte Trainingseinheit,
 - genau ein verantwortlicher Trainer und optionale Assistenztrainer,
-- vollständige manuelle Anwesenheit mit Suche, Filtern, Rollen und Gästen,
+- vollständige manuelle Anwesenheit mit Suche, Filtern, Rollen und dauerhaften Probetrainingprofilen,
 - rein simulierte Fotoassistenz ohne Kamera, Upload, Bilder oder Gesichtserkennung,
 - verpflichtende Trainerprüfung, lokale Abschlussansicht und interne Demo-Auswertung.
 

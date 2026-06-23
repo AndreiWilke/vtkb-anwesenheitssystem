@@ -31,7 +31,6 @@ import {
 import {
   canCompleteSession,
   createInitialAttendance,
-  createLocalGuestIdFactory,
   presentMemberIds,
   sessionUiStatus,
   suggestSession,
@@ -82,7 +81,7 @@ describe("Paket-1-Workflow", () => {
       presenceStatus: PresenceStatus.ABSENT,
       sessionRole: null,
     };
-    expect(canCompleteSession(session, attendance, [], 0).allowed).toBe(false);
+    expect(canCompleteSession(session, attendance, 0).allowed).toBe(false);
   });
 
   it("zaehlt einen Assistenztrainer nur einmal als anwesend", () => {
@@ -93,13 +92,13 @@ describe("Paket-1-Workflow", () => {
       sessionRole: SessionRole.ASSISTANT_TRAINER,
     };
     expect(presentMemberIds(attendance)).toHaveLength(2);
-    expect(canCompleteSession(session, attendance, [], 0).allowed).toBe(true);
+    expect(canCompleteSession(session, attendance, 0).allowed).toBe(true);
   });
 
   it("blockiert den Abschluss bei ungeklaerten Foto-Demovorschlaegen", () => {
     const session = createTodaySessions(new Date("2026-06-20T18:00:00+02:00"))[1]!;
     const attendance = createInitialAttendance(members, session);
-    const result = canCompleteSession(session, attendance, [], 2);
+    const result = canCompleteSession(session, attendance, 2);
     expect(result.allowed).toBe(false);
     expect(result.messages.join(" ")).toContain("ungeklaert");
   });
@@ -108,17 +107,6 @@ describe("Paket-1-Workflow", () => {
     expect(members).toHaveLength(40);
     expect(members.every((member) => member.name.endsWith("Beispiel"))).toBe(true);
     expect(members.reduce((sum, member) => sum + member.trainingsVisited, 0)).toBeGreaterThan(0);
-  });
-
-  it("erzeugt monotone kollisionsfreie lokale Gast-IDs auch nach Entfernen", () => {
-    const nextGuestId = createLocalGuestIdFactory();
-    const first = nextGuestId();
-    const second = nextGuestId();
-    const remaining = [second];
-    const third = nextGuestId();
-    remaining.push(third);
-    expect(new Set([first, ...remaining]).size).toBe(3);
-    expect([first, second, third]).toEqual(["guest-001", "guest-002", "guest-003"]);
   });
 
   it("blockiert den Abschluss, wenn ein gesperrter Probetrainingsteilnehmer anwesend ist", () => {
@@ -130,7 +118,7 @@ describe("Paket-1-Workflow", () => {
         reason: "Vier kostenlose Probetrainings wurden bereits genutzt.",
       },
     ];
-    const result = canCompleteSession(session, attendance, [], 0, blockedEntries);
+    const result = canCompleteSession(session, attendance, 0, blockedEntries);
     expect(result.allowed).toBe(false);
     expect(result.messages.join(" ")).toMatch(/Probetraining gesperrt/);
   });
@@ -138,14 +126,18 @@ describe("Paket-1-Workflow", () => {
   it("erlaubt Abschluss, wenn keine gesperrten Probetrainingsteilnehmer anwesend sind", () => {
     const session = createTodaySessions(new Date("2026-06-20T18:00:00+02:00"))[1]!;
     const attendance = createInitialAttendance(members, session);
-    const result = canCompleteSession(session, attendance, [], 0, []);
+    const result = canCompleteSession(session, attendance, 0, []);
     expect(result.allowed).toBe(true);
   });
 
   it("Demo-Probetrainingsteilnehmer sind 6 fiktive Profile", () => {
     expect(trialParticipants).toHaveLength(6);
     expect(trialParticipants.every((p) => p.id.startsWith("trial-"))).toBe(true);
-    expect(trialParticipants.every((p) => p.lastName.includes("Probetraining") || p.lastName.includes("Probe"))).toBe(true);
+    expect(
+      trialParticipants.every(
+        (p) => p.lastName.includes("Probetraining") || p.lastName.includes("Probe"),
+      ),
+    ).toBe(true);
   });
 
   it("trial-006 hat Vorstandsausnahme genutzt und ist gesperrt", () => {
@@ -204,14 +196,13 @@ describe("Paket-1.3-Konvertierung", () => {
   it("convertTrialParticipantToMember erzeugt korrektes Ergebnis", () => {
     const result = convertTrialParticipantToMember({
       participant: trialBase,
-      newMemberId: "member-099",
       memberNumber: "M-1099",
       qualification: MemberQualification.NONE,
       convertedBy: "Vorstand Demo",
       convertedAt: "2026-06-21T10:00:00.000Z",
     });
     expect(result.updatedParticipant.membershipStatus).toBe(PersonMembershipStatus.ACTIVE_MEMBER);
-    expect(result.updatedParticipant.memberId).toBe("member-099");
+    expect(result.updatedParticipant.memberId).toBe(trialBase.id);
     expect(result.auditEntry.action).toBe("TRIAL_CONVERTED_TO_MEMBER");
   });
 
@@ -270,12 +261,12 @@ describe("Paket-1.4-Guertelverwaltung", () => {
     expect(beltHistoryExtended[2]!.source).toBe(BeltChangeSource.IMAGE_SUGGESTION_CONFIRMED);
   });
 
-  it("validateBeltChange akzeptiert GRUEN → BLAU mit Datum", () => {
+  it("validateBeltChange akzeptiert ORANGE → GRUEN mit Datum", () => {
     const result = validateBeltChange({
       personId: "member-01",
-      previousBeltColor: "GRUEN",
+      previousBeltColor: "ORANGE",
       previousBeltGrade: "7. Kyu",
-      newBeltColor: "BLAU",
+      newBeltColor: "GRUEN",
       newBeltGrade: "6. Kyu",
       effectiveFrom: "2026-06-21",
       recordedBy: "Trainer Demo",
@@ -308,17 +299,15 @@ describe("Paket-1.4-Guertelverwaltung", () => {
     expect(hint.isHighest).toBe(false);
   });
 
-  it("suggestNextBelt markiert 3. Dan als hoechsten Grad", () => {
-    const hint = suggestNextBelt("SCHWARZ", "3. Dan");
+  it("suggestNextBelt markiert 9. Dan als hoechsten Grad", () => {
+    const hint = suggestNextBelt("SCHWARZ", "9. Dan");
     expect(hint.isHighest).toBe(true);
     expect(hint.nextLevel).toBeNull();
   });
 
-  it("calculateBeltDistribution liefert zwoelf Eintraege (inkl. Halbguertel)", () => {
-    const dist = calculateBeltDistribution(
-      members.filter((m) => m.active).map((m) => m.beltColor),
-    );
-    expect(dist).toHaveLength(12);
+  it("calculateBeltDistribution liefert dreizehn Eintraege", () => {
+    const dist = calculateBeltDistribution(members.filter((m) => m.active).map((m) => m.beltColor));
+    expect(dist).toHaveLength(13);
     const total = dist.reduce((sum, e) => sum + e.count, 0);
     expect(total).toBe(members.filter((m) => m.active).length);
   });
@@ -330,9 +319,7 @@ describe("Paket-1.4-Guertelverwaltung", () => {
   });
 
   it("initialBeltSuggestions enthalten 2 offene und 2 geschlossene Vorschlaege", () => {
-    const closed = initialBeltSuggestions.filter(
-      (s) => s.status !== BeltSuggestionStatus.OPEN,
-    );
+    const closed = initialBeltSuggestions.filter((s) => s.status !== BeltSuggestionStatus.OPEN);
     expect(initialBeltSuggestions).toHaveLength(4);
     expect(closed).toHaveLength(2);
   });

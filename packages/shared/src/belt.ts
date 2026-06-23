@@ -32,29 +32,28 @@ export interface BeltLevel {
 }
 
 /**
- * Guertelkatalog des VTKB Berlin (inkl. Halbguertel).
- * Halbguertel werden mit Suffix "a" bezeichnet (z. B. 9a. Kyu = Weiss-Rot).
+ * Verbindlicher Guertelkatalog des VTKB Berlin (inkl. Zwischenstufen).
  */
 export const BELT_CATALOG: readonly BeltLevel[] = [
-  { color: "WEISS",        grade: "10. Kyu", sortOrder: 1 },
-  { color: "WEISS_ROT",    grade: "9a. Kyu", sortOrder: 2 },
-  { color: "WEISS_GELB",   grade: "9b. Kyu", sortOrder: 3 },  // Paket 1.7: Vereinsordnung
-  { color: "GELB",         grade: "9. Kyu",  sortOrder: 4 },
-  { color: "GELB_ORANGE",  grade: "8a. Kyu", sortOrder: 5 },
-  { color: "ORANGE",       grade: "8. Kyu",  sortOrder: 6 },
+  { color: "WEISS", grade: "10. Kyu", sortOrder: 1 },
+  { color: "WEISS_ROT", grade: "9. Kyu", sortOrder: 2 },
+  { color: "WEISS_GELB", grade: "9a. Kyu", sortOrder: 3 },
+  { color: "GELB", grade: "8. Kyu", sortOrder: 4 },
+  { color: "GELB_ORANGE", grade: "8a. Kyu", sortOrder: 5 },
+  { color: "ORANGE", grade: "7. Kyu", sortOrder: 6 },
   { color: "ORANGE_GRUEN", grade: "7a. Kyu", sortOrder: 7 },
-  { color: "GRUEN",        grade: "7. Kyu",  sortOrder: 8 },
-  { color: "GRUEN_BLAU",   grade: "6a. Kyu", sortOrder: 9 },
-  { color: "BLAU",         grade: "6. Kyu",  sortOrder: 10 },
-  { color: "BLAU_BRAUN",   grade: "5a. Kyu", sortOrder: 11 },
-  { color: "BRAUN",        grade: "5. Kyu",  sortOrder: 12 },
-  { color: "VIOLETT",      grade: "4. Kyu",  sortOrder: 13 },  // Paket 1.7: Vereinsordnung
-  { color: "BRAUN",        grade: "3. Kyu",  sortOrder: 14 },
-  { color: "BRAUN",        grade: "2. Kyu",  sortOrder: 15 },
-  { color: "BRAUN",        grade: "1. Kyu",  sortOrder: 16 },
-  { color: "SCHWARZ",      grade: "1. Dan",  sortOrder: 17 },
-  { color: "SCHWARZ",      grade: "2. Dan",  sortOrder: 18 },
-  { color: "SCHWARZ",      grade: "3. Dan",  sortOrder: 19 },
+  { color: "GRUEN", grade: "6. Kyu", sortOrder: 8 },
+  { color: "GRUEN_BLAU", grade: "6a. Kyu", sortOrder: 9 },
+  { color: "BLAU", grade: "5. Kyu", sortOrder: 10 },
+  { color: "VIOLETT", grade: "4. Kyu", sortOrder: 11 },
+  { color: "BRAUN", grade: "3. Kyu", sortOrder: 12 },
+  { color: "BRAUN", grade: "2. Kyu", sortOrder: 13 },
+  { color: "BRAUN", grade: "1. Kyu", sortOrder: 14 },
+  ...Array.from({ length: 9 }, (_, index) => ({
+    color: "SCHWARZ",
+    grade: `${index + 1}. Dan`,
+    sortOrder: index + 15,
+  })),
 ] as const;
 
 export const BELT_COLORS = [
@@ -68,18 +67,31 @@ export const BELT_COLORS = [
   "GRUEN",
   "GRUEN_BLAU",
   "BLAU",
-  "BLAU_BRAUN",
-  "BRAUN",
   "VIOLETT",
+  "BRAUN",
   "SCHWARZ",
 ] as const;
 
 export type BeltColor = (typeof BELT_COLORS)[number];
 
+export const BELT_LABELS: Record<BeltColor, string> = {
+  WEISS: "Weiß",
+  WEISS_ROT: "Weiß-Rot",
+  WEISS_GELB: "Weiß-Gelb",
+  GELB: "Gelb",
+  GELB_ORANGE: "Gelb-Orange",
+  ORANGE: "Orange",
+  ORANGE_GRUEN: "Orange-Grün",
+  GRUEN: "Grün",
+  GRUEN_BLAU: "Grün-Blau",
+  BLAU: "Blau",
+  VIOLETT: "Violett",
+  BRAUN: "Braun",
+  SCHWARZ: "Schwarz",
+};
+
 export function gradesForColor(color: string): string[] {
-  return BELT_CATALOG.filter((level) => level.color === color).map(
-    (level) => level.grade,
-  );
+  return BELT_CATALOG.filter((level) => level.color === color).map((level) => level.grade);
 }
 
 // ---------------------------------------------------------------------------
@@ -101,10 +113,7 @@ export interface BeltChangeInput {
   source: BeltChangeSourceValue;
 }
 
-export function createBeltHistoryEntry(
-  id: string,
-  input: BeltChangeInput,
-): BeltHistoryEntry {
+export function createBeltHistoryEntry(id: string, input: BeltChangeInput): BeltHistoryEntry {
   if (!input.newBeltColor.trim()) {
     throw new Error("Guertelfarbe darf nicht leer sein.");
   }
@@ -133,11 +142,7 @@ export function createBeltHistoryEntry(
 // ---------------------------------------------------------------------------
 
 export interface BeltSuggestionDecision {
-  action:
-    | "CONFIRM"
-    | "REJECT"
-    | "DEFER"
-    | "KEEP_STORED";
+  action: "CONFIRM" | "REJECT" | "DEFER" | "KEEP_STORED";
   historyEntryId?: string;
   decidedBy: string;
   decidedAt: string;
@@ -178,12 +183,8 @@ export function beltSuggestionChangeSource(): BeltChangeSourceValue {
 // Offene Gurthinweise filtern
 // ---------------------------------------------------------------------------
 
-export function openBeltSuggestions(
-  suggestions: readonly BeltSuggestion[],
-): BeltSuggestion[] {
-  return suggestions.filter(
-    (suggestion) => suggestion.status === BeltSuggestionStatus.OPEN,
-  );
+export function openBeltSuggestions(suggestions: readonly BeltSuggestion[]): BeltSuggestion[] {
+  return suggestions.filter((suggestion) => suggestion.status === BeltSuggestionStatus.OPEN);
 }
 
 // ---------------------------------------------------------------------------
@@ -260,10 +261,7 @@ export interface BeltExamHint {
  * Pruefungsvoraussetzungen (Trainingseinheiten, Mindestalter etc.) werden
  * in Paket 2+ durch den Verein definiert.
  */
-export function suggestNextBelt(
-  currentColor: string,
-  currentGrade: string,
-): BeltExamHint {
+export function suggestNextBelt(currentColor: string, currentGrade: string): BeltExamHint {
   const current = BELT_CATALOG.find(
     (level) => level.color === currentColor && level.grade === currentGrade,
   );
@@ -293,9 +291,7 @@ export interface BeltDistributionEntry {
  * Berechnet die Verteilung der Guertelfarben ueber eine Liste von Personen.
  * Gibt alle bekannten Farben zurueck, auch wenn count === 0.
  */
-export function calculateBeltDistribution(
-  beltColors: readonly string[],
-): BeltDistributionEntry[] {
+export function calculateBeltDistribution(beltColors: readonly string[]): BeltDistributionEntry[] {
   const total = beltColors.length;
   const counts = new Map<string, number>();
   for (const color of BELT_COLORS) counts.set(color, 0);
@@ -337,7 +333,7 @@ export function simulateBeltColorSuggestion(
   // Mit ~30% "naechste Farbe" (echte Abweichung), ~10% "andere Farbe"
   const roll = rng % 10;
 
-  const currentIdx = BELT_COLORS.indexOf(storedBeltColor as typeof BELT_COLORS[number]);
+  const currentIdx = BELT_COLORS.indexOf(storedBeltColor as (typeof BELT_COLORS)[number]);
   const safeIdx = currentIdx >= 0 ? currentIdx : 0;
 
   let suggestedColor: string;
@@ -361,9 +357,7 @@ export function simulateBeltColorSuggestion(
 // ID-Generator fuer Guertelhistorie
 // ---------------------------------------------------------------------------
 
-export function createBeltHistoryIdGenerator(
-  existingIds: readonly string[],
-): () => string {
+export function createBeltHistoryIdGenerator(existingIds: readonly string[]): () => string {
   const issued = new Set(existingIds);
   let seq = 1;
   return () => {

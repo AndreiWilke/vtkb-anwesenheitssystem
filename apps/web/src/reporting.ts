@@ -1,4 +1,5 @@
 import {
+  BELT_LABELS,
   DemoRole,
   PresenceStatus,
   SessionRole,
@@ -13,12 +14,7 @@ import {
   type SettlementStatus as SettlementStatusValue,
 } from "@vtkb/shared";
 
-import type {
-  HistoricalTrainingSession,
-  Member,
-  TrainingType,
-  TrialParticipant,
-} from "./types";
+import type { HistoricalTrainingSession, Member, TrainingType, TrialParticipant } from "./types";
 import { ContractStatus, PersonMembershipStatus } from "@vtkb/shared";
 import { computeTrialSessionCount } from "./trialWorkflow";
 
@@ -184,7 +180,11 @@ export function calculateDashboardMetrics(
   ).length;
 
   // Alle Settlement-Kennzahlen in einem einzigen Durchlauf
-  const settlementTotals = settlements.reduce(
+  const settlementTotals = settlements.reduce<{
+    totalCents: number;
+    openReviewNotes: number;
+    counts: Partial<Record<SettlementStatusValue, number>>;
+  }>(
     (acc, item) => {
       if (item.status !== SettlementStatus.CANCELLED) {
         acc.totalCents += item.view.totalCents;
@@ -196,7 +196,7 @@ export function calculateDashboardMetrics(
     {
       totalCents: 0,
       openReviewNotes: 0,
-      counts: {} as Partial<Record<SettlementStatusValue, number>>,
+      counts: {},
     },
   );
 
@@ -745,7 +745,7 @@ export function attendanceCsv(
     ...summaries.map((item) => [
       item.member.name,
       item.member.gender,
-      item.member.beltColor,
+      BELT_LABELS[item.member.beltColor],
       item.member.beltGrade,
       periodLabel,
       item.total,
@@ -851,22 +851,15 @@ export interface TrialDashboardMetrics {
   convertedThisYear: number;
 }
 
-export function trialDashboardMetrics(
-  summaries: readonly TrialSummary[],
-  currentYear: number,
-): TrialDashboardMetrics {
+export function trialDashboardMetrics(summaries: readonly TrialSummary[]): TrialDashboardMetrics {
   return {
     totalActive: summaries.filter(
       (s) =>
-        s.participant.active &&
-        s.participant.membershipStatus === PersonMembershipStatus.TRIAL,
+        s.participant.active && s.participant.membershipStatus === PersonMembershipStatus.TRIAL,
     ).length,
     blocked: summaries.filter((s) => s.isBlocked).length,
     contractPending: summaries.filter(
-      (s) =>
-        s.participant.active &&
-        s.hasPendingContract &&
-        s.attended >= 3,
+      (s) => s.participant.active && s.hasPendingContract && s.attended >= 3,
     ).length,
     convertedThisYear: summaries.filter(
       (s) =>
@@ -910,8 +903,20 @@ export function trialCsv(summaries: readonly TrialSummary[]): string {
  */
 export function beltReportCsv(
   members: readonly Member[],
-  history: readonly { personId: string; effectiveFrom?: string; newBeltColor: string; newBeltGrade: string; source: string }[],
-  suggestions: readonly { memberId: string; status: string; suggestedBeltColor: string; confidencePercent: number; sessionDate: string }[],
+  history: readonly {
+    personId: string;
+    effectiveFrom?: string;
+    newBeltColor: string;
+    newBeltGrade: string;
+    source: string;
+  }[],
+  suggestions: readonly {
+    memberId: string;
+    status: string;
+    suggestedBeltColor: string;
+    confidencePercent: number;
+    sessionDate: string;
+  }[],
 ): string {
   const openByMember = new Map<string, string>();
   for (const s of suggestions) {
@@ -942,7 +947,7 @@ export function beltReportCsv(
       .map((m) => [
         m.name,
         m.gender,
-        m.beltColor,
+        BELT_LABELS[m.beltColor],
         m.beltGrade,
         lastChangeByMember.get(m.id) ?? "",
         openByMember.get(m.id) ?? "",

@@ -1048,7 +1048,8 @@ function MemberSummaryList({
             <span>
               <strong>{item.member.name}</strong>
               <small>
-                {item.member.gender === "WEIBLICH" ? "W" : "M"} · {item.member.active ? "aktiv" : "inaktiv"}
+                {item.member.gender === "WEIBLICH" ? "W" : "M"} ·{" "}
+                {item.member.active ? "aktiv" : "inaktiv"}
               </small>
               <BeltMark color={item.member.beltColor} grade={item.member.beltGrade} />
             </span>

@@ -8,7 +8,7 @@ Stand: 2026-06-21 · Prototyp-Phase, keine Produktivdaten
 
 Paket 1.2 erweitert das VTKB-Anwesenheitssystem um folgende Bereiche:
 
-- **Personenmodell**: `TrialParticipant` als permanentes Profil (kein Tag-Gast)
+- **Personenmodell**: `TrialParticipant` als permanentes Profil
 - **Probetraining-Workflow**: 4 kostenlose Einheiten, Vertragsstatus-Tracking, Vorstandsausnahme
 - **Dubletten-Erkennung**: normalisierter Vergleich auf Vorname + Nachname + Geburtsjahr
 - **4-Einheiten-Sperre**: Soft-Warnung bei Anwesenheits-Toggle, Hartsperre in `canCompleteSession`
@@ -18,32 +18,32 @@ Paket 1.2 erweitert das VTKB-Anwesenheitssystem um folgende Bereiche:
 
 ## Neue Dateien
 
-| Datei | Beschreibung |
-|---|---|
-| `packages/shared/src/trial.ts` | Zählung besuchter Einheiten, Berechtigungsprüfung, Vertragsstatus-Übergänge |
-| `packages/shared/src/person.ts` | Normalisierung, Dubletten-Check, ID-Generatoren |
-| `packages/shared/src/belt.ts` | Gürteldemo-Katalog, Änderungshistorie, Bildvorschlag-Entscheidungen |
-| `apps/web/src/trialWorkflow.ts` | App-seitige Trial-Logik, Warnhinweise, Profil-Builder |
-| `apps/web/src/trialScreens.tsx` | TrialListScreen, TrialNewScreen, TrialProfileScreen, TrialContractScreen |
-| `packages/shared/test/trial.test.ts` | 30 Unit-Tests für Probetraining-Kernlogik |
-| `packages/shared/test/person.test.ts` | 12 Unit-Tests für Normalisierung und Dubletten |
-| `docs/PACKAGE_1_2_REPORT.md` | Dieser Bericht |
+| Datei                                 | Beschreibung                                                                |
+| ------------------------------------- | --------------------------------------------------------------------------- |
+| `packages/shared/src/trial.ts`        | Zählung besuchter Einheiten, Berechtigungsprüfung, Vertragsstatus-Übergänge |
+| `packages/shared/src/person.ts`       | Normalisierung, Dubletten-Check, ID-Generatoren                             |
+| `packages/shared/src/belt.ts`         | Gürteldemo-Katalog, Änderungshistorie, Bildvorschlag-Entscheidungen         |
+| `apps/web/src/trialWorkflow.ts`       | App-seitige Trial-Logik, Warnhinweise, Profil-Builder                       |
+| `apps/web/src/trialScreens.tsx`       | TrialListScreen, TrialNewScreen, TrialProfileScreen, TrialContractScreen    |
+| `packages/shared/test/trial.test.ts`  | 30 Unit-Tests für Probetraining-Kernlogik                                   |
+| `packages/shared/test/person.test.ts` | 12 Unit-Tests für Normalisierung und Dubletten                              |
+| `docs/PACKAGE_1_2_REPORT.md`          | Dieser Bericht                                                              |
 
 ---
 
 ## Geänderte Dateien
 
-| Datei | Änderung |
-|---|---|
+| Datei                           | Änderung                                                                         |
+| ------------------------------- | -------------------------------------------------------------------------------- |
 | `packages/shared/src/domain.ts` | + `DemoRole.ASSISTANT_TRAINER`, + 5 neue Const-Objekt-Enums, + 3 neue Interfaces |
-| `packages/shared/src/index.ts` | + Re-Exports für `trial.js`, `person.js`, `belt.js` |
-| `apps/web/src/types.ts` | `GuestKind = "GAST"` (PROBETRAINING entfernt), + neue AppScreens, + Re-Exports |
-| `apps/web/src/mockData.ts` | + 6 fiktive TrialParticipants, Gürtelhistorien, Bildvorschläge |
-| `apps/web/src/workflow.ts` | `canCompleteSession` nimmt optionalen `blockedTrialParticipants`-Parameter |
-| `apps/web/src/reporting.ts` | + `buildTrialSummaries`, `trialDashboardMetrics`, `trialCsv` |
-| `apps/web/src/styles.css` | + Paket-1.2-CSS-Klassen (TrialList, Filter-Tabs, Fortschrittsbalken etc.) |
-| `apps/web/src/workflow.test.ts` | + 5 neue Tests für Trial-Sperrlogik und Demo-Daten |
-| `PROJECT_RULES.md` | + Paket-1.2-Fachregeln (Bildanalyse, Trial, Gürtelverwaltung) |
+| `packages/shared/src/index.ts`  | + Re-Exports für `trial.js`, `person.js`, `belt.js`                              |
+| `apps/web/src/types.ts`         | Dauerhafte Probetrainingprofile, neue AppScreens und Re-Exports                  |
+| `apps/web/src/mockData.ts`      | + 6 fiktive TrialParticipants, Gürtelhistorien, Bildvorschläge                   |
+| `apps/web/src/workflow.ts`      | `canCompleteSession` nimmt optionalen `blockedTrialParticipants`-Parameter       |
+| `apps/web/src/reporting.ts`     | + `buildTrialSummaries`, `trialDashboardMetrics`, `trialCsv`                     |
+| `apps/web/src/styles.css`       | + Paket-1.2-CSS-Klassen (TrialList, Filter-Tabs, Fortschrittsbalken etc.)        |
+| `apps/web/src/workflow.test.ts` | + 5 neue Tests für Trial-Sperrlogik und Demo-Daten                               |
+| `PROJECT_RULES.md`              | + Paket-1.2-Fachregeln (Bildanalyse, Trial, Gürtelverwaltung)                    |
 
 ---
 
@@ -51,7 +51,7 @@ Paket 1.2 erweitert das VTKB-Anwesenheitssystem um folgende Bereiche:
 
 ### Probetraining
 
-- Jeder Probetrainingsteilnehmer ist ein permanentes `TrialParticipant`-Profil, kein Tages-Gast.
+- Jeder Probetrainingsteilnehmer ist ein permanentes `TrialParticipant`-Profil.
 - Maximal **4 kostenlose Einheiten** (gezählt aus der Anwesenheitshistorie, nicht als mutierbares Feld).
 - Die 5. Teilnahme ist nur möglich bei: `ContractStatus.RECEIVED`, `ContractStatus.MEMBERSHIP_ACTIVATED`, oder genehmigter und noch nicht genutzter Vorstandsausnahme.
 - **Vorstandsausnahme**: genau eine zusätzliche Einheit, Begründungspflicht, erzeugt Audit-Eintrag.
@@ -74,6 +74,7 @@ Paket 1.2 erweitert das VTKB-Anwesenheitssystem um folgende Bereiche:
 ## Demo-Datensätze
 
 Alle Testdaten sind **ausschließlich fiktiv**. Erkennungsmerkmale:
+
 - Nachname enthält „Probetraining" oder „Beispiel-Probe"
 - E-Mail-Adressen enden auf `@example.invalid`
 - Telefonnummern im Format `030-555-01xx`
@@ -93,6 +94,6 @@ Alle Testdaten sind **ausschließlich fiktiv**. Erkennungsmerkmale:
 ## Technische Hinweise
 
 - Alle neuen Shared-Funktionen sind **zustandslos und rein berechenbar** (keine React-Abhängigkeit).
-- `GuestKind` ist jetzt **`"GAST"` only**. Code, der `"PROBETRAINING"` als GuestKind verwendete, muss auf TrialParticipant umgestellt werden.
+- Frühere kurzlebige Fremdpersonenmodelle wurden vollständig durch `TrialParticipant` ersetzt.
 - Der Gürteldemo-Katalog (`BELT_CATALOG`) in `belt.ts` ist fiktiv und muss nach Paket 2 durch den VTKB e.V. bestätigt werden.
 - Git-Operationen (Branch, Commit, Push, PR) werden manuell via PowerShell durchgeführt (siehe `scripts/git_package_1_2.ps1`).

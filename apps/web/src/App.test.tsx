@@ -53,9 +53,6 @@ describe("klickbarer Paket-1-Prototyp", () => {
     ).toBeInTheDocument();
   });
 
-  // Paket 1.6: Manuelle Gasterfassung wurde entfernt (kein "Gäste und Probetraining"-Button mehr).
-  // Gäste können weiterhin über den Fotoassistenz-Demo-Flow erfasst werden.
-
   it("blockiert die Speicherung mit offenen Foto-Demovorschlaegen", async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -95,6 +92,39 @@ describe("klickbarer Paket-1-Prototyp", () => {
     await user.click(within(nav).getByRole("button", { name: "Auswertung" }));
     expect(
       screen.getByRole("heading", { name: "Auswertung und Aufwandsentschädigung" }),
+    ).toBeInTheDocument();
+  });
+
+  it("enthält keinerlei Gastaktion mehr im Fotoablauf", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openPhotoReview(user);
+    expect(screen.queryByText(/Als Gast erfassen/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Gäste und Probetraining/i)).not.toBeInTheDocument();
+  });
+
+  it("erstellt eine Nachtragseinheit vollständig und zeigt sie in der Historie", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
+    await user.click(within(nav).getByRole("button", { name: "Verwaltung" }));
+    await user.click(screen.getByRole("button", { name: /Einheit nachträglich erstellen/ }));
+    await user.type(screen.getByLabelText("Datum"), "2026-06-20");
+    await user.type(screen.getByLabelText("Bezeichnung"), "Fiktive Nachtragseinheit");
+    await user.type(
+      screen.getByLabelText("Grund für die Nachtragserfassung"),
+      "Fiktive Dokumentationskorrektur",
+    );
+    await user.click(screen.getByRole("button", { name: /Trainer festlegen/ }));
+    await user.click(screen.getByRole("button", { name: "Anwesenheit erfassen" }));
+    await user.click(screen.getByRole("button", { name: "Liste prüfen" }));
+    await user.click(screen.getByRole("button", { name: "Nachtrag speichern und abschließen" }));
+    expect(screen.getByRole("heading", { name: "Verwaltung" })).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("retrospective-history")).getByText("Fiktive Nachtragseinheit"),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("runtime-audit")).getByText("RETROSPECTIVE_SESSION_CREATED"),
     ).toBeInTheDocument();
   });
 
@@ -223,23 +253,7 @@ describe("klickbarer Paket-1-Prototyp", () => {
     expect(within(unknown).getByText("Als unbekannt markiert")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Gesamtliste öffnen" }));
     expect(within(screen.getByTestId("summary-total")).getByText("2")).toBeInTheDocument();
-    expect(
-      within(screen.getByTestId("summary-guests")).getByText("Keine Gäste"),
-    ).toBeInTheDocument();
-  });
-
-  it("erfasst ein unbekanntes Gesicht genau einmal als manuellen Gast", async () => {
-    const user = userEvent.setup();
-    render(<App />);
-    await openPhotoReview(user);
-    const unknown = screen.getByTestId("proposal-3");
-    await user.click(within(unknown).getByRole("button", { name: "Als Gast erfassen" }));
-    await user.click(within(unknown).getByRole("button", { name: "Als Gast erfassen" }));
-    expect(within(unknown).getByText("Als Gast erfasst")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Gesamtliste öffnen" }));
-    expect(
-      within(screen.getByTestId("summary-guests")).getAllByText(/Gast Demo guest-/),
-    ).toHaveLength(1);
+    expect(screen.queryByText(/Gast/)).not.toBeInTheDocument();
   });
 
   it("wählt für ein unbekanntes Gesicht sichtbar genau das ausgewählte Mitglied", async () => {

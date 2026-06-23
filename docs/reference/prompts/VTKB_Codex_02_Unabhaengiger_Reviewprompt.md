@@ -13,7 +13,7 @@ Bewerte mindestens:
    - dauerhafte Qualifikation getrennt von der heutigen Funktion,
    - genau eine Anwesenheit pro Person und Einheit,
    - keine Doppelzählung als Trainer und Teilnehmer,
-   - Gäste ohne biometrisches Enrollment.
+   - dauerhafte Probetrainingprofile ohne biometrisches Enrollment.
 3. Datenschutz-by-Design:
    - keine echten Mitglieds- oder Kinderdaten,
    - keine unnötigen Logs,

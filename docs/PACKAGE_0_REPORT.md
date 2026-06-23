@@ -52,9 +52,7 @@ Die lokale Codex-Laufzeit stellt npm nicht global bereit. Die aufgefuehrten npm-
 - Mitgliedsdatensaetze muessen zur geprueften Einheit gehoeren.
 - Verantwortliche und assistierende Trainerfunktionen setzen Anwesenheit voraus.
 - Gaeste besitzen keine biometrische Enrollment-ID.
-- Eine `guestId` darf je Einheit nur einmal vorkommen.
-- Gastdatensaetze muessen zur geprueften Einheit gehoeren.
-- Ein gueltiger Gast ohne biometrische Enrollment-ID wird akzeptiert.
+- Anwesenheitsdatensätze beziehen sich ausschließlich auf Mitglieder oder dauerhafte Probetrainingprofile.
 - `assertValidTrainingSession` akzeptiert gueltige und verwirft ungueltige Daten.
 - `ConsentStatus` enthaelt `DECLINED`.
 - `BiometricConsent` ist durch seinen Zweck eindeutig auf biometrische Anwesenheitsidentifizierung begrenzt und bildet keine allgemeine Fotoerlaubnis ab.

@@ -1,5 +1,15 @@
-import { useMemo, useRef, useState } from "react";
-import { DemoRole, PresenceStatus, SessionRole } from "@vtkb/shared";
+import { useMemo, useState } from "react";
+import {
+  DemoRole,
+  CaptureSource,
+  PresenceStatus,
+  SessionRole,
+  TrainingSessionStatus,
+  type AttendanceRecord,
+  createRetrospectiveSession,
+  createRetrospectiveSessionIdGenerator,
+  type RetrospectiveSessionInput,
+} from "@vtkb/shared";
 
 import { AppShell } from "./components";
 import {
@@ -11,7 +21,7 @@ import {
   ManualAttendanceScreen,
   PhotoDemoScreen,
   PhotoReviewScreen,
-  RetroDateSelectScreen,
+  RetrospectiveSessionScreen,
   SessionSelectScreen,
   StartScreen,
   SummaryScreen,
@@ -52,19 +62,18 @@ import type {
   ConversionResult,
   DemoRoleValue,
   DirectMemberResult,
-  LocalGuest,
   Member,
   PhotoProposal,
+  ProposalDecision,
   TrainingSessionMock,
   TrialParticipant,
   WorkflowState,
+  HistoricalTrainingSession,
+  TrainingType,
 } from "./types";
-import {
-  canCompleteSession,
-  createInitialAttendance,
-  createLocalGuestIdFactory,
-  suggestSession,
-} from "./workflow";
+import { canCompleteSession, createInitialAttendance, suggestSession } from "./workflow";
+import { historicalSessions, recordHistoricalSession } from "./reportingMockData";
+import { blockedTrialParticipantsInSession } from "./trialWorkflow";
 
 function cloneProposals(): PhotoProposal[] {
   return initialPhotoProposals.map((proposal) => ({ ...proposal }));
@@ -86,11 +95,7 @@ function proposalMemberIds(proposals: readonly PhotoProposal[]): Set<string> {
 }
 
 export default function App() {
-  const [retroDate, setRetroDate] = useState<string | null>(null);
-  const sessions = useMemo(
-    () => createTodaySessions(retroDate ? new Date(`${retroDate}T12:00:00`) : new Date()),
-    [retroDate],
-  );
+  const sessions = useMemo(() => createTodaySessions(new Date()), []);
 
   // Anwesenheits-Workflow
   const [screen, setScreen] = useState<AppScreen>("START");
@@ -100,19 +105,24 @@ export default function App() {
   const [attendance, setAttendance] = useState<AttendanceState>(() =>
     createInitialAttendance(initialMembers, selectedSession),
   );
-  const [guests, setGuests] = useState<LocalGuest[]>([]);
   const [photoModeUsed, setPhotoModeUsed] = useState(false);
   const [proposals, setProposals] = useState<PhotoProposal[]>(cloneProposals);
   const [workflow, setWorkflow] = useState<WorkflowState>(initialWorkflow);
   const [demoRole, setDemoRole] = useState<DemoRoleValue>(DemoRole.BOARD);
-  const guestIdFactory = useRef(createLocalGuestIdFactory()).current;
 
   // Probetraining-State
-  const [trialParticipants, setTrialParticipants] = useState<TrialParticipant[]>(
-    () => [...initialTrialParticipants],
-  );
+  const [trialParticipants, setTrialParticipants] = useState<TrialParticipant[]>(() => [
+    ...initialTrialParticipants,
+  ]);
   const [selectedTrialId, setSelectedTrialId] = useState<string | null>(null);
+  const [selectedTrialAttendanceIds, setSelectedTrialAttendanceIds] = useState<string[]>([]);
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
+  const [trainingHistory, setTrainingHistory] = useState<HistoricalTrainingSession[]>(() => [
+    ...historicalSessions,
+  ]);
+  const [nextRetrospectiveId] = useState(() =>
+    createRetrospectiveSessionIdGenerator(historicalSessions.map((session) => session.id)),
+  );
 
   // Mitglieder-State (für neue/umgewandelte Mitglieder)
   const [members, setMembers] = useState<Member[]>(() => [...initialMembers]);
@@ -122,9 +132,9 @@ export default function App() {
     ...initialBeltHistory,
     ...beltHistoryExtended,
   ]);
-  const [beltSuggestions, setBeltSuggestions] = useState<BeltSuggestion[]>(
-    () => [...initialBeltSuggestions],
-  );
+  const [beltSuggestions, setBeltSuggestions] = useState<BeltSuggestion[]>(() => [
+    ...initialBeltSuggestions,
+  ]);
   const [selectedBeltMemberId, setSelectedBeltMemberId] = useState<string | null>(null);
 
   // Hilfsfunktionen
@@ -144,9 +154,20 @@ export default function App() {
   // Anwesenheits-Workflow-Hilfsfunktionen
   const activeProposals = photoModeUsed ? proposals : [];
   const unresolvedProposalCount = activeProposals.filter((proposal) => !proposal.resolved).length;
+  const blockedTrialParticipants = blockedTrialParticipantsInSession(
+    selectedTrialAttendanceIds,
+    trialParticipants,
+    trainingHistory,
+  );
   const completion = useMemo(
-    () => canCompleteSession(selectedSession, attendance, guests, unresolvedProposalCount),
-    [selectedSession, attendance, guests, unresolvedProposalCount],
+    () =>
+      canCompleteSession(
+        selectedSession,
+        attendance,
+        unresolvedProposalCount,
+        blockedTrialParticipants,
+      ),
+    [selectedSession, attendance, unresolvedProposalCount, blockedTrialParticipants],
   );
 
   const workflowMessages = [
@@ -196,7 +217,7 @@ export default function App() {
   const selectSession = (session: TrainingSessionMock) => {
     setSelectedSession(session);
     setAttendance(createInitialAttendance(members, session));
-    setGuests([]);
+    setSelectedTrialAttendanceIds([]);
     setPhotoModeUsed(false);
     setProposals(cloneProposals());
     resetWorkflowForSession();
@@ -205,7 +226,7 @@ export default function App() {
 
   const beginTraining = () => {
     setAttendance(createInitialAttendance(members, selectedSession));
-    setGuests([]);
+    setSelectedTrialAttendanceIds([]);
     setPhotoModeUsed(false);
     setProposals(cloneProposals());
     resetWorkflowForSession();
@@ -264,6 +285,85 @@ export default function App() {
     markCaptureActivity();
   };
 
+  const toggleTrialAttendance = (participantId: string) => {
+    setSelectedTrialAttendanceIds((current) =>
+      current.includes(participantId)
+        ? current.filter((id) => id !== participantId)
+        : [...current, participantId],
+    );
+    markCaptureActivity();
+  };
+
+  const persistCurrentSession = () => {
+    if (!canSave || trainingHistory.some((session) => session.id === selectedSession.id)) return;
+    const date = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Berlin",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(selectedSession.startsAt);
+    const records: AttendanceRecord[] = Object.entries(attendance)
+      .filter(([, selection]) => selection.presenceStatus === PresenceStatus.PRESENT)
+      .map(([memberId, selection]) => ({
+        sessionId: selectedSession.id,
+        memberId,
+        presenceStatus: selection.presenceStatus,
+        sessionRole: selection.sessionRole,
+        captureSource: CaptureSource.MANUAL,
+      }));
+    records.push(
+      ...selectedTrialAttendanceIds.map((memberId) => ({
+        sessionId: selectedSession.id,
+        memberId,
+        presenceStatus: PresenceStatus.PRESENT,
+        sessionRole: SessionRole.PARTICIPANT,
+        captureSource: CaptureSource.MANUAL,
+      })),
+    );
+    const completedAt = new Date().toISOString();
+    const historicalSession: HistoricalTrainingSession = {
+      id: selectedSession.id,
+      date,
+      startsAt: selectedSession.startsAt.toISOString(),
+      endsAt: selectedSession.endsAt.toISOString(),
+      timeZone: "Europe/Berlin",
+      name: selectedSession.name,
+      trainingType: "GRUNDLAGENTRAINING",
+      dojo: selectedSession.dojo,
+      status: TrainingSessionStatus.COMPLETED,
+      attendance: records,
+      completedAt,
+      completedBy: demoRole,
+    };
+    recordHistoricalSession(historicalSession);
+    setTrainingHistory((current) => [...current, historicalSession]);
+    setTrialParticipants((current) =>
+      current.map((participant) =>
+        selectedTrialAttendanceIds.includes(participant.id)
+          ? {
+              ...participant,
+              firstTrialDate: participant.firstTrialDate ?? date,
+              lastTrialDate: date,
+              overrideUsed:
+                participant.overrideStatus === "ONE_ADDITIONAL_SESSION_APPROVED"
+                  ? true
+                  : participant.overrideUsed,
+            }
+          : participant,
+      ),
+    );
+    addAuditEntry({
+      id: `audit-session-${selectedSession.id}`,
+      occurredAt: completedAt,
+      actor: demoRole,
+      action: "TRAINING_SESSION_COMPLETED",
+      object: `TrainingSession:${selectedSession.id}`,
+      previousValue: null,
+      newValue: `${records.length} Anwesenheiten`,
+      reason: null,
+    });
+  };
+
   const changeRole = (memberId: string, role: SessionRole) => {
     if (role === SessionRole.RESPONSIBLE_TRAINER) {
       changeResponsible(memberId);
@@ -278,7 +378,7 @@ export default function App() {
 
   const resolveProposal = (
     proposalId: string,
-    action: import("./types").ProposalDecision,
+    action: ProposalDecision,
     selectedMemberId?: string,
   ) => {
     const proposal = proposals.find((item) => item.id === proposalId);
@@ -293,7 +393,6 @@ export default function App() {
         resolved: false,
         resolutionAction: null,
         selectedMemberId: undefined,
-        guestId: undefined,
       };
     } else if (action === "CONFIRM_CANDIDATE" && proposal.candidateMemberId) {
       nextProposal = {
@@ -301,7 +400,6 @@ export default function App() {
         resolved: true,
         resolutionAction: "CONFIRMED_MEMBER",
         selectedMemberId: proposal.candidateMemberId,
-        guestId: undefined,
       };
     } else if (action === "SELECT_MEMBER" && selectedMemberId) {
       nextProposal = {
@@ -309,7 +407,6 @@ export default function App() {
         resolved: true,
         resolutionAction: "SELECTED_MEMBER",
         selectedMemberId,
-        guestId: undefined,
       };
     } else if (action === "MARK_UNKNOWN") {
       nextProposal = {
@@ -317,7 +414,6 @@ export default function App() {
         resolved: true,
         resolutionAction: "MARKED_UNKNOWN",
         selectedMemberId: undefined,
-        guestId: undefined,
       };
     } else if (action === "DISCARD") {
       nextProposal = {
@@ -325,28 +421,11 @@ export default function App() {
         resolved: true,
         resolutionAction: "DISCARDED",
         selectedMemberId: undefined,
-        guestId: undefined,
       };
-    } else if (action === "CREATE_GUEST") {
-      const guestId = guestIdFactory();
-      nextProposal = {
-        ...proposal,
-        resolved: true,
-        resolutionAction: "GUEST_CREATED",
-        selectedMemberId: undefined,
-        guestId,
-      };
-      setGuests((current) => [
-        ...current.filter((guest) => guest.id !== proposal.guestId),
-        { id: guestId, firstName: `Gast Demo ${guestId}`, kind: "GAST" },
-      ]);
     } else {
       return;
     }
 
-    if (proposal.guestId && action !== "CREATE_GUEST") {
-      setGuests((current) => current.filter((guest) => guest.id !== proposal.guestId));
-    }
     const nextProposals = proposals.map((item) => (item.id === proposalId ? nextProposal : item));
     synchronizeProposalAttendance(proposals, nextProposals);
     setProposals(nextProposals);
@@ -356,8 +435,6 @@ export default function App() {
   const startManualCapture = () => {
     if (photoModeUsed) {
       synchronizeProposalAttendance(proposals, []);
-      const photoGuestIds = new Set(proposals.flatMap((proposal) => proposal.guestId ?? []));
-      setGuests((current) => current.filter((guest) => !photoGuestIds.has(guest.id)));
     }
     setPhotoModeUsed(false);
     setProposals(cloneProposals());
@@ -424,7 +501,7 @@ export default function App() {
 
   // Bestehende Mitglieds-IDs und -Nummern für ID-Generatoren
   const existingMemberIds = members.map((m) => m.id);
-  const existingMemberNumbers = members.map((m) => m.id); // Platzhalter bis echte Nummern im Member-Modell
+  const existingMemberNumbers = members.map((m) => m.memberNumber ?? m.id);
 
   let content;
   switch (screen) {
@@ -449,13 +526,9 @@ export default function App() {
     case "SESSION_SELECT":
       content = (
         <SessionSelectScreen
-          retroDate={retroDate ?? undefined}
           selectedId={selectedSession.id}
           sessions={sessions}
-          onBack={() => {
-            if (retroDate) setScreen("RETRO_DATE_SELECT");
-            else setScreen("START");
-          }}
+          onBack={() => setScreen("START")}
           onSelect={selectSession}
         />
       );
@@ -487,11 +560,14 @@ export default function App() {
         <ManualAttendanceScreen
           attendance={attendance}
           members={members}
+          trialParticipants={trialParticipants}
+          selectedTrialIds={selectedTrialAttendanceIds}
           responsibleId={selectedSession.responsibleTrainerId}
           onBack={() => setScreen("CAPTURE_METHOD")}
           onReview={reviewAttendance}
           onRoleChange={changeRole}
           onToggleAttendance={toggleAttendance}
+          onToggleTrial={toggleTrialAttendance}
         />
       );
       break;
@@ -522,8 +598,9 @@ export default function App() {
       content = (
         <SummaryScreen
           attendance={attendance}
+          trialParticipants={trialParticipants}
+          selectedTrialIds={selectedTrialAttendanceIds}
           canSave={canSave}
-          guests={guests}
           members={members}
           proposals={activeProposals}
           session={selectedSession}
@@ -531,7 +608,10 @@ export default function App() {
           onManual={editManualAttendance}
           onPhotoReview={() => setScreen(photoModeUsed ? "PHOTO_REVIEW" : "CAPTURE_METHOD")}
           onSave={() => {
-            if (canSave) setScreen("COMPLETE");
+            if (canSave) {
+              persistCurrentSession();
+              setScreen("COMPLETE");
+            }
           }}
         />
       );
@@ -540,15 +620,13 @@ export default function App() {
       content = (
         <CompleteScreen
           attendance={attendance}
-          guests={guests}
+          selectedTrialIds={selectedTrialAttendanceIds}
           members={members}
           session={selectedSession}
           onHome={() => {
-            setRetroDate(null);
             setScreen("START");
           }}
           onNext={() => {
-            setRetroDate(null);
             startNextSession();
           }}
           onOverview={() => setScreen("STATS")}
@@ -568,7 +646,7 @@ export default function App() {
       content = (
         <TrialListScreen
           participants={trialParticipants}
-          history={[]}
+          history={trainingHistory}
           onSelect={(id) => {
             setSelectedTrialId(id);
             setScreen("TRIAL_PROFILE");
@@ -596,7 +674,7 @@ export default function App() {
       content = selectedTrialParticipant ? (
         <TrialProfileScreen
           participant={selectedTrialParticipant}
-          history={[]}
+          history={trainingHistory}
           onContractView={() => setScreen("TRIAL_CONTRACT")}
           onBack={() => setScreen("TRIAL_LIST")}
         />
@@ -635,11 +713,40 @@ export default function App() {
       content = selectedTrialParticipant ? (
         <TrialConversionScreen
           participant={selectedTrialParticipant}
-          existingMemberIds={existingMemberIds}
           existingMemberNumbers={existingMemberNumbers}
-          history={[]}
+          history={trainingHistory}
           onConvert={(result: ConversionResult) => {
             updateTrialParticipant(result.updatedParticipant);
+            const participant = result.updatedParticipant;
+            setMembers((current) =>
+              current.some((member) => member.id === participant.id)
+                ? current
+                : [
+                    ...current,
+                    {
+                      id: participant.id,
+                      memberNumber: result.memberNumber,
+                      name: `${participant.firstName} ${participant.lastName}`,
+                      initials:
+                        `${participant.firstName[0] ?? ""}${participant.lastName[0] ?? ""}`.toUpperCase(),
+                      gender: participant.gender,
+                      birthDate: participant.birthDate,
+                      beltColor: (participant.beltColor ?? "WEISS") as Member["beltColor"],
+                      beltGrade: participant.beltGrade ?? "10. Kyu",
+                      qualification: result.qualification,
+                      active: true,
+                      trainingsVisited: trainingHistory.filter((session) =>
+                        session.attendance.some(
+                          (record) =>
+                            record.memberId === participant.id &&
+                            record.presenceStatus === PresenceStatus.PRESENT,
+                        ),
+                      ).length,
+                      responsibleAssignments: 0,
+                      assistantAssignments: 0,
+                    },
+                  ],
+            );
             addAuditEntry(result.auditEntry);
             setScreen("TRIAL_LIST");
           }}
@@ -656,16 +763,18 @@ export default function App() {
             // Neues Mitglied als vereinfachtes Member-Objekt in die Liste aufnehmen
             const newMember: Member = {
               id: result.memberId,
+              memberNumber: result.memberNumber,
               name: result.displayName,
-              initials: result.displayName
-                .split(" ")
-                .slice(0, 2)
-                .map((w) => w[0] ?? "")
-                .join("")
-                .toUpperCase() || "??",
+              initials:
+                result.displayName
+                  .split(" ")
+                  .slice(0, 2)
+                  .map((w) => w[0] ?? "")
+                  .join("")
+                  .toUpperCase() || "??",
               gender: result.gender,
-              beltColor: (result.beltColor ?? "WEISS") as Member["beltColor"],
-              beltGrade: result.beltGrade ?? "10. Kyu",
+              beltColor: result.beltColor as Member["beltColor"],
+              beltGrade: result.beltGrade,
               qualification: result.qualification,
               active: true,
               trainingsVisited: 0,
@@ -684,7 +793,7 @@ export default function App() {
       content = (
         <TrialReportScreen
           participants={trialParticipants}
-          history={[]}
+          history={trainingHistory}
           onSelectParticipant={(id) => {
             setSelectedTrialId(id);
             setScreen("TRIAL_PROFILE");
@@ -706,9 +815,7 @@ export default function App() {
           actorName={demoRole}
           canEdit={isBoard || demoRole === DemoRole.TRAINER}
           onDecide={(updated, newEntry) => {
-            setBeltSuggestions((prev) =>
-              prev.map((s) => (s.id === updated.id ? updated : s)),
-            );
+            setBeltSuggestions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
             if (newEntry) {
               setBeltHistory((prev) => [...prev, newEntry]);
               // Mitglied aktualisieren
@@ -808,6 +915,12 @@ export default function App() {
           onBeltReport={() => setScreen("BELT_REPORT")}
           onBeltSuggestions={() => setScreen("BELT_SUGGESTION_REVIEW")}
           onRetroEntry={() => setScreen("RETRO_DATE_SELECT")}
+          recentRetrospectiveSessions={trainingHistory.filter((session) =>
+            session.id.startsWith("retro-"),
+          )}
+          auditCount={auditEntries.length}
+          auditEntries={auditEntries}
+          canCreateRetrospective={isBoard}
         />
       );
       break;
@@ -817,15 +930,31 @@ export default function App() {
     // ------------------------------------------------------------------
     case "RETRO_DATE_SELECT":
       content = (
-        <RetroDateSelectScreen
-          onSelect={(date) => {
-            setRetroDate(date);
-            setScreen("SESSION_SELECT");
-          }}
-          onBack={() => {
-            setRetroDate(null);
+        <RetrospectiveSessionScreen
+          members={members}
+          trialParticipants={trialParticipants}
+          history={trainingHistory}
+          onSave={(input: RetrospectiveSessionInput) => {
+            const { session, auditEntry } = createRetrospectiveSession(
+              nextRetrospectiveId(),
+              input,
+              new Intl.DateTimeFormat("en-CA", {
+                timeZone: "Europe/Berlin",
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+              }).format(new Date()),
+            );
+            const historicalSession: HistoricalTrainingSession = {
+              ...session,
+              trainingType: session.trainingType as TrainingType,
+            };
+            recordHistoricalSession(historicalSession);
+            setTrainingHistory((current) => [...current, historicalSession]);
+            addAuditEntry(auditEntry);
             setScreen("MANAGEMENT");
           }}
+          onBack={() => setScreen("MANAGEMENT")}
         />
       );
       break;

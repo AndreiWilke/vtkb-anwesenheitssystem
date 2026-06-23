@@ -4,7 +4,7 @@
  * Alle Funktionen sind zustandslos und rein berechenbar.
  *
  * Fachregeln:
- *   - Die gesamte Anwesenheitshistorie bleibt erhalten (memberId = neue Mitglieds-ID).
+ *   - Die Personen-ID bleibt erhalten; die Mitgliedsnummer ist ein separates Merkmal.
  *   - Ein TrialParticipant wird nicht geloescht, sondern erhaelt membershipStatus = ACTIVE_MEMBER.
  *   - Jede Umwandlung erzeugt einen AuditEntry.
  *   - Direktanlage eines Mitglieds ohne Probetraining ist ebenfalls moeglich.
@@ -26,7 +26,6 @@ import {
 
 export interface ConversionInput {
   participant: TrialParticipant;
-  newMemberId: string;
   memberNumber: string;
   qualification: MemberQualificationValue;
   convertedBy: string;
@@ -39,6 +38,7 @@ export interface ConversionResult {
   auditEntry: AuditEntry;
   newMemberId: string;
   memberNumber: string;
+  qualification: MemberQualificationValue;
 }
 
 export interface DirectMemberInput {
@@ -133,9 +133,7 @@ export function checkConversionEligibility(
  * mit memberId === participant.id werden nach der Konvertierung unter
  * der neuen memberId weitergefuehrt (ID ist unveraendert, wenn newMemberId === participant.id).
  */
-export function convertTrialParticipantToMember(
-  input: ConversionInput,
-): ConversionResult {
+export function convertTrialParticipantToMember(input: ConversionInput): ConversionResult {
   const eligibility = checkConversionEligibility(input.participant);
   if (!eligibility.eligible) {
     throw new Error(`Umwandlung nicht moeglich: ${eligibility.reason}`);
@@ -148,26 +146,27 @@ export function convertTrialParticipantToMember(
     ...input.participant,
     membershipStatus: PersonMembershipStatus.ACTIVE_MEMBER,
     contractStatus: ContractStatus.MEMBERSHIP_ACTIVATED,
-    memberId: input.newMemberId,
+    memberId: input.participant.id,
     ...(combinedNote !== undefined ? { note: combinedNote } : {}),
   };
 
   const auditEntry: AuditEntry = {
-    id: `audit-conv-${input.newMemberId}`,
+    id: `audit-conv-${input.participant.id}`,
     occurredAt: input.convertedAt,
     actor: input.convertedBy,
     action: "TRIAL_CONVERTED_TO_MEMBER",
     object: `TrialParticipant:${input.participant.id}`,
     previousValue: PersonMembershipStatus.TRIAL,
-    newValue: `${PersonMembershipStatus.ACTIVE_MEMBER}:${input.newMemberId}`,
+    newValue: `${PersonMembershipStatus.ACTIVE_MEMBER}:${input.participant.id}:${input.memberNumber}`,
     reason: input.note ?? null,
   };
 
   return {
     updatedParticipant,
     auditEntry,
-    newMemberId: input.newMemberId,
+    newMemberId: input.participant.id,
     memberNumber: input.memberNumber,
+    qualification: input.qualification,
   };
 }
 

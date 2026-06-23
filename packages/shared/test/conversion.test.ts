@@ -82,9 +82,7 @@ describe("checkConversionEligibility", () => {
   });
 
   it("blockiert Doppelkonvertierung (memberId bereits gesetzt)", () => {
-    const result = checkConversionEligibility(
-      baseParticipant({ memberId: "member-99" }),
-    );
+    const result = checkConversionEligibility(baseParticipant({ memberId: "member-99" }));
     expect(result.eligible).toBe(false);
     expect(result.reason).toContain("memberId");
   });
@@ -103,7 +101,6 @@ describe("checkConversionEligibility", () => {
 describe("convertTrialParticipantToMember", () => {
   const input = {
     participant: baseParticipant(),
-    newMemberId: "member-042",
     memberNumber: "M-1042",
     qualification: MemberQualification.NONE,
     convertedBy: "Vorstand Demo",
@@ -120,9 +117,9 @@ describe("convertTrialParticipantToMember", () => {
     expect(result.updatedParticipant.contractStatus).toBe(ContractStatus.MEMBERSHIP_ACTIVATED);
   });
 
-  it("setzt memberId auf die neue Mitglieds-ID", () => {
+  it("behält die Personen-ID als Mitglieds-ID", () => {
     const result = convertTrialParticipantToMember(input);
-    expect(result.updatedParticipant.memberId).toBe("member-042");
+    expect(result.updatedParticipant.memberId).toBe("trial-001");
   });
 
   it("gibt die korrekte memberNumber zurueck", () => {
@@ -136,7 +133,8 @@ describe("convertTrialParticipantToMember", () => {
     expect(result.auditEntry.actor).toBe("Vorstand Demo");
     expect(result.auditEntry.object).toContain("trial-001");
     expect(result.auditEntry.previousValue).toBe(PersonMembershipStatus.TRIAL);
-    expect(result.auditEntry.newValue).toContain("member-042");
+    expect(result.auditEntry.newValue).toContain("trial-001");
+    expect(result.auditEntry.newValue).toContain("M-1042");
   });
 
   it("haengt eine optionale Notiz an bestehende Notiz an", () => {
@@ -254,9 +252,7 @@ describe("grantBoardOverride", () => {
       TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED,
     );
     expect(result.updatedParticipant.overrideGrantedBy).toBe("Vorstand Demo");
-    expect(result.updatedParticipant.overrideReason).toBe(
-      "Terminkonflikt beim Vertragseingang",
-    );
+    expect(result.updatedParticipant.overrideReason).toBe("Terminkonflikt beim Vertragseingang");
     expect(result.updatedParticipant.overrideUsed).toBe(false);
   });
 

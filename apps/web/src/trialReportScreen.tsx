@@ -31,7 +31,15 @@ function downloadCsv(content: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-function MetricCard({ label, value, highlight = false }: { label: string; value: number; highlight?: boolean }) {
+function MetricCard({
+  label,
+  value,
+  highlight = false,
+}: {
+  label: string;
+  value: number;
+  highlight?: boolean;
+}) {
   return (
     <div className={`metric-card${highlight ? " metric-card--warn" : ""}`}>
       <div className="metric-card__value">{value}</div>
@@ -49,7 +57,6 @@ type FilterMode = "ALL" | "ACTIVE" | "BLOCKED" | "CONTRACT_PENDING" | "CONVERTED
 interface TrialReportScreenProps {
   participants: readonly TrialParticipant[];
   history: readonly HistoricalTrainingSession[];
-  currentYear?: number;
   onSelectParticipant: (id: string) => void;
   onBack: () => void;
 }
@@ -57,7 +64,6 @@ interface TrialReportScreenProps {
 export function TrialReportScreen({
   participants,
   history,
-  currentYear = new Date().getFullYear(),
   onSelectParticipant,
   onBack,
 }: TrialReportScreenProps) {
@@ -69,10 +75,7 @@ export function TrialReportScreen({
     [participants, history],
   );
 
-  const metrics = useMemo(
-    () => trialDashboardMetrics(summaries, currentYear),
-    [summaries, currentYear],
-  );
+  const metrics = useMemo(() => trialDashboardMetrics(summaries), [summaries]);
 
   const displayed = useMemo<TrialSummary[]>(() => {
     let filtered = summaries;
@@ -100,9 +103,7 @@ export function TrialReportScreen({
 
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      filtered = filtered.filter((s) =>
-        s.participant.displayName.toLowerCase().includes(q),
-      );
+      filtered = filtered.filter((s) => s.participant.displayName.toLowerCase().includes(q));
     }
 
     return filtered;
@@ -117,7 +118,9 @@ export function TrialReportScreen({
   return (
     <div className="screen">
       <header className="screen-header">
-        <button className="btn-back" onClick={onBack}>← Zurück</button>
+        <button className="btn-back" onClick={onBack}>
+          ← Zurück
+        </button>
         <h1>Probetraining-Auswertung</h1>
         <button className="btn-secondary btn-sm" onClick={handleExport}>
           CSV
@@ -128,7 +131,11 @@ export function TrialReportScreen({
       <div className="metrics-row">
         <MetricCard label="Aktive Probanden" value={metrics.totalActive} />
         <MetricCard label="Gesperrt" value={metrics.blocked} highlight={metrics.blocked > 0} />
-        <MetricCard label="Vertrag ausstehend" value={metrics.contractPending} highlight={metrics.contractPending > 0} />
+        <MetricCard
+          label="Vertrag ausstehend"
+          value={metrics.contractPending}
+          highlight={metrics.contractPending > 0}
+        />
         <MetricCard label="Umgewandelt" value={metrics.convertedThisYear} />
       </div>
 
@@ -145,12 +152,12 @@ export function TrialReportScreen({
                 {f === "ACTIVE"
                   ? "Aktiv"
                   : f === "BLOCKED"
-                  ? "Gesperrt"
-                  : f === "CONTRACT_PENDING"
-                  ? "Vertrag"
-                  : f === "CONVERTED"
-                  ? "Umgewandelt"
-                  : "Alle"}
+                    ? "Gesperrt"
+                    : f === "CONTRACT_PENDING"
+                      ? "Vertrag"
+                      : f === "CONVERTED"
+                        ? "Umgewandelt"
+                        : "Alle"}
               </button>
             ),
           )}

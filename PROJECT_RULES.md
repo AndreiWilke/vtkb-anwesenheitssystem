@@ -49,7 +49,7 @@
 
 ## Fachliche Invarianten fuer Personen und Probetraining (ab Paket 1.2)
 
-- Ein Probetrainingsteilnehmer besitzt ein dauerhaftes lokales Profil und ist kein gewoehnlicher Tagesgast.
+- Ein Probetrainingsteilnehmer besitzt ein dauerhaftes lokales Profil.
 - Es stehen grundsaetzlich vier kostenlose, tatsaechlich besuchte Probetrainings zur Verfuegung.
 - Als Probetraining zaehlt ausschliesslich: `PersonMembershipStatus.TRIAL`, `PresenceStatus.PRESENT` in einer `TrainingSessionStatus.COMPLETED`-Einheit.
 - Abwesenheit, Abbruch oder stornierte Einheiten zaehlen nicht; doppelte Anwesenheit zaehlt nur einmal.
@@ -58,7 +58,7 @@
 - Nach dem vierten besuchten Probetraining ist fuer weitere Teilnahme mindestens eines erforderlich: Vertragsstatus RECEIVED, aktives Mitglied oder eine begruendete Vorstandsausnahme.
 - Die Vorstandsausnahme erlaubt genau eine zusaetzliche Einheit und erzeugt einen Audit-Eintrag.
 - Die Umwandlung zum Mitglied erhaelt Personen-ID, Probetrainingsteilnahmen, den gesamten Anwesenheitsverlauf, Guerteldaten, Guertelhistorie, Auditverlauf und interne Bemerkungen.
-- Ein Tagesgast (GuestKind.GAST) hat kein dauerhaftes Profil und kein Probetraining-Konto.
+- Personen ohne Mitgliedschaft werden ausschließlich als dauerhafte Probetrainingprofile geführt.
 - Keine biometrische Registrierung von Gaesten oder Probetrainingsteilnehmern.
 
 ## Grenzen von Paket 0

@@ -175,6 +175,12 @@ export const historicalSessions: HistoricalTrainingSession[] = Array.from(
     }),
 ).flat();
 
+export function recordHistoricalSession(session: HistoricalTrainingSession): void {
+  if (!historicalSessions.some((existing) => existing.id === session.id)) {
+    historicalSessions.push(session);
+  }
+}
+
 export const initialCompensationRates: CompensationRate[] = [
   {
     id: "rate-responsible-2025",

@@ -27,14 +27,21 @@ export type BeltSuggestion = SharedBeltSuggestion;
 export type TrialParticipant = SharedTrialParticipant;
 
 export type Gender = "MAENNLICH" | "WEIBLICH";
-export type BeltColor = "WEISS" | "WEISS_ROT" | "WEISS_GELB" | "GELB" | "GELB_ORANGE" | "ORANGE" | "ORANGE_GRUEN" | "GRUEN" | "GRUEN_BLAU" | "BLAU" | "BLAU_BRAUN" | "BRAUN" | "VIOLETT" | "SCHWARZ";
+export type BeltColor =
+  | "WEISS"
+  | "WEISS_ROT"
+  | "WEISS_GELB"
+  | "GELB"
+  | "GELB_ORANGE"
+  | "ORANGE"
+  | "ORANGE_GRUEN"
+  | "GRUEN"
+  | "GRUEN_BLAU"
+  | "BLAU"
+  | "VIOLETT"
+  | "BRAUN"
+  | "SCHWARZ";
 export type SessionUiStatus = "BEVORSTEHEND" | "LAEUFT" | "BEENDET";
-
-/**
- * Paket 1.2: GuestKind ist nur noch "GAST".
- * "PROBETRAINING" wurde durch TrialParticipant (eigenes Profil) ersetzt.
- */
-export type GuestKind = "GAST";
 
 export type ProposalStatus = "EINDEUTIG" | "PRUEFEN" | "UNBEKANNT" | "DUBLETTE";
 export type ProposalResolutionAction =
@@ -42,19 +49,18 @@ export type ProposalResolutionAction =
   | "CONFIRMED_MEMBER"
   | "SELECTED_MEMBER"
   | "MARKED_UNKNOWN"
-  | "GUEST_CREATED"
   | "DISCARDED";
 export type ProposalDecision =
   | "CONFIRM_CANDIDATE"
   | "SELECT_MEMBER"
   | "MARK_UNKNOWN"
-  | "CREATE_GUEST"
   | "DISCARD"
   | "RESET";
 export type CaptureMethod = "MANUAL" | "PHOTO_DEMO";
 
 export interface Member {
   id: string;
+  memberNumber?: string;
   name: string;
   initials: string;
   gender: Gender;
@@ -128,20 +134,12 @@ export interface AttendanceSelection {
 
 export type AttendanceState = Record<string, AttendanceSelection>;
 
-export interface LocalGuest {
-  id: string;
-  firstName: string;
-  lastName?: string;
-  kind: GuestKind;
-}
-
 export interface PhotoProposal {
   id: string;
   label: string;
   status: ProposalStatus;
   candidateMemberId?: string;
   selectedMemberId?: string;
-  guestId?: string;
   resolutionAction: ProposalResolutionAction | null;
   resolved: boolean;
 }
@@ -184,4 +182,5 @@ export type AppScreen =
   // Verwaltungs-Hub
   | "MANAGEMENT"
   // Paket 1.6
-  | "RETRO_DATE_SELECT";
+  | "RETRO_DATE_SELECT"
+  | "RETRO_CREATE";

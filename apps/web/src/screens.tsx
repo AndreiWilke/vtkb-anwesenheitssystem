@@ -17,7 +17,16 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { MemberQualification, PresenceStatus, SessionRole } from "@vtkb/shared";
+import {
+  MemberQualification,
+  BELT_COLORS,
+  BELT_LABELS,
+  PresenceStatus,
+  SessionRole,
+  findRetrospectiveDuplicate,
+  validateRetrospectiveSession,
+  type RetrospectiveSessionInput,
+} from "@vtkb/shared";
 
 import {
   BeltMark,
@@ -31,15 +40,18 @@ import {
 import { completedSessionHistory } from "./mockData";
 import type {
   AttendanceState,
+  AuditEntry,
   BeltColor,
   Gender,
-  LocalGuest,
   Member,
   ProposalDecision,
   PhotoProposal,
   TrainingSessionMock,
+  HistoricalTrainingSession,
+  TrialParticipant,
 } from "./types";
 import { presentMemberIds, sessionUiStatus } from "./workflow";
+import { blockedTrialParticipantsInSession } from "./trialWorkflow";
 import { clubDateFormatter, clubTimeFormatter } from "./time";
 
 function formatSessionTime(session: TrainingSessionMock) {
@@ -215,7 +227,11 @@ export function SessionSelectScreen({
                 <StatusTag
                   tone={status === "LAEUFT" ? "good" : status === "BEENDET" ? "muted" : "warn"}
                 >
-                  {status === "LAEUFT" ? "Läuft" : status === "BEENDET" ? "Beendet" : "Bevorstehend"}
+                  {status === "LAEUFT"
+                    ? "Läuft"
+                    : status === "BEENDET"
+                      ? "Beendet"
+                      : "Bevorstehend"}
                 </StatusTag>
                 {session.id === selectedId ? (
                   <CheckCircle2 aria-label="Ausgewählt" />
@@ -353,17 +369,23 @@ export function CaptureMethodScreen({
 
 export function ManualAttendanceScreen({
   members,
+  trialParticipants,
+  selectedTrialIds,
   attendance,
   responsibleId,
   onToggleAttendance,
+  onToggleTrial,
   onRoleChange,
   onReview,
   onBack,
 }: {
   members: readonly Member[];
+  trialParticipants: readonly TrialParticipant[];
+  selectedTrialIds: readonly string[];
   attendance: AttendanceState;
   responsibleId: string;
   onToggleAttendance: (memberId: string) => void;
+  onToggleTrial: (participantId: string) => void;
   onRoleChange: (memberId: string, role: SessionRole) => void;
   onReview: () => void;
   onBack: () => void;
@@ -383,7 +405,7 @@ export function ManualAttendanceScreen({
       return true;
     });
   }, [gender, belt, deferredSearch, members, trainersOnly]);
-  const presentCount = presentMemberIds(attendance).length;
+  const presentCount = presentMemberIds(attendance).length + selectedTrialIds.length;
   return (
     <section>
       <PageHeading
@@ -418,9 +440,9 @@ export function ManualAttendanceScreen({
             onChange={(event) => setBelt(event.target.value as BeltColor | "ALLE")}
           >
             <option value="ALLE">Alle Gürtel</option>
-            {["WEISS", "GELB", "ORANGE", "GRUEN", "BLAU", "BRAUN", "SCHWARZ"].map((color) => (
+            {BELT_COLORS.map((color) => (
               <option key={color} value={color}>
-                {color}
+                {BELT_LABELS[color]}
               </option>
             ))}
           </select>
@@ -509,105 +531,41 @@ export function ManualAttendanceScreen({
           );
         })}
       </div>
+      <section className="trial-attendance-section">
+        <h2>Probetraining</h2>
+        <p>Dauerhafte Profile · die kostenlose Teilnahmegrenze wird beim Abschluss geprüft.</p>
+        {trialParticipants
+          .filter((participant) => participant.active && participant.membershipStatus === "TRIAL")
+          .map((participant) => {
+            const present = selectedTrialIds.includes(participant.id);
+            return (
+              <button
+                aria-label={`${participant.displayName} ${present ? "abwesend setzen" : "anwesend setzen"}`}
+                className={present ? "member-row present trial-row" : "member-row trial-row"}
+                key={participant.id}
+                type="button"
+                onClick={() => onToggleTrial(participant.id)}
+              >
+                <MemberAvatar
+                  initials={`${participant.firstName[0] ?? ""}${participant.lastName[0] ?? ""}`}
+                  muted={!present}
+                />
+                <span>
+                  <strong>{participant.displayName}</strong>
+                  <small>Probetraining-Profil</small>
+                </span>
+                <span className={present ? "presence-switch on" : "presence-switch"}>
+                  {present ? "Anwesend" : "Abwesend"}
+                </span>
+              </button>
+            );
+          })}
+      </section>
       <div className="action-stack">
         <PrimaryButton onClick={onReview}>
           Gesamtliste prüfen <ArrowRight aria-hidden="true" />
         </PrimaryButton>
       </div>
-    </section>
-  );
-}
-
-export function GuestScreen({
-  guests,
-  onAdd,
-  onRemove,
-  onBack,
-}: {
-  guests: readonly LocalGuest[];
-  onAdd: (guest: Omit<LocalGuest, "id">) => void;
-  onRemove: (id: string) => void;
-  onBack: () => void;
-}) {
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [kind, setKind] = useState<LocalGuest["kind"]>("GAST");
-  const submit = () => {
-    if (!firstName.trim()) return;
-    onAdd({
-      firstName: firstName.trim(),
-      ...(lastName.trim() ? { lastName: lastName.trim() } : {}),
-      kind,
-    });
-    setFirstName("");
-    setLastName("");
-  };
-  return (
-    <section>
-      <PageHeading
-        title="Gäste und Probetraining"
-        description="Ausschließlich manuelle lokale Mockerfassung – ohne Biometrie."
-        onBack={onBack}
-      />
-      <div className="demo-notice">
-        <ShieldCheck aria-hidden="true" />
-        <span>
-          Keine Einwilligung, keine Referenzbilder, keine Enrollment-ID und keine Gesichtserkennung.
-        </span>
-      </div>
-      <div className="form-grid">
-        <label>
-          <span>Vorname oder Anzeigename</span>
-          <input value={firstName} onChange={(event) => setFirstName(event.target.value)} />
-        </label>
-        <label>
-          <span>Nachname · optional</span>
-          <input value={lastName} onChange={(event) => setLastName(event.target.value)} />
-        </label>
-        <label>
-          <span>Art</span>
-          <select
-            value={kind}
-            onChange={(event) => setKind(event.target.value as LocalGuest["kind"])}
-          >
-            <option value="GAST">Gast</option>
-          </select>
-        </label>
-        <PrimaryButton disabled={!firstName.trim()} onClick={submit}>
-          Manuell hinzufügen
-        </PrimaryButton>
-      </div>
-      <div className="guest-list">
-        {guests.length === 0 ? (
-          <p className="empty-state">Noch keine Gäste erfasst.</p>
-        ) : (
-          guests.map((guest) => (
-            <div
-              className="guest-row"
-              data-guest-id={guest.id}
-              data-testid="guest-row"
-              key={guest.id}
-            >
-              <MemberAvatar initials="G" />
-              <span>
-                <strong>
-                  {guest.firstName} {guest.lastName ?? ""}
-                </strong>
-                <small>{guest.kind === "GAST" ? "Gast" : "Probetraining"}</small>
-              </span>
-              <button
-                aria-label={`${guest.firstName} entfernen`}
-                className="icon-button"
-                type="button"
-                onClick={() => onRemove(guest.id)}
-              >
-                <X />
-              </button>
-            </div>
-          ))
-        )}
-      </div>
-      <PrimaryButton onClick={onBack}>Zur Anwesenheitsliste</PrimaryButton>
     </section>
   );
 }
@@ -683,7 +641,6 @@ const resolutionLabels: Record<NonNullable<PhotoProposal["resolutionAction"]>, s
   CONFIRMED_MEMBER: "Person bestätigt",
   SELECTED_MEMBER: "Andere Person gewählt",
   MARKED_UNKNOWN: "Als unbekannt markiert",
-  GUEST_CREATED: "Als Gast erfasst",
   DISCARDED: "Verworfen",
 };
 
@@ -705,25 +662,17 @@ export function PhotoReviewScreen({
   const unresolved = proposals.filter((proposal) => !proposal.resolved).length;
   const [pickerProposalId, setPickerProposalId] = useState<string | null>(null);
   const [pickerSearch, setPickerSearch] = useState("");
-  const [pickerMemberId, setPickerMemberId] = useState<string | null>(null);
   const pickerProposal = proposals.find((proposal) => proposal.id === pickerProposalId);
   const pickerMembers = members.filter((member) =>
     member.name.toLocaleLowerCase("de").includes(pickerSearch.trim().toLocaleLowerCase("de")),
   );
   const openPicker = (proposal: PhotoProposal) => {
     setPickerProposalId(proposal.id);
-    setPickerMemberId(proposal.selectedMemberId ?? proposal.candidateMemberId ?? null);
     setPickerSearch("");
   };
   const closePicker = () => {
     setPickerProposalId(null);
-    setPickerMemberId(null);
     setPickerSearch("");
-  };
-  const confirmPicker = () => {
-    if (!pickerProposal || !pickerMemberId) return;
-    onResolve(pickerProposal.id, "SELECT_MEMBER", pickerMemberId);
-    closePicker();
   };
   return (
     <section>
@@ -775,7 +724,10 @@ export function PhotoReviewScreen({
                 {!proposal.resolved ? (
                   <>
                     {proposal.status !== "UNBEKANNT" && proposal.candidateMemberId ? (
-                      <button type="button" onClick={() => onResolve(proposal.id, "CONFIRM_CANDIDATE")}>
+                      <button
+                        type="button"
+                        onClick={() => onResolve(proposal.id, "CONFIRM_CANDIDATE")}
+                      >
                         Bestätigen
                       </button>
                     ) : null}
@@ -787,9 +739,6 @@ export function PhotoReviewScreen({
                     </button>
                     <button type="button" onClick={() => onResolve(proposal.id, "DISCARD")}>
                       Verwerfen
-                    </button>
-                    <button type="button" onClick={() => onResolve(proposal.id, "CREATE_GUEST")}>
-                      Als Gast erfassen
                     </button>
                   </>
                 ) : (
@@ -863,7 +812,8 @@ export function SummaryScreen({
   session,
   members,
   attendance,
-  guests,
+  trialParticipants,
+  selectedTrialIds,
   proposals,
   validationMessages,
   canSave,
@@ -874,7 +824,8 @@ export function SummaryScreen({
   session: TrainingSessionMock;
   members: readonly Member[];
   attendance: AttendanceState;
-  guests: readonly LocalGuest[];
+  trialParticipants: readonly TrialParticipant[];
+  selectedTrialIds: readonly string[];
   proposals: readonly PhotoProposal[];
   validationMessages: readonly string[];
   canSave: boolean;
@@ -892,7 +843,9 @@ export function SummaryScreen({
   const assistants = byRole(SessionRole.ASSISTANT_TRAINER);
   const participants = byRole(SessionRole.PARTICIPANT);
   const unresolved = proposals.filter((proposal) => !proposal.resolved).length;
-  const total = responsible.length + assistants.length + participants.length + guests.length;
+  const selectedTrials = trialParticipants.filter((person) => selectedTrialIds.includes(person.id));
+  const total =
+    responsible.length + assistants.length + participants.length + selectedTrials.length;
   const group = (title: string, values: readonly Member[]) => (
     <section className="summary-group">
       <h2>
@@ -925,22 +878,20 @@ export function SummaryScreen({
       {group("Verantwortlicher Trainer", responsible)}
       {group("Assistenztrainer", assistants)}
       {group("Teilnehmer", participants)}
-      <section className="summary-group" data-testid="summary-guests">
+      <section className="summary-group" data-testid="summary-trials">
         <h2>
-          Gäste<span>{guests.length}</span>
+          Probetraining<span>{selectedTrials.length}</span>
         </h2>
-        {guests.length === 0 ? (
-          <p>Keine Gäste</p>
-        ) : (
-          guests.map((guest) => (
-            <div className="summary-person" key={guest.id}>
-              <MemberAvatar initials="G" />
-              <span>
-                {guest.firstName} {guest.lastName ?? ""}
-              </span>
-              <StatusTag tone="muted">Manuell</StatusTag>
+        {selectedTrials.length ? (
+          selectedTrials.map((person) => (
+            <div className="summary-person" key={person.id}>
+              <MemberAvatar initials={`${person.firstName[0] ?? ""}${person.lastName[0] ?? ""}`} />
+              <span>{person.displayName}</span>
+              <StatusTag tone="muted">Profil</StatusTag>
             </div>
           ))
+        ) : (
+          <p>Keine Personen</p>
         )}
       </section>
       <button
@@ -981,7 +932,7 @@ export function CompleteScreen({
   session,
   members,
   attendance,
-  guests,
+  selectedTrialIds,
   onOverview,
   onNext,
   onHome,
@@ -989,7 +940,7 @@ export function CompleteScreen({
   session: TrainingSessionMock;
   members: readonly Member[];
   attendance: AttendanceState;
-  guests: readonly LocalGuest[];
+  selectedTrialIds: readonly string[];
   onOverview: () => void;
   onNext: () => void;
   onHome: () => void;
@@ -1035,7 +986,7 @@ export function CompleteScreen({
         </div>
         <div>
           <dt>Gesamt</dt>
-          <dd>{present.length + guests.length} Personen</dd>
+          <dd>{present.length + selectedTrialIds.length} Personen</dd>
         </div>
       </dl>
       <div className="demo-notice">
@@ -1148,6 +1099,10 @@ export function ManagementScreen({
   onBeltReport,
   onBeltSuggestions,
   onRetroEntry,
+  recentRetrospectiveSessions,
+  auditCount,
+  auditEntries,
+  canCreateRetrospective,
 }: {
   openBeltSuggestionsCount: number;
   onTrialList: () => void;
@@ -1155,6 +1110,10 @@ export function ManagementScreen({
   onBeltReport: () => void;
   onBeltSuggestions: () => void;
   onRetroEntry: () => void;
+  recentRetrospectiveSessions: readonly HistoricalTrainingSession[];
+  auditCount: number;
+  auditEntries: readonly AuditEntry[];
+  canCreateRetrospective: boolean;
 }) {
   return (
     <section className="management-screen">
@@ -1165,14 +1124,53 @@ export function ManagementScreen({
 
       <div className="mgmt-section">
         <h2>Training</h2>
-        <button className="mgmt-card" type="button" onClick={onRetroEntry}>
+        <button
+          className="mgmt-card"
+          disabled={!canCreateRetrospective}
+          type="button"
+          onClick={onRetroEntry}
+        >
           <History aria-hidden="true" />
           <span>
-            <strong>Nachtrag erfassen</strong>
-            <small>Anwesenheit für ein vergangenes Training nachträglich eintragen</small>
+            <strong>Einheit nachträglich erstellen</strong>
+            <small>
+              {canCreateRetrospective
+                ? "Vergangene Einheit vollständig anlegen, prüfen und abschließen"
+                : "Nur Vorstand oder besonders berechtigte Trainer"}
+            </small>
           </span>
           <ChevronRight aria-hidden="true" />
         </button>
+        {recentRetrospectiveSessions.length ? (
+          <div className="runtime-history" data-testid="retrospective-history">
+            <p className="section-label">Zuletzt nachgetragen</p>
+            {recentRetrospectiveSessions
+              .slice(-3)
+              .reverse()
+              .map((session) => (
+                <div key={session.id}>
+                  <span>
+                    <strong>{session.name}</strong>
+                    <small>
+                      {session.date} · {session.dojo}
+                    </small>
+                  </span>
+                  <StatusTag tone="good">Abgeschlossen</StatusTag>
+                </div>
+              ))}
+          </div>
+        ) : null}
+        <p className="audit-runtime-count">{auditCount} Laufzeit-Audit-Einträge verfügbar</p>
+        <div className="runtime-audit" data-testid="runtime-audit">
+          {auditEntries.slice(0, 3).map((entry) => (
+            <div key={entry.id}>
+              <strong>{entry.action}</strong>
+              <small>
+                {entry.actor} · {entry.occurredAt.slice(0, 10)}
+              </small>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="mgmt-section">
@@ -1226,66 +1224,325 @@ export function ManagementScreen({
   );
 }
 
-export function RetroDateSelectScreen({
-  onSelect,
+export function RetrospectiveSessionScreen({
+  members,
+  trialParticipants,
+  history,
+  onSave,
   onBack,
 }: {
-  onSelect: (date: string) => void;
+  members: readonly Member[];
+  trialParticipants: readonly TrialParticipant[];
+  history: readonly HistoricalTrainingSession[];
+  onSave: (input: RetrospectiveSessionInput) => void;
   onBack: () => void;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Berlin",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  const trainers = members.filter(
+    (member) =>
+      member.active &&
+      (member.qualification === MemberQualification.TRAINER ||
+        member.qualification === MemberQualification.ASSISTANT_TRAINER),
+  );
+  const [step, setStep] = useState(1);
   const [date, setDate] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [startTime, setStartTime] = useState("17:00");
+  const [endTime, setEndTime] = useState("18:30");
+  const [name, setName] = useState("");
+  const [trainingType, setTrainingType] = useState("GRUNDLAGENTRAINING");
+  const [dojo, setDojo] = useState("Dojo VTKB Berlin");
+  const [responsibleTrainerId, setResponsibleTrainerId] = useState(trainers[0]?.id ?? "");
+  const [assistantTrainerIds, setAssistantTrainerIds] = useState<string[]>([]);
+  const [participantIds, setParticipantIds] = useState<string[]>([]);
+  const [reason, setReason] = useState("");
+  const [note, setNote] = useState("");
+  const [errors, setErrors] = useState<string[]>([]);
 
-  const handleContinue = () => {
-    if (!date) {
-      setError("Bitte ein Datum auswählen.");
+  const input = (): RetrospectiveSessionInput => ({
+    date,
+    startTime,
+    endTime,
+    name,
+    trainingType,
+    dojo,
+    responsibleTrainerId,
+    assistantTrainerIds,
+    participantIds,
+    reason,
+    ...(note.trim() ? { note } : {}),
+    createdBy: "Vorstand Demo",
+    createdAt: new Date().toISOString(),
+  });
+  const duplicateId = findRetrospectiveDuplicate(input(), history);
+  const blockedTrials = blockedTrialParticipantsInSession(
+    participantIds.filter((id) => id.startsWith("trial-")),
+    trialParticipants,
+    history,
+  );
+  const continueFromDetails = () => {
+    const issues = validateRetrospectiveSession(input(), today);
+    if (issues.length) {
+      setErrors(issues.map((issue) => issue.message));
       return;
     }
-    if (date >= today) {
-      setError("Das Datum muss in der Vergangenheit liegen.");
-      return;
-    }
-    onSelect(date);
+    setErrors([]);
+    setStep(2);
+  };
+  const toggleId = (values: string[], id: string, setValues: (next: string[]) => void) => {
+    setValues(values.includes(id) ? values.filter((value) => value !== id) : [...values, id]);
   };
 
   return (
     <section>
       <PageHeading
-        title="Nachtragserfassung"
-        description="Anwesenheit für ein vergangenes Training nachträglich eintragen."
+        title="Einheit nachträglich erstellen"
+        description={`Schritt ${step} von 4 · vollständige Erfassung und sofortiger Abschluss`}
         onBack={onBack}
       />
-      <div className="demo-notice">
-        <Info aria-hidden="true" />
-        <span>
-          Trainingseinheiten werden für das gewählte Datum generiert. Der vollständige
-          Erfassungsworkflow läuft wie gewohnt ab.
-        </span>
-      </div>
-      <div className="form-grid">
-        <label>
-          <span>Trainingsdatum</span>
-          <input
-            max={
-              new Date(new Date().setDate(new Date().getDate() - 1)).toISOString().slice(0, 10)
-            }
-            type="date"
-            value={date}
-            onChange={(event) => {
-              setDate(event.target.value);
-              setError(null);
-            }}
-          />
-        </label>
-        {error ? <p className="form-error">{error}</p> : null}
-      </div>
-      <div className="action-stack">
-        <PrimaryButton disabled={!date} onClick={handleContinue}>
-          Einheit auswählen <ArrowRight aria-hidden="true" />
-        </PrimaryButton>
-        <SecondaryButton onClick={onBack}>Abbrechen</SecondaryButton>
-      </div>
+      {step === 1 ? (
+        <div className="form-grid retrospective-form">
+          <label>
+            <span>Datum</span>
+            <input
+              aria-label="Datum"
+              max={today}
+              type="date"
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+            />
+          </label>
+          <div className="form-row">
+            <label>
+              <span>Beginn</span>
+              <input
+                aria-label="Beginn"
+                type="time"
+                value={startTime}
+                onChange={(event) => setStartTime(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>Ende</span>
+              <input
+                aria-label="Ende"
+                type="time"
+                value={endTime}
+                onChange={(event) => setEndTime(event.target.value)}
+              />
+            </label>
+          </div>
+          <label>
+            <span>Bezeichnung</span>
+            <input
+              aria-label="Bezeichnung"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>Trainingsart</span>
+            <select
+              aria-label="Trainingsart"
+              value={trainingType}
+              onChange={(event) => setTrainingType(event.target.value)}
+            >
+              <option value="GRUNDLAGENTRAINING">Grundlagentraining</option>
+              <option value="FORTGESCHRITTENENTRAINING">Fortgeschrittenentraining</option>
+              <option value="KINDERTRAINING">Kindertraining</option>
+              <option value="JUGENDTRAINING">Jugendtraining</option>
+              <option value="ERWACHSENENTRAINING">Erwachsenentraining</option>
+            </select>
+          </label>
+          <label>
+            <span>Dojo</span>
+            <input
+              aria-label="Dojo"
+              value={dojo}
+              onChange={(event) => setDojo(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>Grund für die Nachtragserfassung</span>
+            <textarea
+              aria-label="Grund für die Nachtragserfassung"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>Interne Bemerkung · optional</span>
+            <textarea
+              aria-label="Interne Bemerkung"
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+            />
+          </label>
+          {errors.length ? (
+            <div className="validation-box" role="alert">
+              <ul>
+                {errors.map((error) => (
+                  <li key={error}>{error}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {duplicateId ? (
+            <div className="demo-notice strong" role="status">
+              <Info aria-hidden="true" />
+              <span>
+                Mögliche Dublette: {duplicateId} hat dasselbe Datum, dieselbe Zeit und dasselbe
+                Dojo.
+              </span>
+            </div>
+          ) : null}
+          <PrimaryButton onClick={continueFromDetails}>
+            Trainer festlegen <ArrowRight aria-hidden="true" />
+          </PrimaryButton>
+        </div>
+      ) : null}
+      {step === 2 ? (
+        <div className="retrospective-step">
+          <label>
+            <span>Verantwortlicher Trainer</span>
+            <select
+              aria-label="Verantwortlicher Trainer"
+              value={responsibleTrainerId}
+              onChange={(event) => {
+                setResponsibleTrainerId(event.target.value);
+                setAssistantTrainerIds((current) =>
+                  current.filter((id) => id !== event.target.value),
+                );
+              }}
+            >
+              <option value="">Bitte wählen</option>
+              {trainers.map((trainer) => (
+                <option key={trainer.id} value={trainer.id}>
+                  {trainer.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <fieldset>
+            <legend>Assistenztrainer · optional</legend>
+            {trainers
+              .filter((trainer) => trainer.id !== responsibleTrainerId)
+              .map((trainer) => (
+                <label className="check-row" key={trainer.id}>
+                  <input
+                    type="checkbox"
+                    checked={assistantTrainerIds.includes(trainer.id)}
+                    onChange={() =>
+                      toggleId(assistantTrainerIds, trainer.id, setAssistantTrainerIds)
+                    }
+                  />
+                  {trainer.name}
+                </label>
+              ))}
+          </fieldset>
+          <div className="action-stack">
+            <PrimaryButton onClick={() => setStep(3)}>Anwesenheit erfassen</PrimaryButton>
+            <SecondaryButton onClick={() => setStep(1)}>Zurück</SecondaryButton>
+          </div>
+        </div>
+      ) : null}
+      {step === 3 ? (
+        <div className="retrospective-step">
+          <p className="section-label">Mitglieder und Probetraining</p>
+          <div className="retrospective-attendance">
+            {[
+              ...members
+                .filter((member) => member.active)
+                .map((member) => ({ id: member.id, label: member.name, kind: "Mitglied" })),
+              ...trialParticipants
+                .filter((person) => person.active && person.membershipStatus === "TRIAL")
+                .map((person) => ({
+                  id: person.id,
+                  label: person.displayName,
+                  kind: "Probetraining",
+                })),
+            ]
+              .filter(
+                (person) =>
+                  person.id !== responsibleTrainerId && !assistantTrainerIds.includes(person.id),
+              )
+              .map((person) => (
+                <label className="check-row" key={person.id}>
+                  <input
+                    type="checkbox"
+                    checked={participantIds.includes(person.id)}
+                    onChange={() => toggleId(participantIds, person.id, setParticipantIds)}
+                  />
+                  <span>
+                    <strong>{person.label}</strong>
+                    <small>{person.kind}</small>
+                  </span>
+                </label>
+              ))}
+          </div>
+          {blockedTrials.length ? (
+            <div className="validation-box" role="alert">
+              <strong>Speichern blockiert</strong>
+              <ul>
+                {blockedTrials.map((entry) => (
+                  <li key={entry.participantId}>
+                    {entry.displayName}: {entry.reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          <div className="action-stack">
+            <PrimaryButton disabled={blockedTrials.length > 0} onClick={() => setStep(4)}>
+              Liste prüfen
+            </PrimaryButton>
+            <SecondaryButton onClick={() => setStep(2)}>Zurück</SecondaryButton>
+          </div>
+        </div>
+      ) : null}
+      {step === 4 ? (
+        <div className="retrospective-review">
+          <dl className="completion-details">
+            <div>
+              <dt>Einheit</dt>
+              <dd>{name}</dd>
+            </div>
+            <div>
+              <dt>Datum und Zeit</dt>
+              <dd>
+                {date} · {startTime}–{endTime}
+              </dd>
+            </div>
+            <div>
+              <dt>Dojo</dt>
+              <dd>{dojo}</dd>
+            </div>
+            <div>
+              <dt>Anwesend</dt>
+              <dd>{1 + assistantTrainerIds.length + participantIds.length} Personen</dd>
+            </div>
+            <div>
+              <dt>Grund</dt>
+              <dd>{reason}</dd>
+            </div>
+          </dl>
+          <div className="success-box">
+            <CheckCircle2 aria-hidden="true" />
+            Die Einheit wird als abgeschlossen gespeichert und in Historie, Auswertung, Vergütung
+            und Audit berücksichtigt.
+          </div>
+          <div className="action-stack">
+            <PrimaryButton onClick={() => onSave(input())}>
+              Nachtrag speichern und abschließen
+            </PrimaryButton>
+            <SecondaryButton onClick={() => setStep(3)}>Anwesenheit bearbeiten</SecondaryButton>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

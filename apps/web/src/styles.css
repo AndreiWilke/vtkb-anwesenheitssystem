@@ -853,18 +853,20 @@ input {
   border: 1px solid #7b8492;
   border-radius: 50%;
 }
-.belt-weiss      { background: #fff; }
-.belt-weiss_rot  { background: linear-gradient(90deg, #fff 50%, #e53935 50%); }
-.belt-gelb       { background: #f4d430; }
-.belt-gelb_orange{ background: linear-gradient(90deg, #f4d430 50%, #ed8b22 50%); }
-.belt-orange     { background: #ed8b22; }
-.belt-orange_gruen { background: linear-gradient(90deg, #ed8b22 50%, #188a51 50%); }
-.belt-gruen      { background: #188a51; }
-.belt-gruen_blau { background: linear-gradient(90deg, #188a51 50%, #3479c9 50%); }
-.belt-blau       { background: #3479c9; }
-.belt-blau_braun { background: linear-gradient(90deg, #3479c9 50%, #795033 50%); }
-.belt-braun      { background: #795033; }
-.belt-schwarz    { background: #111827; }
+.belt-weiss        { background: #ffffff; }
+.belt-weiss_rot    { background: linear-gradient(90deg, #ffffff 50%, #c62828 50%); }
+.belt-weiss_gelb   { background: linear-gradient(90deg, #ffffff 50%, #f2c200 50%); } /* Paket 1.7 */
+.belt-gelb         { background: #f2c200; }
+.belt-gelb_orange  { background: linear-gradient(90deg, #f2c200 50%, #e07b1e 50%); }
+.belt-orange       { background: #e07b1e; }
+.belt-orange_gruen { background: linear-gradient(90deg, #e07b1e 50%, #2f8a4e 50%); }
+.belt-gruen        { background: #2f8a4e; }
+.belt-gruen_blau   { background: linear-gradient(90deg, #2f8a4e 50%, #2f6fb0 50%); }
+.belt-blau         { background: #2f6fb0; }
+.belt-blau_braun   { background: linear-gradient(90deg, #2f6fb0 50%, #6e4327 50%); }
+.belt-braun        { background: #6e4327; }
+.belt-violett      { background: #6b4a9e; }                                          /* Paket 1.7 */
+.belt-schwarz      { background: #1a1a1a; }
 .action-stack {
   display: grid;
   gap: 10px;

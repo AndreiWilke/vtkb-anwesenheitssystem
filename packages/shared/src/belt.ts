@@ -38,27 +38,29 @@ export interface BeltLevel {
 export const BELT_CATALOG: readonly BeltLevel[] = [
   { color: "WEISS",        grade: "10. Kyu", sortOrder: 1 },
   { color: "WEISS_ROT",    grade: "9a. Kyu", sortOrder: 2 },
-  { color: "GELB",         grade: "9. Kyu",  sortOrder: 3 },
-  { color: "GELB_ORANGE",  grade: "8a. Kyu", sortOrder: 4 },
-  { color: "ORANGE",       grade: "8. Kyu",  sortOrder: 5 },
-  { color: "ORANGE_GRUEN", grade: "7a. Kyu", sortOrder: 6 },
-  { color: "GRUEN",        grade: "7. Kyu",  sortOrder: 7 },
-  { color: "GRUEN_BLAU",   grade: "6a. Kyu", sortOrder: 8 },
-  { color: "BLAU",         grade: "6. Kyu",  sortOrder: 9 },
-  { color: "BLAU_BRAUN",   grade: "5a. Kyu", sortOrder: 10 },
-  { color: "BRAUN",        grade: "5. Kyu",  sortOrder: 11 },
-  { color: "BRAUN",        grade: "4. Kyu",  sortOrder: 12 },
-  { color: "BRAUN",        grade: "3. Kyu",  sortOrder: 13 },
-  { color: "BRAUN",        grade: "2. Kyu",  sortOrder: 14 },
-  { color: "BRAUN",        grade: "1. Kyu",  sortOrder: 15 },
-  { color: "SCHWARZ",      grade: "1. Dan",  sortOrder: 16 },
-  { color: "SCHWARZ",      grade: "2. Dan",  sortOrder: 17 },
-  { color: "SCHWARZ",      grade: "3. Dan",  sortOrder: 18 },
+  { color: "WEISS_GELB",   grade: "9b. Kyu", sortOrder: 3 },  // Paket 1.7: Vereinsordnung
+  { color: "GELB",         grade: "9. Kyu",  sortOrder: 4 },
+  { color: "GELB_ORANGE",  grade: "8a. Kyu", sortOrder: 5 },
+  { color: "ORANGE",       grade: "8. Kyu",  sortOrder: 6 },
+  { color: "ORANGE_GRUEN", grade: "7a. Kyu", sortOrder: 7 },
+  { color: "GRUEN",        grade: "7. Kyu",  sortOrder: 8 },
+  { color: "GRUEN_BLAU",   grade: "6a. Kyu", sortOrder: 9 },
+  { color: "BLAU",         grade: "6. Kyu",  sortOrder: 10 },
+  { color: "BLAU_BRAUN",   grade: "5a. Kyu", sortOrder: 11 },
+  { color: "BRAUN",        grade: "5. Kyu",  sortOrder: 12 },
+  { color: "VIOLETT",      grade: "4. Kyu",  sortOrder: 13 },  // Paket 1.7: Vereinsordnung
+  { color: "BRAUN",        grade: "3. Kyu",  sortOrder: 14 },
+  { color: "BRAUN",        grade: "2. Kyu",  sortOrder: 15 },
+  { color: "BRAUN",        grade: "1. Kyu",  sortOrder: 16 },
+  { color: "SCHWARZ",      grade: "1. Dan",  sortOrder: 17 },
+  { color: "SCHWARZ",      grade: "2. Dan",  sortOrder: 18 },
+  { color: "SCHWARZ",      grade: "3. Dan",  sortOrder: 19 },
 ] as const;
 
 export const BELT_COLORS = [
   "WEISS",
   "WEISS_ROT",
+  "WEISS_GELB",
   "GELB",
   "GELB_ORANGE",
   "ORANGE",
@@ -68,6 +70,7 @@ export const BELT_COLORS = [
   "BLAU",
   "BLAU_BRAUN",
   "BRAUN",
+  "VIOLETT",
   "SCHWARZ",
 ] as const;
 

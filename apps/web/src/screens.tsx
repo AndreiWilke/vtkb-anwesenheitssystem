@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock3,
+  History,
   Info,
   MapPin,
   Search,
@@ -170,21 +171,31 @@ export function StartScreen({
 export function SessionSelectScreen({
   sessions,
   selectedId,
+  retroDate,
   onSelect,
   onBack,
 }: {
   sessions: readonly TrainingSessionMock[];
   selectedId: string;
+  retroDate?: string;
   onSelect: (session: TrainingSessionMock) => void;
   onBack: () => void;
 }) {
   return (
     <section>
       <PageHeading
-        title="Trainingseinheit auswählen"
+        title={retroDate ? "Nachtrag – Einheit auswählen" : "Trainingseinheit auswählen"}
         description="Kein fester Kader: Alle aktiven Mitglieder können jede Einheit besuchen."
         onBack={onBack}
       />
+      {retroDate ? (
+        <div className="demo-notice">
+          <History aria-hidden="true" />
+          <span>
+            <strong>Nachtragserfassung</strong> – Datum: {retroDate}
+          </span>
+        </div>
+      ) : null}
       <div className="session-list">
         {sessions.map((session) => {
           const status = sessionUiStatus(session);
@@ -344,20 +355,16 @@ export function ManualAttendanceScreen({
   members,
   attendance,
   responsibleId,
-  guestCount,
   onToggleAttendance,
   onRoleChange,
-  onGuests,
   onReview,
   onBack,
 }: {
   members: readonly Member[];
   attendance: AttendanceState;
   responsibleId: string;
-  guestCount: number;
   onToggleAttendance: (memberId: string) => void;
   onRoleChange: (memberId: string, role: SessionRole) => void;
-  onGuests: () => void;
   onReview: () => void;
   onBack: () => void;
 }) {
@@ -376,7 +383,7 @@ export function ManualAttendanceScreen({
       return true;
     });
   }, [gender, belt, deferredSearch, members, trainersOnly]);
-  const presentCount = presentMemberIds(attendance).length + guestCount;
+  const presentCount = presentMemberIds(attendance).length;
   return (
     <section>
       <PageHeading
@@ -503,9 +510,6 @@ export function ManualAttendanceScreen({
         })}
       </div>
       <div className="action-stack">
-        <SecondaryButton onClick={onGuests}>
-          <UserPlus aria-hidden="true" /> Gäste und Probetraining ({guestCount})
-        </SecondaryButton>
         <PrimaryButton onClick={onReview}>
           Gesamtliste prüfen <ArrowRight aria-hidden="true" />
         </PrimaryButton>
@@ -1143,12 +1147,14 @@ export function ManagementScreen({
   onNewMember,
   onBeltReport,
   onBeltSuggestions,
+  onRetroEntry,
 }: {
   openBeltSuggestionsCount: number;
   onTrialList: () => void;
   onNewMember: () => void;
   onBeltReport: () => void;
   onBeltSuggestions: () => void;
+  onRetroEntry: () => void;
 }) {
   return (
     <section className="management-screen">
@@ -1156,6 +1162,18 @@ export function ManagementScreen({
         title="Verwaltung"
         description="Mitglieder, Probetraining und Gürtelverwaltung"
       />
+
+      <div className="mgmt-section">
+        <h2>Training</h2>
+        <button className="mgmt-card" type="button" onClick={onRetroEntry}>
+          <History aria-hidden="true" />
+          <span>
+            <strong>Nachtrag erfassen</strong>
+            <small>Anwesenheit für ein vergangenes Training nachträglich eintragen</small>
+          </span>
+          <ChevronRight aria-hidden="true" />
+        </button>
+      </div>
 
       <div className="mgmt-section">
         <h2>Probetraining</h2>
@@ -1203,6 +1221,70 @@ export function ManagementScreen({
           </span>
           <ChevronRight aria-hidden="true" />
         </button>
+      </div>
+    </section>
+  );
+}
+
+export function RetroDateSelectScreen({
+  onSelect,
+  onBack,
+}: {
+  onSelect: (date: string) => void;
+  onBack: () => void;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [date, setDate] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const handleContinue = () => {
+    if (!date) {
+      setError("Bitte ein Datum auswählen.");
+      return;
+    }
+    if (date >= today) {
+      setError("Das Datum muss in der Vergangenheit liegen.");
+      return;
+    }
+    onSelect(date);
+  };
+
+  return (
+    <section>
+      <PageHeading
+        title="Nachtragserfassung"
+        description="Anwesenheit für ein vergangenes Training nachträglich eintragen."
+        onBack={onBack}
+      />
+      <div className="demo-notice">
+        <Info aria-hidden="true" />
+        <span>
+          Trainingseinheiten werden für das gewählte Datum generiert. Der vollständige
+          Erfassungsworkflow läuft wie gewohnt ab.
+        </span>
+      </div>
+      <div className="form-grid">
+        <label>
+          <span>Trainingsdatum</span>
+          <input
+            max={
+              new Date(new Date().setDate(new Date().getDate() - 1)).toISOString().slice(0, 10)
+            }
+            type="date"
+            value={date}
+            onChange={(event) => {
+              setDate(event.target.value);
+              setError(null);
+            }}
+          />
+        </label>
+        {error ? <p className="form-error">{error}</p> : null}
+      </div>
+      <div className="action-stack">
+        <PrimaryButton disabled={!date} onClick={handleContinue}>
+          Einheit auswählen <ArrowRight aria-hidden="true" />
+        </PrimaryButton>
+        <SecondaryButton onClick={onBack}>Abbrechen</SecondaryButton>
       </div>
     </section>
   );

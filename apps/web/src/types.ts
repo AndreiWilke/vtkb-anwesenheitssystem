@@ -27,7 +27,7 @@ export type BeltSuggestion = SharedBeltSuggestion;
 export type TrialParticipant = SharedTrialParticipant;
 
 export type Gender = "MAENNLICH" | "WEIBLICH";
-export type BeltColor = "WEISS" | "WEISS_ROT" | "GELB" | "GELB_ORANGE" | "ORANGE" | "ORANGE_GRUEN" | "GRUEN" | "GRUEN_BLAU" | "BLAU" | "BLAU_BRAUN" | "BRAUN" | "SCHWARZ";
+export type BeltColor = "WEISS" | "WEISS_ROT" | "WEISS_GELB" | "GELB" | "GELB_ORANGE" | "ORANGE" | "ORANGE_GRUEN" | "GRUEN" | "GRUEN_BLAU" | "BLAU" | "BLAU_BRAUN" | "BRAUN" | "VIOLETT" | "SCHWARZ";
 export type SessionUiStatus = "BEVORSTEHEND" | "LAEUFT" | "BEENDET";
 
 /**
@@ -160,7 +160,6 @@ export type AppScreen =
   | "LEADERSHIP"
   | "CAPTURE_METHOD"
   | "MANUAL"
-  | "GUESTS"
   | "PHOTO_DEMO"
   | "PHOTO_REVIEW"
   | "SUMMARY"
@@ -183,4 +182,6 @@ export type AppScreen =
   | "BELT_REPORT"
   | "BELT_SIM_DEMO"
   // Verwaltungs-Hub
-  | "MANAGEMENT";
+  | "MANAGEMENT"
+  // Paket 1.6
+  | "RETRO_DATE_SELECT";

@@ -20,8 +20,8 @@ import {
 // ---------------------------------------------------------------------------
 
 describe("BELT_CATALOG", () => {
-  it("enthaelt 12 Eintraege", () => {
-    expect(BELT_CATALOG).toHaveLength(12);
+  it("enthaelt 19 Eintraege (inkl. Halbguertel, WEISS_GELB und VIOLETT)", () => {
+    expect(BELT_CATALOG).toHaveLength(19);
   });
 
   it("hat aufsteigende sortOrder-Werte", () => {
@@ -45,10 +45,10 @@ describe("BELT_CATALOG", () => {
 
 describe("gradesForColor", () => {
   it("gibt einen Grad fuer WEISS zurueck", () => {
-    expect(gradesForColor("WEISS")).toEqual(["9. Kyu"]);
+    expect(gradesForColor("WEISS")).toEqual(["10. Kyu"]);
   });
 
-  it("gibt vier Grade fuer BRAUN zurueck", () => {
+  it("gibt vier Grade fuer BRAUN zurueck (4. Kyu ist jetzt VIOLETT)", () => {
     expect(gradesForColor("BRAUN")).toHaveLength(4);
   });
 
@@ -65,9 +65,9 @@ describe("validateBeltChange", () => {
   const baseInput = {
     personId: "member-01",
     previousBeltColor: "GRUEN",
-    previousBeltGrade: "6. Kyu",
+    previousBeltGrade: "7. Kyu",
     newBeltColor: "BLAU",
-    newBeltGrade: "5. Kyu",
+    newBeltGrade: "6. Kyu",
     effectiveFrom: "2026-06-21",
     recordedBy: "Trainer Demo",
     recordedAt: "2026-06-21T19:00:00.000Z",
@@ -113,7 +113,7 @@ describe("validateBeltChange", () => {
     const result = validateBeltChange({
       ...baseInput,
       newBeltColor: "GRUEN",
-      newBeltGrade: "6. Kyu",
+      newBeltGrade: "7. Kyu",
     });
     expect(result.valid).toBe(false);
     expect(result.issues.join(" ")).toContain("identisch");
@@ -129,9 +129,9 @@ describe("createBeltHistoryEntry", () => {
     const entry = createBeltHistoryEntry("belt-0001", {
       personId: "member-01",
       previousBeltColor: "GRUEN",
-      previousBeltGrade: "6. Kyu",
+      previousBeltGrade: "7. Kyu",
       newBeltColor: "BLAU",
-      newBeltGrade: "5. Kyu",
+      newBeltGrade: "6. Kyu",
       effectiveFrom: "2026-06-21",
       recordedBy: "Trainer Demo",
       recordedAt: "2026-06-21T19:00:00.000Z",
@@ -180,9 +180,9 @@ describe("createBeltHistoryEntry", () => {
 // ---------------------------------------------------------------------------
 
 describe("suggestNextBelt", () => {
-  it("schlaegt GELB nach WEISS vor", () => {
-    const hint = suggestNextBelt("WEISS", "9. Kyu");
-    expect(hint.nextLevel?.color).toBe("GELB");
+  it("schlaegt WEISS_ROT nach WEISS vor", () => {
+    const hint = suggestNextBelt("WEISS", "10. Kyu");
+    expect(hint.nextLevel?.color).toBe("WEISS_ROT");
     expect(hint.isHighest).toBe(false);
   });
 
@@ -198,8 +198,8 @@ describe("suggestNextBelt", () => {
     expect(hint.nextLevel).toBeNull();
   });
 
-  it("schlaegt korrekten naechsten Grad innerhalb BRAUN vor", () => {
-    const hint = suggestNextBelt("BRAUN", "4. Kyu");
+  it("schlaegt nach VIOLETT den naechsten BRAUN-Grad vor", () => {
+    const hint = suggestNextBelt("VIOLETT", "4. Kyu");
     expect(hint.nextLevel?.grade).toBe("3. Kyu");
     expect(hint.nextLevel?.color).toBe("BRAUN");
   });
@@ -226,9 +226,9 @@ describe("calculateBeltDistribution", () => {
     expect(gelb.percent).toBe(25);
   });
 
-  it("gibt alle sieben Farben zurueck auch wenn count 0", () => {
+  it("gibt alle vierzehn Farben zurueck auch wenn count 0 (inkl. WEISS_GELB + VIOLETT)", () => {
     const dist = calculateBeltDistribution(["WEISS"]);
-    expect(dist).toHaveLength(7);
+    expect(dist).toHaveLength(14);
     expect(dist.find((e) => e.color === "SCHWARZ")!.count).toBe(0);
   });
 });

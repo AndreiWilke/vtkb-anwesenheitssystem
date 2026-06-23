@@ -298,12 +298,12 @@ export function TrialNewScreen({
             </select>
           </label>
           {field("birthDate", "Geburtsdatum", "date")}
+          {field("contactPhone", "Telefonnummer", "tel")}
         </fieldset>
 
         <fieldset className="form-group">
           <legend>Kontakt (optional)</legend>
           {field("contactName", "Kontaktperson")}
-          {field("contactPhone", "Telefon")}
           {field("contactEmail", "E-Mail")}
         </fieldset>
 
@@ -791,6 +791,7 @@ interface DirectForm {
   lastName: string;
   gender: "MAENNLICH" | "WEIBLICH";
   birthDate: string;
+  contactPhone: string;
   beltIndex: string;
   qualification: string;
   note: string;
@@ -801,6 +802,7 @@ const emptyDirectForm: DirectForm = {
   lastName: "",
   gender: "MAENNLICH",
   birthDate: "",
+  contactPhone: "",
   beltIndex: "0",
   qualification: MemberQualification.NONE,
   note: "",
@@ -903,6 +905,7 @@ export function DirectMemberNewScreen({
             </select>
           </label>
           {field("birthDate", "Geburtsdatum", "date")}
+          {field("contactPhone", "Telefonnummer", "tel")}
         </fieldset>
 
         <fieldset className="form-group">

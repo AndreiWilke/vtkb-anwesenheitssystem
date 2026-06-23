@@ -53,46 +53,8 @@ describe("klickbarer Paket-1-Prototyp", () => {
     ).toBeInTheDocument();
   });
 
-  it("erfasst einen Gast manuell ohne biometrische Felder", async () => {
-    const user = userEvent.setup();
-    render(<App />);
-    await openManualAttendance(user);
-    await user.click(screen.getByRole("button", { name: /Gäste und Probetraining/ }));
-    await user.type(screen.getByLabelText("Vorname oder Anzeigename"), "Gast A");
-    await user.click(screen.getByRole("button", { name: "Manuell hinzufügen" }));
-    expect(screen.getByText("Gast A")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Keine Einwilligung, keine Referenzbilder, keine Enrollment-ID/),
-    ).toBeInTheDocument();
-  });
-
-  it("vergibt nach Entfernen und erneutem Hinzufügen weiterhin eindeutige Gast-IDs", async () => {
-    const user = userEvent.setup();
-    render(<App />);
-    await openManualAttendance(user);
-    await user.click(screen.getByRole("button", { name: /Gäste und Probetraining/ }));
-
-    const nameInput = screen.getByLabelText("Vorname oder Anzeigename");
-    await user.type(nameInput, "Gast Eins");
-    await user.click(screen.getByRole("button", { name: "Manuell hinzufügen" }));
-    await user.type(nameInput, "Gast Zwei");
-    await user.click(screen.getByRole("button", { name: "Manuell hinzufügen" }));
-    const firstIds = screen
-      .getAllByTestId("guest-row")
-      .map((row) => row.getAttribute("data-guest-id"));
-    await user.click(screen.getByRole("button", { name: "Gast Eins entfernen" }));
-    await user.type(nameInput, "Gast Drei");
-    await user.click(screen.getByRole("button", { name: "Manuell hinzufügen" }));
-    const finalIds = screen
-      .getAllByTestId("guest-row")
-      .map((row) => row.getAttribute("data-guest-id"));
-
-    expect(new Set([...firstIds, ...finalIds]).size).toBe(3);
-    expect(finalIds).toEqual(["guest-002", "guest-003"]);
-    await user.click(screen.getByRole("button", { name: "Zur Anwesenheitsliste" }));
-    await user.click(screen.getByRole("button", { name: /Gesamtliste prüfen/ }));
-    expect(screen.getByRole("button", { name: "Liste geprüft und speichern" })).toBeEnabled();
-  });
+  // Paket 1.6: Manuelle Gasterfassung wurde entfernt (kein "Gäste und Probetraining"-Button mehr).
+  // Gäste können weiterhin über den Fotoassistenz-Demo-Flow erfasst werden.
 
   it("blockiert die Speicherung mit offenen Foto-Demovorschlaegen", async () => {
     const user = userEvent.setup();

@@ -29,10 +29,16 @@ const BASE_NAV: ReadonlyArray<{ label: string; screen: AppScreen; icon: typeof H
 const MGMT_NAV_ITEM = { label: "Verwaltung", screen: "MANAGEMENT" as AppScreen, icon: Settings };
 
 export function ToriiMark(): ReactNode {
+  // Paket 1.7: VTKBLogo.png wird bevorzugt; ToriiMark als Fallback beibehalten
   return (
-    <svg aria-hidden="true" className="torii-mark" viewBox="0 0 48 48">
-      <path d="M7 10h34M11 16h26M14 16v24M34 16v24M10 40h28M20 23v17M28 23v17" />
-    </svg>
+    <img
+      src={`${import.meta.env.BASE_URL}VTKBLogo.png`}
+      alt=""
+      aria-hidden="true"
+      width="36"
+      height="36"
+      style={{ objectFit: "contain", borderRadius: "4px" }}
+    />
   );
 }
 
@@ -52,7 +58,7 @@ export function AppShell({
           <ToriiMark />
           <span>
             <strong>VTKB Berlin</strong>
-            <small>Anwesenheit · lokale Demo</small>
+            <small>ANWESENHEIT</small>
           </span>
         </button>
         <div className="header-actions">
@@ -163,6 +169,7 @@ export function MemberAvatar({ initials, muted = false }: { initials: string; mu
 const beltLabels: Record<BeltColor, string> = {
   WEISS: "Weiß",
   WEISS_ROT: "Weiß-Rot",
+  WEISS_GELB: "Weiß-Gelb",
   GELB: "Gelb",
   GELB_ORANGE: "Gelb-Orange",
   ORANGE: "Orange",
@@ -172,6 +179,7 @@ const beltLabels: Record<BeltColor, string> = {
   BLAU: "Blau",
   BLAU_BRAUN: "Blau-Braun",
   BRAUN: "Braun",
+  VIOLETT: "Violett",
   SCHWARZ: "Schwarz",
 };
 

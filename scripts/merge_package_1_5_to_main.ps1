@@ -1,4 +1,5 @@
 $ErrorActionPreference = "Continue"
+Set-Location "D:\Anwesenheit"
 $feature = "feature/package-1-5-belt-gender-updates"
 
 Write-Host "==> Wechsle auf main..."

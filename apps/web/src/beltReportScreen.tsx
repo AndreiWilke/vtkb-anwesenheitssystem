@@ -219,7 +219,7 @@ export function BeltReportScreen({
           <thead>
             <tr>
               <th>Name</th>
-              <th>Altersgruppe</th>
+              <th>Geschlecht</th>
               <th>Gürtel</th>
               <th>Prüfungshinweis</th>
               <th>Letzter Wechsel</th>

@@ -175,7 +175,7 @@ export function TrialReportScreen({
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Altersgruppe</th>
+                <th>Geschlecht</th>
                 <th>Einheiten</th>
                 <th>Vertrag</th>
                 <th>Status</th>

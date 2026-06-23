@@ -368,7 +368,7 @@ describe("Status, Rollen, Snapshot und Export", () => {
       month: "2026-06",
     });
     const attendance = attendanceCsv(summaries, "Juni 2026");
-    expect(attendance).toContain("Mitglied;Altersgruppe;Gürtelfarbe");
+    expect(attendance).toContain("Mitglied;Geschlecht;Gürtelfarbe");
     const calculation = calculateSettlement(
       "member-01",
       "2026-06",

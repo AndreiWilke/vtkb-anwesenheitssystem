@@ -274,9 +274,9 @@ describe("Paket-1.4-Guertelverwaltung", () => {
     const result = validateBeltChange({
       personId: "member-01",
       previousBeltColor: "GRUEN",
-      previousBeltGrade: "6. Kyu",
+      previousBeltGrade: "7. Kyu",
       newBeltColor: "BLAU",
-      newBeltGrade: "5. Kyu",
+      newBeltGrade: "6. Kyu",
       effectiveFrom: "2026-06-21",
       recordedBy: "Trainer Demo",
       recordedAt: "2026-06-21T19:00:00.000Z",
@@ -289,9 +289,9 @@ describe("Paket-1.4-Guertelverwaltung", () => {
     const entry = createBeltHistoryEntry("belt-test-01", {
       personId: "member-05",
       previousBeltColor: "ORANGE",
-      previousBeltGrade: "7. Kyu",
+      previousBeltGrade: "8. Kyu",
       newBeltColor: "GRUEN",
-      newBeltGrade: "6. Kyu",
+      newBeltGrade: "7. Kyu",
       effectiveFrom: "2026-06-21",
       recordedBy: "Trainer Demo",
       recordedAt: "2026-06-21T19:00:00.000Z",
@@ -302,9 +302,9 @@ describe("Paket-1.4-Guertelverwaltung", () => {
     expect(entry.personId).toBe("member-05");
   });
 
-  it("suggestNextBelt gibt GELB nach WEISS zurueck", () => {
-    const hint = suggestNextBelt("WEISS", "9. Kyu");
-    expect(hint.nextLevel?.color).toBe("GELB");
+  it("suggestNextBelt gibt WEISS_ROT nach WEISS zurueck", () => {
+    const hint = suggestNextBelt("WEISS", "10. Kyu");
+    expect(hint.nextLevel?.color).toBe("WEISS_ROT");
     expect(hint.isHighest).toBe(false);
   });
 
@@ -314,11 +314,11 @@ describe("Paket-1.4-Guertelverwaltung", () => {
     expect(hint.nextLevel).toBeNull();
   });
 
-  it("calculateBeltDistribution liefert sieben Eintraege", () => {
+  it("calculateBeltDistribution liefert zwoelf Eintraege (inkl. Halbguertel)", () => {
     const dist = calculateBeltDistribution(
       members.filter((m) => m.active).map((m) => m.beltColor),
     );
-    expect(dist).toHaveLength(7);
+    expect(dist).toHaveLength(12);
     const total = dist.reduce((sum, e) => sum + e.count, 0);
     expect(total).toBe(members.filter((m) => m.active).length);
   });

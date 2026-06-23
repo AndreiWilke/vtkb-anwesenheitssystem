@@ -732,7 +732,7 @@ export function attendanceCsv(
   return csv([
     [
       "Mitglied",
-      "Altersgruppe",
+      "Geschlecht",
       "Gürtelfarbe",
       "Gürtelgrad",
       "Zeitraum",
@@ -880,8 +880,8 @@ export function trialCsv(summaries: readonly TrialSummary[]): string {
   return csv([
     [
       "Name",
-      "Altersgruppe",
-      "Geburtsjahr",
+      "Geschlecht",
+      "Geburtsdatum",
       "Erstes Training",
       "Letztes Training",
       "Besuchte Einheiten",
@@ -931,7 +931,7 @@ export function beltReportCsv(
   return csv([
     [
       "Name",
-      "Altersgruppe",
+      "Geschlecht",
       "Gürtelfarbe",
       "Gürtelgrad",
       "Letzter Wechsel",

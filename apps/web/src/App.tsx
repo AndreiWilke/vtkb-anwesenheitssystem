@@ -5,13 +5,13 @@ import { AppShell } from "./components";
 import {
   CaptureMethodScreen,
   CompleteScreen,
-  GuestScreen,
   LeadershipScreen,
   LoginScreen,
   ManagementScreen,
   ManualAttendanceScreen,
   PhotoDemoScreen,
   PhotoReviewScreen,
+  RetroDateSelectScreen,
   SessionSelectScreen,
   StartScreen,
   SummaryScreen,
@@ -86,7 +86,11 @@ function proposalMemberIds(proposals: readonly PhotoProposal[]): Set<string> {
 }
 
 export default function App() {
-  const sessions = useMemo(() => createTodaySessions(), []);
+  const [retroDate, setRetroDate] = useState<string | null>(null);
+  const sessions = useMemo(
+    () => createTodaySessions(retroDate ? new Date(`${retroDate}T12:00:00`) : new Date()),
+    [retroDate],
+  );
 
   // Anwesenheits-Workflow
   const [screen, setScreen] = useState<AppScreen>("START");
@@ -144,6 +148,7 @@ export default function App() {
     () => canCompleteSession(selectedSession, attendance, guests, unresolvedProposalCount),
     [selectedSession, attendance, guests, unresolvedProposalCount],
   );
+
   const workflowMessages = [
     ...(workflow.captureMethod ? [] : ["Es wurde noch keine Erfassungsart begonnen."]),
     ...(workflow.captureActivityRecorded
@@ -268,11 +273,6 @@ export default function App() {
       ...current,
       [memberId]: { presenceStatus: PresenceStatus.PRESENT, sessionRole: role },
     }));
-    markCaptureActivity();
-  };
-
-  const addGuest = (guest: Omit<LocalGuest, "id">) => {
-    setGuests((current) => [...current, { ...guest, id: guestIdFactory() }]);
     markCaptureActivity();
   };
 
@@ -449,9 +449,13 @@ export default function App() {
     case "SESSION_SELECT":
       content = (
         <SessionSelectScreen
+          retroDate={retroDate ?? undefined}
           selectedId={selectedSession.id}
           sessions={sessions}
-          onBack={() => setScreen("START")}
+          onBack={() => {
+            if (retroDate) setScreen("RETRO_DATE_SELECT");
+            else setScreen("START");
+          }}
           onSelect={selectSession}
         />
       );
@@ -482,27 +486,12 @@ export default function App() {
       content = (
         <ManualAttendanceScreen
           attendance={attendance}
-          guestCount={guests.length}
           members={members}
           responsibleId={selectedSession.responsibleTrainerId}
           onBack={() => setScreen("CAPTURE_METHOD")}
-          onGuests={() => setScreen("GUESTS")}
           onReview={reviewAttendance}
           onRoleChange={changeRole}
           onToggleAttendance={toggleAttendance}
-        />
-      );
-      break;
-    case "GUESTS":
-      content = (
-        <GuestScreen
-          guests={guests}
-          onAdd={addGuest}
-          onBack={() => setScreen("MANUAL")}
-          onRemove={(id) => {
-            setGuests((current) => current.filter((guest) => guest.id !== id));
-            markCaptureActivity();
-          }}
         />
       );
       break;
@@ -554,8 +543,14 @@ export default function App() {
           guests={guests}
           members={members}
           session={selectedSession}
-          onHome={() => setScreen("START")}
-          onNext={startNextSession}
+          onHome={() => {
+            setRetroDate(null);
+            setScreen("START");
+          }}
+          onNext={() => {
+            setRetroDate(null);
+            startNextSession();
+          }}
           onOverview={() => setScreen("STATS")}
         />
       );
@@ -812,6 +807,25 @@ export default function App() {
           onNewMember={() => setScreen("MEMBER_DIRECT_NEW")}
           onBeltReport={() => setScreen("BELT_REPORT")}
           onBeltSuggestions={() => setScreen("BELT_SUGGESTION_REVIEW")}
+          onRetroEntry={() => setScreen("RETRO_DATE_SELECT")}
+        />
+      );
+      break;
+
+    // ------------------------------------------------------------------
+    // Paket 1.6 – Nachtragserfassung
+    // ------------------------------------------------------------------
+    case "RETRO_DATE_SELECT":
+      content = (
+        <RetroDateSelectScreen
+          onSelect={(date) => {
+            setRetroDate(date);
+            setScreen("SESSION_SELECT");
+          }}
+          onBack={() => {
+            setRetroDate(null);
+            setScreen("MANAGEMENT");
+          }}
         />
       );
       break;

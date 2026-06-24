@@ -31,72 +31,111 @@ import {
 import {
   canCompleteSession,
   createInitialAttendance,
+  attendanceRecordsForSession,
+  hasParallelSessionChoice,
   presentMemberIds,
   sessionUiStatus,
   suggestSession,
 } from "./workflow";
+import { initialHistoricalSessions as historicalSessions } from "./reportingMockData";
+import { computeTrialSessionCount } from "./trialWorkflow";
 
 describe("Paket-1-Workflow", () => {
   it("schlaegt die in Europe/Berlin laufende Einheit unabhaengig von der Systemzeitzone vor", () => {
-    const now = new Date("2026-06-20T16:00:00.000Z");
+    const now = new Date("2026-06-25T16:00:00.000Z");
     const sessions = createTodaySessions(now);
-    expect(suggestSession(sessions, now).id).toBe("session-main");
-    expect(sessions[1]?.startsAt.toISOString()).toBe("2026-06-20T15:30:00.000Z");
-    expect(sessions[1]?.endsAt.toISOString()).toBe("2026-06-20T17:00:00.000Z");
+    expect(suggestSession(sessions, now).scheduledSlotId).toBe("thu-musashi-1800");
+    expect(sessions[1]?.startsAt.toISOString()).toBe("2026-06-25T16:00:00.000Z");
+    expect(sessions[1]?.endsAt.toISOString()).toBe("2026-06-25T17:00:00.000Z");
   });
 
   it("schlaegt vor Trainingsbeginn die naechste bevorstehende Einheit vor", () => {
-    const now = new Date("2026-06-20T13:00:00.000Z");
+    const now = new Date("2026-06-25T13:00:00.000Z");
     const sessions = createTodaySessions(now);
     expect(sessionUiStatus(sessions[0]!, now)).toBe("BEVORSTEHEND");
-    expect(suggestSession(sessions, now).id).toBe("session-early");
+    expect(suggestSession(sessions, now).scheduledSlotId).toBe("thu-musashi-1700");
   });
 
   it("wechselt bei direkt aufeinanderfolgenden Einheiten exakt um 19 Uhr Berlin", () => {
-    const now = new Date("2026-06-20T17:00:00.000Z");
+    const now = new Date("2026-06-25T17:00:00.000Z");
     const sessions = createTodaySessions(now);
     expect(sessionUiStatus(sessions[1]!, now)).toBe("BEENDET");
     expect(sessionUiStatus(sessions[2]!, now)).toBe("LAEUFT");
-    expect(suggestSession(sessions, now).id).toBe("session-following");
+    expect(suggestSession(sessions, now).scheduledSlotId).toBe("thu-musashi-1900");
   });
 
   it("bleibt bei gesetzter Prozesszeitzone UTC auf Europe/Berlin reproduzierbar", () => {
     const previousTimeZone = process.env.TZ;
     process.env.TZ = "UTC";
     try {
-      const now = new Date("2026-06-20T16:00:00.000Z");
+      const now = new Date("2026-06-25T16:00:00.000Z");
       const sessions = createTodaySessions(now);
-      expect(suggestSession(sessions, now).id).toBe("session-main");
-      expect(sessions[2]?.startsAt.toISOString()).toBe("2026-06-20T17:00:00.000Z");
+      expect(suggestSession(sessions, now).scheduledSlotId).toBe("thu-musashi-1800");
+      expect(sessions[2]?.startsAt.toISOString()).toBe("2026-06-25T17:00:00.000Z");
     } finally {
       if (previousTimeZone === undefined) delete process.env.TZ;
       else process.env.TZ = previousTimeZone;
     }
   });
 
+  it("sortiert parallele Mittwochseinheiten nach Beginn und Dojo und verlangt eine Auswahl", () => {
+    const sessions = createTodaySessions(new Date("2026-06-24T14:30:00.000Z"));
+    expect(sessions.map((session) => session.dojo)).toEqual(["Ebereschen Dojo", "Senshi Dojo"]);
+    expect(
+      sessions.every((session) => session.startsAt.toISOString() === "2026-06-24T14:00:00.000Z"),
+    ).toBe(true);
+    expect(hasParallelSessionChoice(sessions, sessions[0]!)).toBe(true);
+  });
+
+  it("übernimmt neutrale Bezeichnungen aus allen Montagseinheiten", () => {
+    const sessions = createTodaySessions(new Date("2026-06-22T16:30:00.000Z"));
+    expect(sessions).toHaveLength(3);
+    expect(sessions.every(({ name }) => name === "Training")).toBe(true);
+    expect(sessions.every(({ trainingType }) => trainingType === "ALLGEMEINES_TRAINING")).toBe(
+      true,
+    );
+  });
+
+  it("speichert den Dojo-Namen als unabhängigen historischen Snapshot", () => {
+    const concrete = createTodaySessions(new Date("2026-06-24T14:30:00.000Z"))[0]!;
+    const snapshot = {
+      dojoId: concrete.dojoId,
+      dojoNameSnapshot: concrete.dojoNameSnapshot,
+    };
+    const laterMasterData = { id: concrete.dojoId, name: "Später umbenannt" };
+    expect(laterMasterData.name).not.toBe(snapshot.dojoNameSnapshot);
+    expect(snapshot).toEqual({
+      dojoId: "dojo-ebereschen",
+      dojoNameSnapshot: "Ebereschen Dojo",
+    });
+  });
+
   it("verlangt genau einen verantwortlichen Trainer", () => {
-    const session = createTodaySessions(new Date("2026-06-20T18:00:00+02:00"))[1]!;
+    const session = createTodaySessions(new Date("2026-06-25T18:00:00+02:00"))[1]!;
     const attendance = createInitialAttendance(members, session);
     attendance[session.responsibleTrainerId] = {
       presenceStatus: PresenceStatus.ABSENT,
       sessionRole: null,
+      captureSource: "MANUAL",
     };
     expect(canCompleteSession(session, attendance, 0).allowed).toBe(false);
   });
 
   it("zaehlt einen Assistenztrainer nur einmal als anwesend", () => {
-    const session = createTodaySessions(new Date("2026-06-20T18:00:00+02:00"))[1]!;
+    const session = createTodaySessions(new Date("2026-06-25T18:00:00+02:00"))[1]!;
     const attendance = createInitialAttendance(members, session);
     attendance["member-05"] = {
       presenceStatus: PresenceStatus.PRESENT,
       sessionRole: SessionRole.ASSISTANT_TRAINER,
+      captureSource: "MANUAL",
     };
-    expect(presentMemberIds(attendance)).toHaveLength(2);
+    expect(presentMemberIds(attendance)).toHaveLength(3);
+    expect(attendance["member-06"]?.sessionRole).toBe(SessionRole.ASSISTANT_TRAINER);
     expect(canCompleteSession(session, attendance, 0).allowed).toBe(true);
   });
 
   it("blockiert den Abschluss bei ungeklaerten Foto-Demovorschlaegen", () => {
-    const session = createTodaySessions(new Date("2026-06-20T18:00:00+02:00"))[1]!;
+    const session = createTodaySessions(new Date("2026-06-25T18:00:00+02:00"))[1]!;
     const attendance = createInitialAttendance(members, session);
     const result = canCompleteSession(session, attendance, 2);
     expect(result.allowed).toBe(false);
@@ -110,7 +149,7 @@ describe("Paket-1-Workflow", () => {
   });
 
   it("blockiert den Abschluss, wenn ein gesperrter Probetrainingsteilnehmer anwesend ist", () => {
-    const session = createTodaySessions(new Date("2026-06-20T18:00:00+02:00"))[1]!;
+    const session = createTodaySessions(new Date("2026-06-25T18:00:00+02:00"))[1]!;
     const attendance = createInitialAttendance(members, session);
     const blockedEntries = [
       {
@@ -124,20 +163,51 @@ describe("Paket-1-Workflow", () => {
   });
 
   it("erlaubt Abschluss, wenn keine gesperrten Probetrainingsteilnehmer anwesend sind", () => {
-    const session = createTodaySessions(new Date("2026-06-20T18:00:00+02:00"))[1]!;
+    const session = createTodaySessions(new Date("2026-06-25T18:00:00+02:00"))[1]!;
     const attendance = createInitialAttendance(members, session);
     const result = canCompleteSession(session, attendance, 0, []);
     expect(result.allowed).toBe(true);
   });
 
-  it("Demo-Probetrainingsteilnehmer sind 6 fiktive Profile", () => {
-    expect(trialParticipants).toHaveLength(6);
+  it("Demo-Probetrainingsteilnehmer sind fiktive Profile", () => {
+    expect(trialParticipants).toHaveLength(7);
     expect(trialParticipants.every((p) => p.id.startsWith("trial-"))).toBe(true);
     expect(
       trialParticipants.every(
         (p) => p.lastName.includes("Probetraining") || p.lastName.includes("Probe"),
       ),
     ).toBe(true);
+  });
+
+  it("bildet die sechs Demo-Profile ausschließlich aus der kanonischen Historie als 0 bis 5 Besuche ab", () => {
+    expect(
+      trialParticipants
+        .slice(0, 6)
+        .map(
+          (participant) => computeTrialSessionCount(participant.id, historicalSessions).attended,
+        ),
+    ).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(computeTrialSessionCount("trial-007", historicalSessions).attended).toBe(4);
+  });
+
+  it("bewahrt gemischte manuelle und fotoassistierte Erfassungsquellen", () => {
+    const session = createTodaySessions(new Date("2026-06-25T18:00:00+02:00"))[1]!;
+    const attendance = createInitialAttendance(members, session);
+    attendance["member-09"] = {
+      presenceStatus: PresenceStatus.PRESENT,
+      sessionRole: SessionRole.PARTICIPANT,
+      captureSource: "PHOTO_ASSISTED",
+    };
+    attendance["member-10"] = {
+      presenceStatus: PresenceStatus.PRESENT,
+      sessionRole: SessionRole.PARTICIPANT,
+      captureSource: "MANUAL",
+    };
+    const records = attendanceRecordsForSession(session, attendance);
+    expect(records.find((record) => record.memberId === "member-09")?.captureSource).toBe(
+      "PHOTO_ASSISTED",
+    );
+    expect(records.find((record) => record.memberId === "member-10")?.captureSource).toBe("MANUAL");
   });
 
   it("trial-006 hat Vorstandsausnahme genutzt und ist gesperrt", () => {
@@ -154,7 +224,7 @@ describe("Paket-1-Workflow", () => {
     expect(mia).toBeDefined();
     expect(mia.membershipStatus).toBe(PersonMembershipStatus.ACTIVE_MEMBER);
     expect(mia.contractStatus).toBe(ContractStatus.MEMBERSHIP_ACTIVATED);
-    expect(mia.memberId).toBe("member-41");
+    expect(mia.memberId).toBe("trial-005");
   });
 });
 
@@ -197,6 +267,7 @@ describe("Paket-1.3-Konvertierung", () => {
     const result = convertTrialParticipantToMember({
       participant: trialBase,
       memberNumber: "M-1099",
+      existingMemberNumbers: [],
       qualification: MemberQualification.NONE,
       convertedBy: "Vorstand Demo",
       convertedAt: "2026-06-21T10:00:00.000Z",
@@ -210,6 +281,7 @@ describe("Paket-1.3-Konvertierung", () => {
     const participant = trialParticipants.find((p) => p.id === "trial-004")!;
     const result = grantBoardOverride({
       participant,
+      attendedTrialCount: 4,
       grantedBy: "Vorstand Demo",
       grantedAt: "2026-06-21T12:00:00.000Z",
       reason: "Ausnahme fuer Demo-Test",
@@ -228,6 +300,9 @@ describe("Paket-1.3-Konvertierung", () => {
       gender: "MAENNLICH",
       birthDate: "1985-03-10",
       memberNumber: "M-1099",
+      existingPersonIds: [],
+      existingMemberNumbers: [],
+      existingPersons: [],
       createdBy: "Vorstand Demo",
       createdAt: "2026-06-21T11:00:00.000Z",
     });
@@ -282,7 +357,7 @@ describe("Paket-1.4-Guertelverwaltung", () => {
       previousBeltColor: "ORANGE",
       previousBeltGrade: "8. Kyu",
       newBeltColor: "GRUEN",
-      newBeltGrade: "7. Kyu",
+      newBeltGrade: "6. Kyu",
       effectiveFrom: "2026-06-21",
       recordedBy: "Trainer Demo",
       recordedAt: "2026-06-21T19:00:00.000Z",

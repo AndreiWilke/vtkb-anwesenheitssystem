@@ -10,6 +10,7 @@ import React, { useState } from "react";
 import {
   BELT_LABELS,
   calculateBeltDistribution,
+  formatGermanDate,
   openBeltSuggestions,
   suggestNextBelt,
 } from "@vtkb/shared";
@@ -266,7 +267,7 @@ export function BeltReportScreen({
                       <span className="badge">–</span>
                     )}
                   </td>
-                  <td>{lastChange ?? "–"}</td>
+                  <td>{lastChange ? formatGermanDate(lastChange) : "–"}</td>
                   <td>
                     {hasOpenSuggestion ? (
                       <span className="badge badge--warn">Offen</span>

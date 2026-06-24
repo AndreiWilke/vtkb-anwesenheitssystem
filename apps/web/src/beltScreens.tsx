@@ -23,12 +23,16 @@ import {
   applyBeltSuggestionDecision,
   createBeltHistoryEntry,
   createBeltHistoryIdGenerator,
+  formatGermanDate,
+  isValidGermanDate,
+  parseGermanDate,
   simulateBeltColorSuggestion,
   suggestNextBelt,
   validateBeltChange,
 } from "@vtkb/shared";
 
 import type { BeltHistoryEntry, BeltSuggestion, Member } from "./types";
+import { GermanDateInput } from "./components";
 
 // ---------------------------------------------------------------------------
 // BeltHistoryScreen
@@ -190,7 +194,7 @@ export function BeltHistoryScreen({
                   {entry.effectiveFrom && (
                     <>
                       <dt>Datum</dt>
-                      <dd>{entry.effectiveFrom}</dd>
+                      <dd>{formatGermanDate(entry.effectiveFrom)}</dd>
                     </>
                   )}
                   <dt>Quelle</dt>
@@ -255,13 +259,18 @@ export function BeltChangeDialog({
 
   const handleSubmit = () => {
     if (!selected) return;
+    if (effectiveFrom && !isValidGermanDate(effectiveFrom)) {
+      setErrors(["Bitte ein gültiges Datum im Format TT.MM.JJJJ eingeben."]);
+      return;
+    }
+    const effectiveFromIso = effectiveFrom ? parseGermanDate(effectiveFrom) : null;
     const input = {
       personId: member.id,
       previousBeltColor: member.beltColor,
       previousBeltGrade: member.beltGrade,
       newBeltColor: selected.color,
       newBeltGrade: selected.grade,
-      ...(effectiveFrom ? { effectiveFrom } : {}),
+      ...(effectiveFromIso ? { effectiveFrom: effectiveFromIso } : {}),
       recordedBy: actorName,
       recordedAt: new Date().toISOString(),
       source: suggestedColor
@@ -305,10 +314,13 @@ export function BeltChangeDialog({
 
         <div className="form-field">
           <label>Gültig ab (optional)</label>
-          <input
-            type="date"
+          <GermanDateInput
+            aria-label="Gültig ab Gürteländerung"
             value={effectiveFrom}
-            onChange={(e) => setEffectiveFrom(e.target.value)}
+            onChange={(e) => {
+              setEffectiveFrom(e.target.value);
+              setErrors([]);
+            }}
           />
         </div>
 
@@ -392,12 +404,16 @@ export function BeltSuggestionReviewScreen({
 
   const handleBeltChangeConfirmed = (entry: BeltHistoryEntry) => {
     if (!activeSuggestion) return;
-    const updated = applyBeltSuggestionDecision(activeSuggestion, {
-      action: "CONFIRM",
-      decidedBy: actorName,
-      decidedAt: new Date().toISOString(),
-      historyEntryId: entry.id,
-    });
+    const updated = applyBeltSuggestionDecision(
+      activeSuggestion,
+      {
+        action: "CONFIRM",
+        decidedBy: actorName,
+        decidedAt: new Date().toISOString(),
+        historyEntryId: entry.id,
+      },
+      [entry],
+    );
     onDecide(updated, entry);
     setShowChangeDialog(false);
     setActiveSuggestion(null);
@@ -459,7 +475,7 @@ export function BeltSuggestionReviewScreen({
                         {s.confidencePercent}%
                       </span>
                     </td>
-                    <td>{s.sessionDate}</td>
+                    <td>{formatGermanDate(s.sessionDate)}</td>
                     {canEdit && (
                       <td>
                         <div className="belt-suggestion-actions">
@@ -514,7 +530,7 @@ export function BeltSuggestionReviewScreen({
                       <span className="badge">{statusLabel[s.status] ?? s.status}</span>
                     </td>
                     <td>{s.decidedBy ?? "–"}</td>
-                    <td>{s.sessionDate}</td>
+                    <td>{formatGermanDate(s.sessionDate)}</td>
                   </tr>
                 );
               })}

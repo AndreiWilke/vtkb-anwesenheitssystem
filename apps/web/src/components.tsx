@@ -1,4 +1,9 @@
-import type { ButtonHTMLAttributes, PropsWithChildren, ReactNode } from "react";
+import type {
+  ButtonHTMLAttributes,
+  InputHTMLAttributes,
+  PropsWithChildren,
+  ReactNode,
+} from "react";
 import { BarChart3, ClipboardCheck, Home, LogOut, Menu, Settings, Users } from "lucide-react";
 import { BELT_LABELS, DemoRole, type DemoRole as DemoRoleValue } from "@vtkb/shared";
 
@@ -84,6 +89,7 @@ export function AppShell({
               >
                 <option value={DemoRole.BOARD}>Vorstand</option>
                 <option value={DemoRole.TRAINER}>Trainer</option>
+                <option value={DemoRole.ASSISTANT_TRAINER}>Assistenztrainer</option>
                 <option value={DemoRole.TREASURER}>Kassenwart</option>
               </select>
             </label>
@@ -101,12 +107,7 @@ export function AppShell({
       <main className="app-main">{children}</main>
       {hideNav ? null : (
         <nav aria-label="Hauptnavigation" className="bottom-nav">
-          {[
-            ...BASE_NAV,
-            ...(demoRole === DemoRole.BOARD || demoRole === DemoRole.TRAINER
-              ? [MGMT_NAV_ITEM]
-              : []),
-          ].map((item) => {
+          {[...BASE_NAV, MGMT_NAV_ITEM].map((item) => {
             const Icon = item.icon;
             const disabled = item.screen === "SUMMARY" && !reviewEnabled;
             const active =
@@ -170,6 +171,22 @@ export function SecondaryButton({
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement>) {
   return <button className={`secondary-button ${className}`.trim()} type="button" {...props} />;
+}
+
+export function GermanDateInput({
+  placeholder = "TT.MM.JJJJ",
+  ...props
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "inputMode">) {
+  return (
+    <input
+      {...props}
+      autoComplete="off"
+      inputMode="numeric"
+      pattern="\d{2}\.\d{2}\.\d{4}"
+      placeholder={placeholder}
+      type="text"
+    />
+  );
 }
 
 export function MemberAvatar({ initials, muted = false }: { initials: string; muted?: boolean }) {

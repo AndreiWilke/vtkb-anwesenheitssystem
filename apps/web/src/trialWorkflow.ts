@@ -42,9 +42,8 @@ export function computeTrialSessionCount(
         participantId,
         presenceStatus: record.presenceStatus,
         sessionStatus: session.status,
-        // In der vollstaendigen Implementierung wird membershipStatusAtTime
-        // aus einem Audit-Log oder Snapshot gelesen. Hier Demo-Annahme: TRIAL.
-        membershipStatusAtTime: PersonMembershipStatus.TRIAL,
+        membershipStatusAtTime:
+          record.membershipStatusAtTime ?? PersonMembershipStatus.ACTIVE_MEMBER,
       })),
   );
 

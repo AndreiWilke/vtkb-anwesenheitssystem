@@ -1,15 +1,20 @@
 import {
   CaptureSource,
-  DemoRole,
   PresenceStatus,
   SessionRole,
   TrainingSessionStatus,
   type AttendanceRecord,
   type AuditEntry,
-  type DemoRole as DemoRoleValue,
+  type TrainingSession,
+  type PersonMembershipStatus,
 } from "./domain.js";
+import { isValidIsoDate } from "./date.js";
+import { AppPermission, hasPermission } from "./permissions.js";
+import { assertValidTrainingSession } from "./validation.js";
+import { berlinClockFromIso, berlinLocalDateTimeToIso } from "./schedule.js";
 
 export const RetrospectiveValidationCode = {
+  INVALID_DATE: "INVALID_DATE",
   DATE_NOT_IN_PAST: "DATE_NOT_IN_PAST",
   INVALID_TIME_RANGE: "INVALID_TIME_RANGE",
   MISSING_NAME: "MISSING_NAME",
@@ -19,6 +24,9 @@ export const RetrospectiveValidationCode = {
   MISSING_REASON: "MISSING_REASON",
   DUPLICATE_ASSISTANT: "DUPLICATE_ASSISTANT",
   RESPONSIBLE_ALSO_ASSISTANT: "RESPONSIBLE_ALSO_ASSISTANT",
+  DUPLICATE_PARTICIPANT: "DUPLICATE_PARTICIPANT",
+  PARTICIPANT_ROLE_OVERLAP: "PARTICIPANT_ROLE_OVERLAP",
+  INVALID_CREATED_BY_ROLE: "INVALID_CREATED_BY_ROLE",
 } as const;
 
 export type RetrospectiveValidationCode =
@@ -36,10 +44,12 @@ export interface RetrospectiveSessionInput {
   endTime: string;
   name: string;
   trainingType: string;
+  dojoId: string;
   dojo: string;
   responsibleTrainerId: string;
   assistantTrainerIds: readonly string[];
   participantIds: readonly string[];
+  membershipStatusByPersonId: Readonly<Record<string, PersonMembershipStatus>>;
   reason: string;
   note?: string;
   createdBy: string;
@@ -54,6 +64,9 @@ export interface RetrospectiveSession {
   timeZone: "Europe/Berlin";
   name: string;
   trainingType: string;
+  scheduledSlotId: null;
+  dojoId: string;
+  dojoNameSnapshot: string;
   dojo: string;
   status: typeof TrainingSessionStatus.COMPLETED;
   attendance: readonly AttendanceRecord[];
@@ -63,7 +76,6 @@ export interface RetrospectiveSession {
   internalNote: string | null;
 }
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const CLOCK_TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 export function validateRetrospectiveSession(
@@ -71,7 +83,13 @@ export function validateRetrospectiveSession(
   today: string,
 ): RetrospectiveValidationIssue[] {
   const issues: RetrospectiveValidationIssue[] = [];
-  if (!ISO_DATE.test(input.date) || input.date >= today) {
+  if (!isValidIsoDate(input.date)) {
+    issues.push({
+      code: RetrospectiveValidationCode.INVALID_DATE,
+      message: "Bitte ein gültiges Datum im Format TT.MM.JJJJ eingeben.",
+      field: "date",
+    });
+  } else if (!isValidIsoDate(today) || input.date >= today) {
     issues.push({
       code: RetrospectiveValidationCode.DATE_NOT_IN_PAST,
       message: "Das Datum muss vor dem heutigen Tag liegen.",
@@ -117,18 +135,35 @@ export function validateRetrospectiveSession(
       field: "assistantTrainerIds",
     });
   }
+  if (new Set(input.participantIds).size !== input.participantIds.length) {
+    issues.push({
+      code: RetrospectiveValidationCode.DUPLICATE_PARTICIPANT,
+      message: "Teilnehmende dürfen nicht doppelt zugeordnet werden.",
+      field: "participantIds",
+    });
+  }
+  if (
+    input.participantIds.includes(input.responsibleTrainerId) ||
+    input.participantIds.some((id) => input.assistantTrainerIds.includes(id))
+  ) {
+    issues.push({
+      code: RetrospectiveValidationCode.PARTICIPANT_ROLE_OVERLAP,
+      message: "Eine Person darf je Einheit nur genau eine Rolle haben.",
+      field: "participantIds",
+    });
+  }
+  if (!canCreateRetrospectiveSession(input.createdBy)) {
+    issues.push({
+      code: RetrospectiveValidationCode.INVALID_CREATED_BY_ROLE,
+      message: "Die Nachtragserfassung ist nur für eine definierte angemeldete Rolle erlaubt.",
+      field: "createdBy",
+    });
+  }
   return issues;
 }
 
-export function canCreateRetrospectiveSession(
-  role: DemoRoleValue | "ADMIN",
-  hasSpecialPermission = false,
-): boolean {
-  return (
-    role === DemoRole.BOARD ||
-    role === "ADMIN" ||
-    (role === DemoRole.TRAINER && hasSpecialPermission)
-  );
+export function canCreateRetrospectiveSession(role: string): boolean {
+  return hasPermission(role, AppPermission.CREATE_RETROSPECTIVE_SESSION);
 }
 
 export function createRetrospectiveSessionIdGenerator(
@@ -149,16 +184,16 @@ export function createRetrospectiveSessionIdGenerator(
 }
 
 export function findRetrospectiveDuplicate(
-  input: Pick<RetrospectiveSessionInput, "date" | "startTime" | "endTime" | "dojo">,
-  sessions: readonly Pick<RetrospectiveSession, "id" | "date" | "startsAt" | "endsAt" | "dojo">[],
+  input: Pick<RetrospectiveSessionInput, "date" | "startTime" | "endTime" | "dojoId">,
+  sessions: readonly Pick<RetrospectiveSession, "id" | "date" | "startsAt" | "endsAt" | "dojoId">[],
 ): string | null {
   return (
     sessions.find(
       (session) =>
         session.date === input.date &&
-        session.startsAt.slice(11, 16) === input.startTime &&
-        session.endsAt.slice(11, 16) === input.endTime &&
-        session.dojo.trim().toLocaleLowerCase("de") === input.dojo.trim().toLocaleLowerCase("de"),
+        berlinClockFromIso(session.startsAt) === input.startTime &&
+        berlinClockFromIso(session.endsAt) === input.endTime &&
+        session.dojoId === input.dojoId,
     )?.id ?? null
   );
 }
@@ -170,6 +205,11 @@ export function createRetrospectiveSession(
 ): { session: RetrospectiveSession; auditEntry: AuditEntry } {
   const issues = validateRetrospectiveSession(input, today);
   if (issues.length) throw new Error(issues.map((issue) => issue.message).join(" "));
+  const membershipStatusFor = (personId: string): PersonMembershipStatus => {
+    const status = input.membershipStatusByPersonId[personId];
+    if (!status) throw new Error(`Mitgliedschaftsstatus für ${personId} fehlt.`);
+    return status;
+  };
   const attendance: AttendanceRecord[] = [
     {
       sessionId: id,
@@ -177,6 +217,7 @@ export function createRetrospectiveSession(
       presenceStatus: PresenceStatus.PRESENT,
       sessionRole: SessionRole.RESPONSIBLE_TRAINER,
       captureSource: CaptureSource.MANUAL,
+      membershipStatusAtTime: membershipStatusFor(input.responsibleTrainerId),
     },
     ...input.assistantTrainerIds.map<AttendanceRecord>((memberId) => ({
       sessionId: id,
@@ -184,28 +225,28 @@ export function createRetrospectiveSession(
       presenceStatus: PresenceStatus.PRESENT,
       sessionRole: SessionRole.ASSISTANT_TRAINER,
       captureSource: CaptureSource.MANUAL,
+      membershipStatusAtTime: membershipStatusFor(memberId),
     })),
-    ...input.participantIds
-      .filter(
-        (memberId) =>
-          memberId !== input.responsibleTrainerId && !input.assistantTrainerIds.includes(memberId),
-      )
-      .map<AttendanceRecord>((memberId) => ({
-        sessionId: id,
-        memberId,
-        presenceStatus: PresenceStatus.PRESENT,
-        sessionRole: SessionRole.PARTICIPANT,
-        captureSource: CaptureSource.MANUAL,
-      })),
+    ...input.participantIds.map<AttendanceRecord>((memberId) => ({
+      sessionId: id,
+      memberId,
+      presenceStatus: PresenceStatus.PRESENT,
+      sessionRole: SessionRole.PARTICIPANT,
+      captureSource: CaptureSource.MANUAL,
+      membershipStatusAtTime: membershipStatusFor(memberId),
+    })),
   ];
   const session: RetrospectiveSession = {
     id,
     date: input.date,
-    startsAt: `${input.date}T${input.startTime}:00`,
-    endsAt: `${input.date}T${input.endTime}:00`,
+    startsAt: berlinLocalDateTimeToIso(input.date, input.startTime),
+    endsAt: berlinLocalDateTimeToIso(input.date, input.endTime),
     timeZone: "Europe/Berlin",
     name: input.name.trim(),
     trainingType: input.trainingType.trim(),
+    scheduledSlotId: null,
+    dojoId: input.dojoId.trim(),
+    dojoNameSnapshot: input.dojo.trim(),
     dojo: input.dojo.trim(),
     status: TrainingSessionStatus.COMPLETED,
     attendance,
@@ -214,6 +255,21 @@ export function createRetrospectiveSession(
     retrospectiveReason: input.reason.trim(),
     internalNote: input.note?.trim() || null,
   };
+  const validationSession: TrainingSession = {
+    id: session.id,
+    templateId: null,
+    scheduledSlotId: null,
+    name: session.name,
+    trainingType: session.trainingType,
+    dojoId: session.dojoId,
+    dojoNameSnapshot: session.dojoNameSnapshot,
+    startsAt: session.startsAt,
+    endsAt: session.endsAt,
+    status: session.status,
+    completedAt: session.completedAt,
+    completedByUserId: session.completedBy,
+  };
+  assertValidTrainingSession({ session: validationSession, attendance });
   return {
     session,
     auditEntry: {

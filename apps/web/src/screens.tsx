@@ -19,17 +19,24 @@ import {
 } from "lucide-react";
 import {
   MemberQualification,
+  DemoRole,
+  DOJOS,
   BELT_COLORS,
   BELT_LABELS,
   PresenceStatus,
+  PersonMembershipStatus,
   SessionRole,
+  formatGermanDate,
   findRetrospectiveDuplicate,
+  parseGermanDate,
   validateRetrospectiveSession,
+  type DemoRole as DemoRoleValue,
   type RetrospectiveSessionInput,
 } from "@vtkb/shared";
 
 import {
   BeltMark,
+  GermanDateInput,
   MemberAvatar,
   PageHeading,
   PrimaryButton,
@@ -52,6 +59,21 @@ import type {
 } from "./types";
 import { presentMemberIds, sessionUiStatus } from "./workflow";
 import { blockedTrialParticipantsInSession } from "./trialWorkflow";
+
+function demoRoleLabel(role: string): string {
+  switch (role) {
+    case DemoRole.BOARD:
+      return "Vorstand";
+    case DemoRole.TRAINER:
+      return "Trainer";
+    case DemoRole.ASSISTANT_TRAINER:
+      return "Assistenztrainer";
+    case DemoRole.TREASURER:
+      return "Kassenwart";
+    default:
+      return role;
+  }
+}
 import { clubDateFormatter, clubTimeFormatter } from "./time";
 
 function formatSessionTime(session: TrainingSessionMock) {
@@ -90,6 +112,7 @@ export function StartScreen({
   sessions,
   selectedSession,
   members,
+  requiresExplicitSelection,
   onStart,
   onChooseSession,
   onSelectHistory,
@@ -97,46 +120,62 @@ export function StartScreen({
   sessions: readonly TrainingSessionMock[];
   selectedSession: TrainingSessionMock;
   members: readonly Member[];
+  requiresExplicitSelection: boolean;
   onStart: () => void;
   onChooseSession: () => void;
   onSelectHistory: () => void;
 }) {
-  const following = sessions.find((session) => session.startsAt >= selectedSession.endsAt);
+  const otherSessions = sessions.filter((session) => session.id !== selectedSession.id);
   return (
     <section>
       <PageHeading title="Start" description={clubDateFormatter.format(new Date())} />
-      <div className="section-label">Heute empfohlen</div>
+      <div className="section-label">
+        {requiresExplicitSelection ? "Heutige parallele Einheiten" : "Heute empfohlen"}
+      </div>
       <article className="session-focus">
         <div className="session-title-row">
           <CalendarDays aria-hidden="true" />
           <div>
-            <h2>{selectedSession.name}</h2>
-            <StatusTag tone="good">Vorgeschlagen</StatusTag>
+            <h2>{requiresExplicitSelection ? "Parallele Einheiten" : selectedSession.name}</h2>
+            <StatusTag tone={requiresExplicitSelection ? "warn" : "good"}>
+              {requiresExplicitSelection ? "Auswahl erforderlich" : "Vorgeschlagen"}
+            </StatusTag>
           </div>
         </div>
-        <dl className="detail-list">
-          <div>
-            <dt>
-              <Clock3 aria-hidden="true" />
-              Zeit
-            </dt>
-            <dd>{formatSessionTime(selectedSession)}</dd>
+        {requiresExplicitSelection ? (
+          <div className="history-list">
+            {sessions.map((session) => (
+              <div className="history-row" key={session.id}>
+                <span>{session.dojo}</span>
+                <strong>{formatSessionTime(session)}</strong>
+              </div>
+            ))}
           </div>
-          <div>
-            <dt>
-              <MapPin aria-hidden="true" />
-              Dojo
-            </dt>
-            <dd>{selectedSession.dojo}</dd>
-          </div>
-          <div>
-            <dt>
-              <Users aria-hidden="true" />
-              Verantwortlich
-            </dt>
-            <dd>{memberName(members, selectedSession.responsibleTrainerId)}</dd>
-          </div>
-        </dl>
+        ) : (
+          <dl className="detail-list">
+            <div>
+              <dt>
+                <Clock3 aria-hidden="true" />
+                Zeit
+              </dt>
+              <dd>{formatSessionTime(selectedSession)}</dd>
+            </div>
+            <div>
+              <dt>
+                <MapPin aria-hidden="true" />
+                Dojo
+              </dt>
+              <dd>{selectedSession.dojo}</dd>
+            </div>
+            <div>
+              <dt>
+                <Users aria-hidden="true" />
+                Verantwortlich
+              </dt>
+              <dd>{memberName(members, selectedSession.responsibleTrainerId)}</dd>
+            </div>
+          </dl>
+        )}
         <PrimaryButton onClick={onStart}>
           Training starten <ArrowRight aria-hidden="true" />
         </PrimaryButton>
@@ -145,18 +184,25 @@ export function StartScreen({
         </button>
       </article>
 
-      {following ? (
+      {!requiresExplicitSelection && otherSessions.length ? (
         <section className="open-section">
-          <div className="section-label">Direkt anschließend</div>
-          <button className="session-row" type="button" onClick={onChooseSession}>
-            <span>
-              <strong>{following.name}</strong>
-              <small>
-                {formatSessionTime(following)} · {following.dojo}
-              </small>
-            </span>
-            <ChevronRight aria-hidden="true" />
-          </button>
+          <div className="section-label">Alle weiteren heutigen Einheiten</div>
+          {otherSessions.map((session) => (
+            <button
+              className="session-row"
+              type="button"
+              onClick={onChooseSession}
+              key={session.id}
+            >
+              <span>
+                <strong>{session.name}</strong>
+                <small>
+                  {formatSessionTime(session)} · {session.dojo}
+                </small>
+              </span>
+              <ChevronRight aria-hidden="true" />
+            </button>
+          ))}
         </section>
       ) : null}
 
@@ -204,7 +250,7 @@ export function SessionSelectScreen({
         <div className="demo-notice">
           <History aria-hidden="true" />
           <span>
-            <strong>Nachtragserfassung</strong> – Datum: {retroDate}
+            <strong>Nachtragserfassung</strong> – Datum: {formatGermanDate(retroDate)}
           </span>
         </div>
       ) : null}
@@ -907,8 +953,8 @@ export function SummaryScreen({
         <div className="validation-box" role="alert">
           <strong>Speichern noch nicht möglich</strong>
           <ul>
-            {validationMessages.map((message) => (
-              <li key={message}>{message}</li>
+            {validationMessages.map((message, index) => (
+              <li key={`${index}-${message}`}>{message}</li>
             ))}
           </ul>
         </div>
@@ -1098,22 +1144,30 @@ export function ManagementScreen({
   onNewMember,
   onBeltReport,
   onBeltSuggestions,
+  onBeltSimulation,
   onRetroEntry,
   recentRetrospectiveSessions,
   auditCount,
   auditEntries,
-  canCreateRetrospective,
+  canManageTrials,
+  canCreateDirectMember,
+  canManageBelts,
+  canDecideBeltSuggestions,
 }: {
   openBeltSuggestionsCount: number;
   onTrialList: () => void;
   onNewMember: () => void;
   onBeltReport: () => void;
   onBeltSuggestions: () => void;
+  onBeltSimulation: () => void;
   onRetroEntry: () => void;
   recentRetrospectiveSessions: readonly HistoricalTrainingSession[];
   auditCount: number;
   auditEntries: readonly AuditEntry[];
-  canCreateRetrospective: boolean;
+  canManageTrials: boolean;
+  canCreateDirectMember: boolean;
+  canManageBelts: boolean;
+  canDecideBeltSuggestions: boolean;
 }) {
   return (
     <section className="management-screen">
@@ -1124,20 +1178,11 @@ export function ManagementScreen({
 
       <div className="mgmt-section">
         <h2>Training</h2>
-        <button
-          className="mgmt-card"
-          disabled={!canCreateRetrospective}
-          type="button"
-          onClick={onRetroEntry}
-        >
+        <button className="mgmt-card" type="button" onClick={onRetroEntry}>
           <History aria-hidden="true" />
           <span>
             <strong>Einheit nachträglich erstellen</strong>
-            <small>
-              {canCreateRetrospective
-                ? "Vergangene Einheit vollständig anlegen, prüfen und abschließen"
-                : "Nur Vorstand oder besonders berechtigte Trainer"}
-            </small>
+            <small>Vergangene Einheit vollständig anlegen, prüfen und abschließen</small>
           </span>
           <ChevronRight aria-hidden="true" />
         </button>
@@ -1152,7 +1197,7 @@ export function ManagementScreen({
                   <span>
                     <strong>{session.name}</strong>
                     <small>
-                      {session.date} · {session.dojo}
+                      {formatGermanDate(session.date)} · {session.dojo}
                     </small>
                   </span>
                   <StatusTag tone="good">Abgeschlossen</StatusTag>
@@ -1166,60 +1211,76 @@ export function ManagementScreen({
             <div key={entry.id}>
               <strong>{entry.action}</strong>
               <small>
-                {entry.actor} · {entry.occurredAt.slice(0, 10)}
+                {demoRoleLabel(entry.actor)} · {formatGermanDate(entry.occurredAt.slice(0, 10))}
               </small>
             </div>
           ))}
         </div>
       </div>
 
-      <div className="mgmt-section">
-        <h2>Probetraining</h2>
-        <button className="mgmt-card" type="button" onClick={onTrialList}>
-          <Users aria-hidden="true" />
-          <span>
-            <strong>Probetraining-Liste</strong>
-            <small>Teilnehmer verwalten, Vertrag erfassen, Mitglied anlegen</small>
-          </span>
-          <ChevronRight aria-hidden="true" />
-        </button>
-      </div>
+      {canManageTrials ? (
+        <div className="mgmt-section">
+          <h2>Probetraining</h2>
+          <button className="mgmt-card" type="button" onClick={onTrialList}>
+            <Users aria-hidden="true" />
+            <span>
+              <strong>Probetraining-Liste</strong>
+              <small>Teilnehmer und fachlich freigegebene Vertragsstatus verwalten</small>
+            </span>
+            <ChevronRight aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
 
-      <div className="mgmt-section">
-        <h2>Mitglieder</h2>
-        <button className="mgmt-card" type="button" onClick={onNewMember}>
-          <UserPlus aria-hidden="true" />
-          <span>
-            <strong>Neues Mitglied anlegen</strong>
-            <small>Direktaufnahme ohne Probetraining</small>
-          </span>
-          <ChevronRight aria-hidden="true" />
-        </button>
-      </div>
+      {canCreateDirectMember ? (
+        <div className="mgmt-section">
+          <h2>Mitglieder</h2>
+          <button className="mgmt-card" type="button" onClick={onNewMember}>
+            <UserPlus aria-hidden="true" />
+            <span>
+              <strong>Neues Mitglied anlegen</strong>
+              <small>Direktaufnahme ohne Probetraining</small>
+            </span>
+            <ChevronRight aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
 
-      <div className="mgmt-section">
-        <h2>Gürtel</h2>
-        <button className="mgmt-card" type="button" onClick={onBeltReport}>
-          <Award aria-hidden="true" />
-          <span>
-            <strong>Gürtelauswertung</strong>
-            <small>Gürteleintrag ändern, Gürtelhistorie einsehen</small>
-          </span>
-          <ChevronRight aria-hidden="true" />
-        </button>
-        <button className="mgmt-card" type="button" onClick={onBeltSuggestions}>
-          <ShieldCheck aria-hidden="true" />
-          <span>
-            <strong>Bildvorschläge prüfen</strong>
-            <small>
-              {openBeltSuggestionsCount > 0
-                ? `${openBeltSuggestionsCount} offene Vorschläge`
-                : "Keine offenen Vorschläge"}
-            </small>
-          </span>
-          <ChevronRight aria-hidden="true" />
-        </button>
-      </div>
+      {canManageBelts ? (
+        <div className="mgmt-section">
+          <h2>Gürtel</h2>
+          <button className="mgmt-card" type="button" onClick={onBeltReport}>
+            <Award aria-hidden="true" />
+            <span>
+              <strong>Gürtelauswertung</strong>
+              <small>Gürteleintrag ändern, Gürtelhistorie einsehen</small>
+            </span>
+            <ChevronRight aria-hidden="true" />
+          </button>
+          <button className="mgmt-card" type="button" onClick={onBeltSimulation}>
+            <Award aria-hidden="true" />
+            <span>
+              <strong>Gürtelfarb-Vorschlag simulieren</strong>
+              <small>Lokale Demo prüfen und anschließend manuell bestätigen</small>
+            </span>
+            <ChevronRight aria-hidden="true" />
+          </button>
+          {canDecideBeltSuggestions ? (
+            <button className="mgmt-card" type="button" onClick={onBeltSuggestions}>
+              <ShieldCheck aria-hidden="true" />
+              <span>
+                <strong>Bildvorschläge prüfen</strong>
+                <small>
+                  {openBeltSuggestionsCount > 0
+                    ? `${openBeltSuggestionsCount} offene Vorschläge`
+                    : "Keine offenen Vorschläge"}
+                </small>
+              </span>
+              <ChevronRight aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -1228,12 +1289,14 @@ export function RetrospectiveSessionScreen({
   members,
   trialParticipants,
   history,
+  actorRole,
   onSave,
   onBack,
 }: {
   members: readonly Member[];
   trialParticipants: readonly TrialParticipant[];
   history: readonly HistoricalTrainingSession[];
+  actorRole: DemoRoleValue;
   onSave: (input: RetrospectiveSessionInput) => void;
   onBack: () => void;
 }) {
@@ -1250,12 +1313,13 @@ export function RetrospectiveSessionScreen({
         member.qualification === MemberQualification.ASSISTANT_TRAINER),
   );
   const [step, setStep] = useState(1);
-  const [date, setDate] = useState("");
+  const [dateInput, setDateInput] = useState("");
   const [startTime, setStartTime] = useState("17:00");
   const [endTime, setEndTime] = useState("18:30");
   const [name, setName] = useState("");
   const [trainingType, setTrainingType] = useState("GRUNDLAGENTRAINING");
-  const [dojo, setDojo] = useState("Dojo VTKB Berlin");
+  const [dojoId, setDojoId] = useState(DOJOS[0]?.id ?? "");
+  const dojo = DOJOS.find((candidate) => candidate.id === dojoId)?.name ?? "";
   const [responsibleTrainerId, setResponsibleTrainerId] = useState(trainers[0]?.id ?? "");
   const [assistantTrainerIds, setAssistantTrainerIds] = useState<string[]>([]);
   const [participantIds, setParticipantIds] = useState<string[]>([]);
@@ -1263,28 +1327,44 @@ export function RetrospectiveSessionScreen({
   const [note, setNote] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
 
+  const parsedDate = parseGermanDate(dateInput);
   const input = (): RetrospectiveSessionInput => ({
-    date,
+    date: parsedDate ?? "",
     startTime,
     endTime,
     name,
     trainingType,
+    dojoId,
     dojo,
     responsibleTrainerId,
     assistantTrainerIds,
     participantIds,
+    membershipStatusByPersonId: Object.fromEntries([
+      ...members.map((member) => [member.id, PersonMembershipStatus.ACTIVE_MEMBER] as const),
+      ...trialParticipants.map(
+        (participant) => [participant.id, participant.membershipStatus] as const,
+      ),
+    ]),
     reason,
     ...(note.trim() ? { note } : {}),
-    createdBy: "Vorstand Demo",
+    createdBy: actorRole,
     createdAt: new Date().toISOString(),
   });
-  const duplicateId = findRetrospectiveDuplicate(input(), history);
+  const duplicateId = parsedDate ? findRetrospectiveDuplicate(input(), history) : null;
   const blockedTrials = blockedTrialParticipantsInSession(
     participantIds.filter((id) => id.startsWith("trial-")),
     trialParticipants,
     history,
   );
   const continueFromDetails = () => {
+    if (!parsedDate) {
+      setErrors(["Bitte ein gültiges Datum im Format TT.MM.JJJJ eingeben."]);
+      return;
+    }
+    if (duplicateId) {
+      setErrors([`Doppelte Einheit: Die Session-ID ${duplicateId} ist bereits vorhanden.`]);
+      return;
+    }
     const issues = validateRetrospectiveSession(input(), today);
     if (issues.length) {
       setErrors(issues.map((issue) => issue.message));
@@ -1308,12 +1388,10 @@ export function RetrospectiveSessionScreen({
         <div className="form-grid retrospective-form">
           <label>
             <span>Datum</span>
-            <input
+            <GermanDateInput
               aria-label="Datum"
-              max={today}
-              type="date"
-              value={date}
-              onChange={(event) => setDate(event.target.value)}
+              value={dateInput}
+              onChange={(event) => setDateInput(event.target.value)}
             />
           </label>
           <div className="form-row">
@@ -1360,11 +1438,17 @@ export function RetrospectiveSessionScreen({
           </label>
           <label>
             <span>Dojo</span>
-            <input
+            <select
               aria-label="Dojo"
-              value={dojo}
-              onChange={(event) => setDojo(event.target.value)}
-            />
+              value={dojoId}
+              onChange={(event) => setDojoId(event.target.value)}
+            >
+              {DOJOS.filter((dojo) => dojo.active).map((dojo) => (
+                <option key={dojo.id} value={dojo.id}>
+                  {dojo.name}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             <span>Grund für die Nachtragserfassung</span>
@@ -1385,18 +1469,18 @@ export function RetrospectiveSessionScreen({
           {errors.length ? (
             <div className="validation-box" role="alert">
               <ul>
-                {errors.map((error) => (
-                  <li key={error}>{error}</li>
+                {errors.map((error, index) => (
+                  <li key={`${index}-${error}`}>{error}</li>
                 ))}
               </ul>
             </div>
           ) : null}
           {duplicateId ? (
-            <div className="demo-notice strong" role="status">
+            <div className="validation-box" role="alert">
               <Info aria-hidden="true" />
               <span>
-                Mögliche Dublette: {duplicateId} hat dasselbe Datum, dieselbe Zeit und dasselbe
-                Dojo.
+                Doppelte Einheit: {duplicateId} hat dasselbe Datum, dieselbe Zeit und dasselbe Dojo
+                und kann nicht erneut gespeichert werden.
               </span>
             </div>
           ) : null}
@@ -1514,7 +1598,7 @@ export function RetrospectiveSessionScreen({
             <div>
               <dt>Datum und Zeit</dt>
               <dd>
-                {date} · {startTime}–{endTime}
+                {parsedDate ? formatGermanDate(parsedDate) : dateInput} · {startTime}–{endTime}
               </dd>
             </div>
             <div>
@@ -1535,6 +1619,7 @@ export function RetrospectiveSessionScreen({
             Die Einheit wird als abgeschlossen gespeichert und in Historie, Auswertung, Vergütung
             und Audit berücksichtigt.
           </div>
+          <p className="section-label">Erstellt durch: {demoRoleLabel(actorRole)}</p>
           <div className="action-stack">
             <PrimaryButton onClick={() => onSave(input())}>
               Nachtrag speichern und abschließen

@@ -10,12 +10,16 @@ import {
   type CompensationRate,
 } from "@vtkb/shared";
 
-import { members } from "./mockData";
-import { historicalSessions, initialCompensationRates } from "./reportingMockData";
+import { members, trialParticipants } from "./mockData";
+import {
+  initialCompensationRates,
+  initialHistoricalSessions as historicalSessions,
+} from "./reportingMockData";
 import {
   addSettlementCorrection,
   aggregateAttendance,
   attendanceCsv,
+  buildTrialSummaries,
   calculateDashboardMetrics,
   calculateSettlement,
   canRoleViewSettlement,
@@ -39,6 +43,7 @@ import {
   resolveSettlementView,
   roleCan,
   transitionSettlementStatus,
+  trialDashboardMetrics,
   validateCompensationRates,
   validateSettlementForApproval,
   validateSettlementForReview,
@@ -61,6 +66,9 @@ function session(
     timeZone: "Europe/Berlin",
     name: "Fiktive Testeinheit",
     trainingType: "GRUNDLAGENTRAINING",
+    scheduledSlotId: null,
+    dojoId: "dojo-test",
+    dojoNameSnapshot: "Test-Dojo",
     dojo: "Test-Dojo",
     status,
     attendance: [
@@ -144,7 +152,7 @@ describe("Paket 1.1 Anwesenheitsauswertung", () => {
         [...historicalSessions, session("2025-12-31", SessionRole.PARTICIPANT)],
         { mode: "YEAR", year: 2026 },
       ),
-    ).toHaveLength(60);
+    ).toHaveLength(66);
   });
 
   it("ermittelt die letzte Teilnahme und konsistente Rollensummen", () => {
@@ -170,6 +178,51 @@ describe("Paket 1.1 Anwesenheitsauswertung", () => {
     })[0]!;
     expect(result).not.toHaveProperty("attendanceRate");
     expect(result).not.toHaveProperty("absences");
+  });
+});
+
+describe("Sicherheits- und Snapshot-Regressionen", () => {
+  it("neutralisiert CSV-Formeln auch nach führenden Leerzeichen, aber keine negativen Zahlen", () => {
+    const csv = attendanceCsv(
+      [
+        {
+          member: { ...members[0]!, name: '   =HYPERLINK("https://example.invalid")' },
+          total: -5,
+          participant: 0,
+          responsible: 0,
+          assistant: 0,
+          lastAttendance: null,
+        },
+      ],
+      "Test",
+    );
+    expect(csv).toContain("'   =HYPERLINK");
+    expect(csv).toContain(";-5;");
+  });
+
+  it("lehnt inkonsistente Snapshot-Gesamtsummen und Korrekturen ab", () => {
+    const calculation = calculateSettlement(
+      "member-05",
+      "2026-06",
+      [session("2026-06-20", SessionRole.RESPONSIBLE_TRAINER)],
+      initialCompensationRates,
+    );
+    const correction = createCorrection({
+      id: "correction-inconsistent",
+      amountCents: 100,
+      reason: "Test",
+      editedBy: "BOARD",
+      editedAt: "2026-06-24T10:00:00.000Z",
+    });
+    expect(() =>
+      createSettlementSnapshot(calculation, [correction], "BOARD", "2026-06-24T10:00:00.000Z"),
+    ).toThrow("konsistent");
+  });
+
+  it("berechnet Umwandlungen nur für das explizite Referenzjahr", () => {
+    const summaries = buildTrialSummaries(trialParticipants, historicalSessions);
+    expect(trialDashboardMetrics(summaries, 2026).convertedThisYear).toBe(1);
+    expect(trialDashboardMetrics(summaries, 2025).convertedThisYear).toBe(0);
   });
 });
 

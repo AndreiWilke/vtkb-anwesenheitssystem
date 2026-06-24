@@ -75,7 +75,7 @@ export function TrialReportScreen({
     [participants, history],
   );
 
-  const metrics = useMemo(() => trialDashboardMetrics(summaries), [summaries]);
+  const metrics = useMemo(() => trialDashboardMetrics(summaries, 2026), [summaries]);
 
   const displayed = useMemo<TrialSummary[]>(() => {
     let filtered = summaries;

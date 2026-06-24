@@ -6,6 +6,9 @@ const webRoot = resolve(import.meta.dirname, "..");
 const indexHtml = readFileSync(resolve(webRoot, "index.html"), "utf8");
 const styles = readFileSync(resolve(import.meta.dirname, "styles.css"), "utf8");
 const components = readFileSync(resolve(import.meta.dirname, "components.tsx"), "utf8");
+const dateFieldSources = ["beltScreens.tsx", "reportingScreens.tsx", "trialScreens.tsx"].map(
+  (file) => readFileSync(resolve(import.meta.dirname, file), "utf8"),
+);
 
 describe("Dojo-Design und Assets", () => {
   it("lädt keine externen Google-Schriften", () => {
@@ -39,5 +42,10 @@ describe("Dojo-Design und Assets", () => {
       expect(styles).toContain(token);
     }
     expect(styles).not.toContain("data:image/svg+xml");
+  });
+
+  it("verwendet für sichtbare Datumsfelder ausschließlich die deutsche Eingabekomponente", () => {
+    expect(dateFieldSources.join("\n")).not.toContain('type="date"');
+    for (const source of dateFieldSources) expect(source).toContain("GermanDateInput");
   });
 });

@@ -60,7 +60,8 @@ export type TrainingSessionStatus =
 export interface TrainingTemplate {
   id: string;
   name: string;
-  dojo: string;
+  dojoId: string;
+  dojoNameSnapshot: string;
   weekday: number;
   startTime: string;
   durationMinutes: number;
@@ -71,8 +72,11 @@ export interface TrainingTemplate {
 export interface TrainingSession {
   id: string;
   templateId: string | null;
+  scheduledSlotId: string | null;
   name: string;
-  dojo: string;
+  trainingType: string;
+  dojoId: string;
+  dojoNameSnapshot: string;
   startsAt: string;
   endsAt: string;
   status: TrainingSessionStatus;
@@ -198,6 +202,7 @@ export interface TrialParticipant {
   membershipStatus: PersonMembershipStatus;
   /** Gesetzt nach erfolgreicher Umwandlung zum regulaeren Mitglied */
   memberId?: string;
+  convertedAt?: string;
   beltColor?: string;
   beltGrade?: string;
   active: boolean;
@@ -298,6 +303,8 @@ export interface AttendanceRecord {
   presenceStatus: PresenceStatus;
   sessionRole: SessionRole | null;
   captureSource: CaptureSource;
+  /** Unveraenderlicher Status-Snapshot fuer historische Auswertungen. */
+  membershipStatusAtTime?: PersonMembershipStatus;
 }
 
 /**

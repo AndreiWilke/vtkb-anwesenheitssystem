@@ -5,6 +5,8 @@ import {
   MemberQualification,
   PersonMembershipStatus,
   TrialOverrideStatus,
+  dojoById,
+  slotsForWeekday,
 } from "@vtkb/shared";
 
 import type {
@@ -18,7 +20,7 @@ import type {
   TrainingSessionMock,
   TrialParticipant,
 } from "./types";
-import { createClubDateAtTime } from "./time";
+import { clubDateKey, clubIsoWeekday, createClubDateFromIso } from "./time";
 
 const fictionalFirstNames = [
   "Aiko",
@@ -97,6 +99,7 @@ export const members: Member[] = fictionalFirstNames.map((firstName, index) => {
     name: `${firstName} Beispiel`,
     initials: `${firstName[0] ?? "M"}B`,
     gender: genderForIndex(index),
+    birthDate: `${1980 + (index % 25)}-${String((index % 12) + 1).padStart(2, "0")}-15`,
     beltColor: belt?.color ?? "WEISS",
     beltGrade: belt?.grade ?? "10. Kyu",
     qualification: qualificationForIndex(index),
@@ -108,35 +111,23 @@ export const members: Member[] = fictionalFirstNames.map((firstName, index) => {
 });
 
 export function createTodaySessions(now = new Date()): TrainingSessionMock[] {
-  return [
-    {
-      id: "session-early",
-      name: "Grundlagentraining",
-      dojo: "Dojo Nord",
-      startsAt: createClubDateAtTime(now, 16, 0),
-      endsAt: createClubDateAtTime(now, 17, 30),
-      responsibleTrainerId: "member-02",
-      assistantTrainerIds: ["member-05"],
-    },
-    {
-      id: "session-main",
-      name: "Donnerstagstraining",
-      dojo: "Dojo VTKB Berlin",
-      startsAt: createClubDateAtTime(now, 17, 30),
-      endsAt: createClubDateAtTime(now, 19, 0),
-      responsibleTrainerId: "member-01",
-      assistantTrainerIds: ["member-05", "member-06"],
-    },
-    {
-      id: "session-following",
-      name: "Fortgeschrittenentraining",
-      dojo: "Dojo VTKB Berlin",
-      startsAt: createClubDateAtTime(now, 19, 0),
-      endsAt: createClubDateAtTime(now, 20, 30),
-      responsibleTrainerId: "member-03",
-      assistantTrainerIds: ["member-07"],
-    },
-  ];
+  const date = clubDateKey(now);
+  return slotsForWeekday(clubIsoWeekday(now)).map((slot, index) => {
+    const dojo = dojoById(slot.dojoId);
+    return {
+      id: `session-${date}-${slot.id}`,
+      scheduledSlotId: slot.id,
+      name: slot.name,
+      trainingType: slot.trainingType,
+      dojoId: dojo.id,
+      dojoNameSnapshot: dojo.name,
+      dojo: dojo.name,
+      startsAt: createClubDateFromIso(date, slot.startTime),
+      endsAt: createClubDateFromIso(date, slot.endTime),
+      responsibleTrainerId: `member-0${(index % 4) + 1}`,
+      assistantTrainerIds: [`member-0${(index % 4) + 5}`],
+    };
+  });
 }
 
 export const completedSessionHistory = [
@@ -150,7 +141,7 @@ export const completedSessionHistory = [
 // ---------------------------------------------------------------------------
 
 /**
- * Sechs fiktive Probetrainingsteilnehmer mit unterschiedlichen Probetrainingstaenden.
+ * Fiktive Probetrainingsteilnehmer mit unterschiedlichen Probetrainingstaenden.
  * Alle Namen, Geburtsjahre, Kontaktdaten und Mitgliedsnummern sind eindeutig fiktiv.
  * Gekennzeichnet durch Nachnamen "Probetraining" oder "Beispiel-Probe".
  */
@@ -211,7 +202,7 @@ export const trialParticipants: TrialParticipant[] = [
     createdAt: "2026-04-01T11:00:00.000Z",
     firstTrialDate: "2026-04-05",
     lastTrialDate: "2026-04-19",
-    contractStatus: ContractStatus.NOT_ISSUED,
+    contractStatus: ContractStatus.RECEIVED,
     overrideStatus: TrialOverrideStatus.NONE,
     overrideUsed: false,
     membershipStatus: PersonMembershipStatus.TRIAL,
@@ -256,7 +247,8 @@ export const trialParticipants: TrialParticipant[] = [
     overrideStatus: TrialOverrideStatus.NONE,
     overrideUsed: false,
     membershipStatus: PersonMembershipStatus.ACTIVE_MEMBER,
-    memberId: "member-41",
+    memberId: "trial-005",
+    convertedAt: "2026-06-10T10:00:00.000Z",
     beltColor: "WEISS",
     beltGrade: "10. Kyu",
     active: true,
@@ -286,6 +278,26 @@ export const trialParticipants: TrialParticipant[] = [
     beltGrade: "10. Kyu",
     active: true,
     note: "Fiktives Demo-Profil. Vorstandsausnahme wurde genutzt.",
+  },
+  // 4 von 4 – Vertrag eingegangen, Vorstand kann Ausnahme oder Umwandlung prüfen
+  {
+    id: "trial-007",
+    firstName: "Luca",
+    lastName: "Probetraining",
+    displayName: "Luca Probetraining",
+    gender: "MAENNLICH",
+    birthDate: "2004-04-12",
+    contactEmail: "trial07@example.invalid",
+    createdAt: "2026-01-12T09:00:00.000Z",
+    firstTrialDate: "2026-01-15",
+    lastTrialDate: "2026-02-05",
+    contractStatus: ContractStatus.NOT_ISSUED,
+    overrideStatus: TrialOverrideStatus.NONE,
+    overrideUsed: false,
+    membershipStatus: PersonMembershipStatus.TRIAL,
+    beltColor: "WEISS",
+    beltGrade: "10. Kyu",
+    active: true,
   },
 ];
 
@@ -441,51 +453,18 @@ export const initialBeltSuggestions: BeltSuggestion[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Anwesenheits-Mock-Records fuer Probetrainingsteilnehmer
-// (Referenziert historische Session-IDs aus reportingMockData)
-// ---------------------------------------------------------------------------
-
-/**
- * Simulierte Anwesenheitsdatensaetze fuer Probetrainingsteilnehmer.
- * Diese werden separat von den Mitglieder-Attendance-Records gehalten,
- * damit die 40 bestehenden Mitglieder unveraendert bleiben.
- */
-export const trialAttendanceHistory = [
-  // trial-002: 1 Besuch
-  { sessionId: "hist-2026-01-07", participantId: "trial-002", present: true },
-  // trial-003: 2 Besuche
-  { sessionId: "hist-2026-01-07", participantId: "trial-003", present: true },
-  { sessionId: "hist-2026-01-14", participantId: "trial-003", present: true },
-  // trial-004: 3 Besuche
-  { sessionId: "hist-2026-01-07", participantId: "trial-004", present: true },
-  { sessionId: "hist-2026-01-14", participantId: "trial-004", present: true },
-  { sessionId: "hist-2026-02-04", participantId: "trial-004", present: true },
-  // trial-005: 4 Besuche
-  { sessionId: "hist-2026-01-07", participantId: "trial-005", present: true },
-  { sessionId: "hist-2026-01-14", participantId: "trial-005", present: true },
-  { sessionId: "hist-2026-02-04", participantId: "trial-005", present: true },
-  { sessionId: "hist-2026-03-04", participantId: "trial-005", present: true },
-  // trial-006: 4 regulaere + 1 Ausnahme = 5 Besuche
-  { sessionId: "hist-2026-01-07", participantId: "trial-006", present: true },
-  { sessionId: "hist-2026-01-14", participantId: "trial-006", present: true },
-  { sessionId: "hist-2026-02-04", participantId: "trial-006", present: true },
-  { sessionId: "hist-2026-03-04", participantId: "trial-006", present: true },
-  { sessionId: "hist-2026-04-01", participantId: "trial-006", present: true }, // Ausnahme
-] as const;
-
-// ---------------------------------------------------------------------------
 // Paket 1.3 – Fiktive Audit-Eintraege (Demo-only)
 // ---------------------------------------------------------------------------
 
 export const demoAuditEntries: AuditEntry[] = [
   {
-    id: "audit-conv-member-41",
+    id: "audit-conv-trial-005",
     occurredAt: "2026-06-10T10:00:00.000Z",
     actor: "Vorstand Demo",
     action: "TRIAL_CONVERTED_TO_MEMBER",
     object: "TrialParticipant:trial-005",
     previousValue: "TRIAL",
-    newValue: "ACTIVE_MEMBER:member-41",
+    newValue: "ACTIVE_MEMBER:trial-005",
     reason: "Vertrag eingegangen, Umwandlung abgeschlossen (Demo Paket 1.3)",
   },
   {

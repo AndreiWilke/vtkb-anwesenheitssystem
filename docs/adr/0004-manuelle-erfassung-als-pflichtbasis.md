@@ -9,7 +9,7 @@ Biometrische Einwilligungen koennen fehlen oder widerrufen werden. Fotoanalyse k
 
 ## Entscheidung
 
-Jede Einheit muss ohne Fotoanalyse vollstaendig und gleichwertig erfasst werden koennen. Nicht einwilligende Personen, Gaeste und Probetrainingsteilnehmer werden manuell erfasst.
+Jede Einheit muss ohne Fotoanalyse vollstaendig und gleichwertig erfasst werden koennen. Nicht einwilligende Personen werden manuell erfasst. Probetrainingsteilnehmer werden als dauerhafte Profile manuell erfasst. Eine allgemeine Gastfunktion existiert nicht.
 
 ## Folgen
 

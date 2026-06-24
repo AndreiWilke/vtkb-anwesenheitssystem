@@ -207,6 +207,18 @@ describe("checkTrialEligibility", () => {
     expect(result.reason).toContain("Vier kostenlose Probetrainings");
   });
 
+  it("blockiert die fünfte Teilnahme bei lediglich ausgegebenem Vertrag", () => {
+    expect(
+      checkTrialEligibility({
+        attendedCount: 4,
+        contractStatus: ContractStatus.ISSUED,
+        membershipStatus: PersonMembershipStatus.TRIAL,
+        overrideStatus: TrialOverrideStatus.NONE,
+        overrideUsed: false,
+      }).allowed,
+    ).toBe(false);
+  });
+
   it("erlaubt fuenfte Teilnahme mit eingegangenen Vertrag (RECEIVED)", () => {
     const result = checkTrialEligibility({
       attendedCount: 4,
@@ -262,13 +274,22 @@ describe("useTrialOverride", () => {
       overrideStatus: TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED,
       overrideUsed: false,
     });
-    const updated = useTrialOverride(participant);
-    expect(updated.overrideUsed).toBe(true);
+    const result = useTrialOverride(
+      participant,
+      4,
+      "BOARD",
+      "2026-06-24T10:00:00.000Z",
+      "session-fifth",
+    );
+    expect(result.updatedParticipant.overrideUsed).toBe(true);
+    expect(result.auditEntry.action).toBe("BOARD_OVERRIDE_USED");
   });
 
   it("wirft bei fehlender Ausnahme", () => {
     const participant = baseParticipant({ overrideStatus: TrialOverrideStatus.NONE });
-    expect(() => useTrialOverride(participant)).toThrow();
+    expect(() =>
+      useTrialOverride(participant, 4, "BOARD", "2026-06-24T10:00:00.000Z", "session-fifth"),
+    ).toThrow();
   });
 
   it("wirft bei bereits genutzter Ausnahme", () => {
@@ -276,7 +297,26 @@ describe("useTrialOverride", () => {
       overrideStatus: TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED,
       overrideUsed: true,
     });
-    expect(() => useTrialOverride(participant)).toThrow();
+    expect(() =>
+      useTrialOverride(participant, 4, "BOARD", "2026-06-24T10:00:00.000Z", "session-fifth"),
+    ).toThrow();
+  });
+
+  it.each([0, 1, 2, 3])("verbraucht die Ausnahme nicht beim Besuch %s", (attended) => {
+    const participant = baseParticipant({
+      overrideStatus: TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED,
+      overrideUsed: false,
+    });
+    expect(() =>
+      useTrialOverride(
+        participant,
+        attended,
+        "BOARD",
+        "2026-06-24T10:00:00.000Z",
+        "session-too-early",
+      ),
+    ).toThrow("fünfte");
+    expect(participant.overrideUsed).toBe(false);
   });
 });
 

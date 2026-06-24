@@ -18,16 +18,16 @@ Paket 1.2 erweitert das VTKB-Anwesenheitssystem um folgende Bereiche:
 
 ## Neue Dateien
 
-| Datei                                 | Beschreibung                                                                |
-| ------------------------------------- | --------------------------------------------------------------------------- |
-| `packages/shared/src/trial.ts`        | Zählung besuchter Einheiten, Berechtigungsprüfung, Vertragsstatus-Übergänge |
-| `packages/shared/src/person.ts`       | Normalisierung, Dubletten-Check, ID-Generatoren                             |
-| `packages/shared/src/belt.ts`         | Gürteldemo-Katalog, Änderungshistorie, Bildvorschlag-Entscheidungen         |
-| `apps/web/src/trialWorkflow.ts`       | App-seitige Trial-Logik, Warnhinweise, Profil-Builder                       |
-| `apps/web/src/trialScreens.tsx`       | TrialListScreen, TrialNewScreen, TrialProfileScreen, TrialContractScreen    |
-| `packages/shared/test/trial.test.ts`  | 30 Unit-Tests für Probetraining-Kernlogik                                   |
-| `packages/shared/test/person.test.ts` | 12 Unit-Tests für Normalisierung und Dubletten                              |
-| `docs/PACKAGE_1_2_REPORT.md`          | Dieser Bericht                                                              |
+| Datei                                 | Beschreibung                                                                 |
+| ------------------------------------- | ---------------------------------------------------------------------------- |
+| `packages/shared/src/trial.ts`        | Zählung besuchter Einheiten, Berechtigungsprüfung, Vertragsstatus-Übergänge  |
+| `packages/shared/src/person.ts`       | Normalisierung, Dubletten-Check, ID-Generatoren                              |
+| `packages/shared/src/belt.ts`         | Verbindlicher Gürtelkatalog, Änderungshistorie, Bildvorschlag-Entscheidungen |
+| `apps/web/src/trialWorkflow.ts`       | App-seitige Trial-Logik, Warnhinweise, Profil-Builder                        |
+| `apps/web/src/trialScreens.tsx`       | TrialListScreen, TrialNewScreen, TrialProfileScreen, TrialContractScreen     |
+| `packages/shared/test/trial.test.ts`  | 30 Unit-Tests für Probetraining-Kernlogik                                    |
+| `packages/shared/test/person.test.ts` | 12 Unit-Tests für Normalisierung und Dubletten                               |
+| `docs/PACKAGE_1_2_REPORT.md`          | Dieser Bericht                                                               |
 
 ---
 
@@ -95,5 +95,5 @@ Alle Testdaten sind **ausschließlich fiktiv**. Erkennungsmerkmale:
 
 - Alle neuen Shared-Funktionen sind **zustandslos und rein berechenbar** (keine React-Abhängigkeit).
 - Frühere kurzlebige Fremdpersonenmodelle wurden vollständig durch `TrialParticipant` ersetzt.
-- Der Gürteldemo-Katalog (`BELT_CATALOG`) in `belt.ts` ist fiktiv und muss nach Paket 2 durch den VTKB e.V. bestätigt werden.
-- Git-Operationen (Branch, Commit, Push, PR) werden manuell via PowerShell durchgeführt (siehe `scripts/git_package_1_2.ps1`).
+- `BELT_CATALOG` in `belt.ts` ist für diesen Projektstand die verbindliche Vereinsvorgabe.
+- Veraltete einmalige Git-Hilfsskripte gehören nicht zum aktuellen Projektstand.

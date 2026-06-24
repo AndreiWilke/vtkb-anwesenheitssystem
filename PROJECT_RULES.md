@@ -2,7 +2,7 @@
 
 ## Arbeitsbereich und Freigaben
 
-- Der bestaetigte Projektordner ist `C:\Users\andre\OneDrive\Documents\Privat\VTKB\Anwesenheit`.
+- Der bestaetigte Projektordner ist `D:\Anwesenheit`.
 - Pro Auftrag wird nur das ausdruecklich freigegebene Arbeitspaket bearbeitet.
 - Vor Aenderungen werden Bestand und Auswirkungen geprueft und ein kurzer Plan genannt.
 - Nach jedem Paket werden Tests, Aenderungen, Annahmen und offene Punkte berichtet. Danach wird gestoppt.
@@ -37,15 +37,16 @@
 - Pro Person und Einheit gibt es genau einen Anwesenheitsdatensatz.
 - Trainer- und Assistenzfunktion implizieren Anwesenheit und fuehren nie zu einer Doppelzaehlung als Teilnehmer.
 - Dauerhafter Anwesenheitsstatus ist `PRESENT` oder `ABSENT`.
-- Gaeste und Probetrainingsteilnehmer werden manuell erfasst und nie biometrisch aufgenommen.
-- Trainer und Assistenztrainer duerfen aktuelle Einheiten erfassen. Aeltere Korrekturen erfordern eine besonders berechtigte Vorstand-/Administratorrolle und ein Auditprotokoll.
+- Probetrainingsteilnehmer werden manuell erfasst und nie biometrisch aufgenommen.
+- Jede angemeldete Rolle darf aktuelle und nachtraegliche Einheiten erfassen. Nachtraegliche Einheiten erzeugen immer ein Auditprotokoll mit der tatsaechlich aktiven Rolle.
 - Guertelfarbe und Guertelgrad stammen aus Mitgliederstammdaten, nicht aus Bilderkennung.
 - Die Bildanalyse darf ausschliesslich eine sichtbare Guertelfarbe als unverbindlichen Pruefhinweis vorschlagen.
 - Die Bildanalyse darf niemals automatisch Stammdaten aendern.
 - Sie darf niemals einen Kyu- oder Dan-Grad bestimmen oder das Bestehen einer Pruefung feststellen.
 - Die endgueltige Aenderung von Guertelfarbe und Guertelgrad erfolgt ausschliesslich nach ausdruecklicher Bestaetigung durch einen berechtigten Trainer, Assistenztrainer oder Vorstand.
 - Jede bestaetigte Guertelaenderung erzeugt einen Historieneintrag und einen Audit-Eintrag.
-- Gaeste und Probetrainingsteilnehmer werden nicht biometrisch identifiziert; ein Bildvorschlag darf bei ihnen keiner Person automatisch zugeordnet werden.
+- `BELT_CATALOG` in `packages/shared/src/belt.ts` ist fuer diesen Projektstand der verbindliche Farb- und Gradkatalog. Abweichungen oder Aenderungen benoetigen eine ausdrueckliche Vereinsfreigabe.
+- Probetrainingsteilnehmer werden nicht biometrisch identifiziert; ein Bildvorschlag darf ihnen nicht automatisch zugeordnet werden.
 
 ## Fachliche Invarianten fuer Personen und Probetraining (ab Paket 1.2)
 
@@ -53,13 +54,12 @@
 - Es stehen grundsaetzlich vier kostenlose, tatsaechlich besuchte Probetrainings zur Verfuegung.
 - Als Probetraining zaehlt ausschliesslich: `PersonMembershipStatus.TRIAL`, `PresenceStatus.PRESENT` in einer `TrainingSessionStatus.COMPLETED`-Einheit.
 - Abwesenheit, Abbruch oder stornierte Einheiten zaehlen nicht; doppelte Anwesenheit zaehlt nur einmal.
-- Tagesgaeste zaehlen nicht als Probetrainingsteilnehmer.
 - Der Zaehler besuchter Probetrainings wird aus der Anwesenheitshistorie berechnet, nie als frei aenderbares Feld gespeichert.
 - Nach dem vierten besuchten Probetraining ist fuer weitere Teilnahme mindestens eines erforderlich: Vertragsstatus RECEIVED, aktives Mitglied oder eine begruendete Vorstandsausnahme.
 - Die Vorstandsausnahme erlaubt genau eine zusaetzliche Einheit und erzeugt einen Audit-Eintrag.
 - Die Umwandlung zum Mitglied erhaelt Personen-ID, Probetrainingsteilnahmen, den gesamten Anwesenheitsverlauf, Guerteldaten, Guertelhistorie, Auditverlauf und interne Bemerkungen.
-- Personen ohne Mitgliedschaft werden ausschließlich als dauerhafte Probetrainingprofile geführt.
-- Keine biometrische Registrierung von Gaesten oder Probetrainingsteilnehmern.
+- Probetrainingsteilnehmer werden als dauerhafte Profile manuell erfasst. Eine allgemeine Gastfunktion existiert nicht.
+- Keine biometrische Registrierung von Probetrainingsteilnehmern.
 
 ## Grenzen von Paket 0
 

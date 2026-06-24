@@ -25,6 +25,18 @@ export function suggestSession(
   return upcoming ?? sessions.at(-1) ?? sessions[0]!;
 }
 
+export function hasParallelSessionChoice(
+  sessions: readonly TrainingSessionMock[],
+  selected: TrainingSessionMock,
+): boolean {
+  return sessions.some(
+    (session) =>
+      session.id !== selected.id &&
+      session.startsAt.getTime() === selected.startsAt.getTime() &&
+      session.dojoId !== selected.dojoId,
+  );
+}
+
 export function createInitialAttendance(
   members: readonly Member[],
   session: TrainingSessionMock,
@@ -36,8 +48,19 @@ export function createInitialAttendance(
         ? {
             presenceStatus: PresenceStatus.PRESENT,
             sessionRole: SessionRole.RESPONSIBLE_TRAINER,
+            captureSource: CaptureSource.PREVIOUS_SESSION_SUGGESTION,
           }
-        : { presenceStatus: PresenceStatus.ABSENT, sessionRole: null },
+        : session.assistantTrainerIds.includes(member.id)
+          ? {
+              presenceStatus: PresenceStatus.PRESENT,
+              sessionRole: SessionRole.ASSISTANT_TRAINER,
+              captureSource: CaptureSource.PREVIOUS_SESSION_SUGGESTION,
+            }
+          : {
+              presenceStatus: PresenceStatus.ABSENT,
+              sessionRole: null,
+              captureSource: CaptureSource.MANUAL,
+            },
     ]),
   );
 }
@@ -46,6 +69,21 @@ export function presentMemberIds(attendance: AttendanceState): string[] {
   return Object.entries(attendance)
     .filter(([, selection]) => selection.presenceStatus === PresenceStatus.PRESENT)
     .map(([memberId]) => memberId);
+}
+
+export function attendanceRecordsForSession(
+  session: TrainingSessionMock,
+  attendance: AttendanceState,
+): AttendanceRecord[] {
+  return Object.entries(attendance)
+    .filter(([, selection]) => selection.presenceStatus === PresenceStatus.PRESENT)
+    .map(([memberId, selection]) => ({
+      sessionId: session.id,
+      memberId,
+      presenceStatus: selection.presenceStatus,
+      sessionRole: selection.sessionRole,
+      captureSource: selection.captureSource,
+    }));
 }
 
 export function canCompleteSession(
@@ -60,15 +98,18 @@ export function canCompleteSession(
       memberId,
       presenceStatus: selection.presenceStatus,
       sessionRole: selection.sessionRole,
-      captureSource: CaptureSource.MANUAL,
+      captureSource: selection.captureSource,
     }),
   );
   const issues = validateTrainingSession({
     session: {
       id: session.id,
       templateId: null,
+      scheduledSlotId: session.scheduledSlotId,
       name: session.name,
-      dojo: session.dojo,
+      trainingType: session.trainingType,
+      dojoId: session.dojoId,
+      dojoNameSnapshot: session.dojoNameSnapshot,
       startsAt: session.startsAt.toISOString(),
       endsAt: session.endsAt.toISOString(),
       status: TrainingSessionStatus.COMPLETED,

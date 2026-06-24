@@ -46,7 +46,7 @@ Paket 1.3 baut auf Paket 1.2 auf und ergänzt folgende Bereiche:
 - Voraussetzung: `contractStatus === RECEIVED` oder `MEMBERSHIP_ACTIVATED`
 - `membershipStatus` wird auf `ACTIVE_MEMBER` gesetzt
 - `contractStatus` wird auf `MEMBERSHIP_ACTIVATED` gesetzt
-- `memberId` wird gesetzt (neue Mitglieds-ID)
+- `memberId` bleibt identisch zur bestehenden Personen-ID
 - Anwesenheitshistorie bleibt vollständig erhalten (keine Datenmigration nötig)
 - Jede Umwandlung erzeugt einen `AuditEntry` mit `TRIAL_CONVERTED_TO_MEMBER`
 - TrialParticipant-Profil wird **nicht** gelöscht
@@ -68,7 +68,7 @@ Paket 1.3 baut auf Paket 1.2 auf und ergänzt folgende Bereiche:
 
 ## Demo-Datensätze (Paket 1.3 Ergänzungen)
 
-- `trial-005` (Mia Probetraining): wurde in Demo zu `member-41` umgewandelt
+- `trial-005` (Mia Probetraining): wurde unter derselben Personen-ID `trial-005` zum Mitglied umgewandelt
 - `demoAuditEntries`: 3 fiktive Audit-Einträge (Umwandlung, Vorstandsausnahme, Direktanlage)
 
 ---

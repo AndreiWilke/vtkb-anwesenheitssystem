@@ -21,12 +21,17 @@ import {
   PersonMembershipStatus,
   TrialOverrideStatus,
   canTransitionContract,
+  checkTrialEligibility,
   checkConversionEligibility,
   checkForDuplicates,
   convertTrialParticipantToMember,
   createDirectMember,
   createTrialParticipantIdGenerator,
   grantBoardOverride,
+  formatGermanDate,
+  isValidGermanDate,
+  parseGermanDate,
+  type PersonForDuplicateCheck,
 } from "@vtkb/shared";
 import React, { useState } from "react";
 
@@ -43,6 +48,7 @@ import {
   getTrialWarning,
 } from "./trialWorkflow";
 import { createMemberNumberGenerator, createPersonIdGenerator } from "@vtkb/shared";
+import { GermanDateInput } from "./components";
 
 // ---------------------------------------------------------------------------
 // Hilfsfunktionen
@@ -101,9 +107,13 @@ export function TrialListScreen({
       const { attended } = computeTrialSessionCount(p.id, history);
       return (
         p.active &&
-        attended >= 4 &&
-        p.contractStatus === ContractStatus.NOT_ISSUED &&
-        p.overrideStatus !== TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED
+        !checkTrialEligibility({
+          attendedCount: attended,
+          contractStatus: p.contractStatus,
+          membershipStatus: p.membershipStatus,
+          overrideStatus: p.overrideStatus,
+          overrideUsed: p.overrideUsed,
+        }).allowed
       );
     }
     return true;
@@ -172,6 +182,7 @@ export function TrialListScreen({
 
 interface TrialNewScreenProps {
   existingParticipants: readonly TrialParticipant[];
+  existingPersons: readonly PersonForDuplicateCheck[];
   onSave: (participant: TrialParticipant) => void;
   onBack: () => void;
   /** Nur BOARD darf Dubletten bewusst ueberschreiben */
@@ -202,12 +213,13 @@ const emptyForm: NewForm = {
 
 export function TrialNewScreen({
   existingParticipants,
+  existingPersons,
   onSave,
   onBack,
   isBoard,
 }: TrialNewScreenProps) {
   const [form, setForm] = useState<NewForm>(emptyForm);
-  const [duplicates, setDuplicates] = useState<TrialParticipant[]>([]);
+  const [duplicates, setDuplicates] = useState<PersonForDuplicateCheck[]>([]);
   const [forceCreate, setForceCreate] = useState(false);
   const [errors, setErrors] = useState<Partial<NewForm>>({});
 
@@ -215,7 +227,9 @@ export function TrialNewScreen({
     const errs: Partial<NewForm> = {};
     if (!form.firstName.trim()) errs.firstName = "Pflichtfeld";
     if (!form.lastName.trim()) errs.lastName = "Pflichtfeld";
-    if (!form.birthDate) errs.birthDate = "Pflichtfeld";
+    if (!isValidGermanDate(form.birthDate)) {
+      errs.birthDate = "Bitte ein gültiges Datum im Format TT.MM.JJJJ eingeben.";
+    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -226,18 +240,26 @@ export function TrialNewScreen({
       {
         firstName: form.firstName,
         lastName: form.lastName,
-        birthDate: form.birthDate,
+        birthDate: parseGermanDate(form.birthDate)!,
       },
-      existingParticipants,
+      existingPersons,
     );
     if (result.hasProbableDuplicate && !forceCreate) {
-      setDuplicates(result.matches as TrialParticipant[]);
+      setDuplicates(result.matches);
     } else {
       handleCreate();
     }
   }
 
   function handleCreate() {
+    const birthDate = parseGermanDate(form.birthDate);
+    if (!birthDate) {
+      setErrors((current) => ({
+        ...current,
+        birthDate: "Bitte ein gültiges Datum im Format TT.MM.JJJJ eingeben.",
+      }));
+      return;
+    }
     const nextId = createTrialParticipantIdGenerator(existingParticipants.map((p) => p.id));
     const id = nextId();
     const participant = buildNewTrialParticipant(
@@ -246,7 +268,7 @@ export function TrialNewScreen({
         firstName: form.firstName,
         lastName: form.lastName,
         gender: form.gender,
-        birthDate: form.birthDate,
+        birthDate,
         contactName: form.contactName || undefined,
         contactPhone: form.contactPhone || undefined,
         contactEmail: form.contactEmail || undefined,
@@ -258,20 +280,30 @@ export function TrialNewScreen({
   }
 
   function field(key: keyof NewForm, label: string, type = "text") {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setForm((prev) => ({ ...prev, [key]: e.target.value }));
+      setErrors((prev) => ({ ...prev, [key]: undefined }));
+      setDuplicates([]);
+      setForceCreate(false);
+    };
     return (
       <label className="form-field">
         <span className="form-field__label">{label}</span>
-        <input
-          className={`form-field__input${errors[key] ? " form-field__input--error" : ""}`}
-          type={type}
-          value={form[key]}
-          onChange={(e) => {
-            setForm((prev) => ({ ...prev, [key]: e.target.value }));
-            setErrors((prev) => ({ ...prev, [key]: undefined }));
-            setDuplicates([]);
-            setForceCreate(false);
-          }}
-        />
+        {type === "date" ? (
+          <GermanDateInput
+            aria-label={label}
+            className={`form-field__input${errors[key] ? " form-field__input--error" : ""}`}
+            value={form[key]}
+            onChange={handleChange}
+          />
+        ) : (
+          <input
+            className={`form-field__input${errors[key] ? " form-field__input--error" : ""}`}
+            type={type}
+            value={form[key]}
+            onChange={handleChange}
+          />
+        )}
         {errors[key] && <span className="form-field__error">{errors[key]}</span>}
       </label>
     );
@@ -328,7 +360,7 @@ export function TrialNewScreen({
             <ul>
               {duplicates.map((d) => (
                 <li key={d.id}>
-                  {d.displayName} ({d.birthDate.slice(0, 4)})
+                  {d.firstName} {d.lastName} ({d.birthDate.slice(0, 4)})
                 </li>
               ))}
             </ul>
@@ -372,6 +404,8 @@ interface TrialProfileScreenProps {
   participant: TrialParticipant;
   history: readonly HistoricalTrainingSession[];
   onContractView: () => void;
+  onBoardOverride?: () => void;
+  onConvert?: () => void;
   onBack: () => void;
 }
 
@@ -379,6 +413,8 @@ export function TrialProfileScreen({
   participant,
   history,
   onContractView,
+  onBoardOverride,
+  onConvert,
   onBack,
 }: TrialProfileScreenProps) {
   const { attended, remaining } = computeTrialSessionCount(participant.id, history);
@@ -405,9 +441,9 @@ export function TrialProfileScreen({
           <dt>Geschlecht</dt>
           <dd>{genderLabel(participant.gender)}</dd>
           <dt>Geburtsdatum</dt>
-          <dd>{participant.birthDate}</dd>
+          <dd>{formatGermanDate(participant.birthDate)}</dd>
           <dt>Erstellt am</dt>
-          <dd>{participant.createdAt.slice(0, 10)}</dd>
+          <dd>{formatGermanDate(participant.createdAt.slice(0, 10))}</dd>
           {participant.beltColor && (
             <>
               <dt>Gürtel</dt>
@@ -441,9 +477,9 @@ export function TrialProfileScreen({
             {attended} / 4 (noch {remaining} kostenfrei)
           </dd>
           <dt>Erstes Training</dt>
-          <dd>{participant.firstTrialDate ?? "–"}</dd>
+          <dd>{participant.firstTrialDate ? formatGermanDate(participant.firstTrialDate) : "–"}</dd>
           <dt>Letztes Training</dt>
-          <dd>{participant.lastTrialDate ?? "–"}</dd>
+          <dd>{participant.lastTrialDate ? formatGermanDate(participant.lastTrialDate) : "–"}</dd>
         </dl>
 
         {participant.overrideStatus === TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED && (
@@ -461,6 +497,16 @@ export function TrialProfileScreen({
         <button className="btn-secondary" onClick={onContractView}>
           Vertragsstatus verwalten →
         </button>
+        {onConvert && participant.membershipStatus === PersonMembershipStatus.TRIAL ? (
+          <button className="btn-secondary" onClick={onConvert}>
+            Profil in Mitglied umwandeln →
+          </button>
+        ) : null}
+        {onBoardOverride && participant.membershipStatus === PersonMembershipStatus.TRIAL ? (
+          <button className="btn-secondary" onClick={onBoardOverride}>
+            Vorstandsausnahme prüfen →
+          </button>
+        ) : null}
       </section>
 
       {participant.contactName || participant.contactEmail || participant.contactPhone ? (
@@ -596,11 +642,17 @@ export function TrialContractScreen({
 
 interface BoardOverrideScreenProps {
   participant: TrialParticipant;
+  attendedTrialCount: number;
   onSave: (updated: TrialParticipant, audit: AuditEntry) => void;
   onBack: () => void;
 }
 
-export function BoardOverrideScreen({ participant, onSave, onBack }: BoardOverrideScreenProps) {
+export function BoardOverrideScreen({
+  participant,
+  attendedTrialCount,
+  onSave,
+  onBack,
+}: BoardOverrideScreenProps) {
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -615,6 +667,7 @@ export function BoardOverrideScreen({ participant, onSave, onBack }: BoardOverri
     try {
       const result = grantBoardOverride({
         participant,
+        attendedTrialCount,
         grantedBy: "Vorstand Demo",
         grantedAt: new Date().toISOString(),
         reason: reason.trim(),
@@ -653,6 +706,10 @@ export function BoardOverrideScreen({ participant, onSave, onBack }: BoardOverri
             Probeeinheit über das reguläre Limit von 4 hinaus. Sie kann pro Person nur einmal
             erteilt werden.
           </div>
+          <p className="screen-subtitle">
+            Nachgewiesene reguläre Besuche: {attendedTrialCount} von 4. Eine Erteilung ist nur exakt
+            nach dem vierten Besuch möglich.
+          </p>
 
           <form
             className="form"
@@ -677,7 +734,7 @@ export function BoardOverrideScreen({ participant, onSave, onBack }: BoardOverri
             </label>
 
             <div className="form-actions">
-              <button type="submit" className="btn-primary">
+              <button type="submit" className="btn-primary" disabled={attendedTrialCount !== 4}>
                 Ausnahme erteilen
               </button>
               <button type="button" className="btn-secondary" onClick={onBack}>
@@ -723,6 +780,7 @@ export function TrialConversionScreen({
       const result = convertTrialParticipantToMember({
         participant,
         memberNumber: nextMemberNumber,
+        existingMemberNumbers,
         qualification:
           qualification as (typeof MemberQualification)[keyof typeof MemberQualification],
         convertedBy: "Vorstand Demo",
@@ -769,9 +827,9 @@ export function TrialConversionScreen({
           <dt>Besuchte Einheiten</dt>
           <dd>{attended}</dd>
           <dt>Erstes Training</dt>
-          <dd>{participant.firstTrialDate ?? "–"}</dd>
+          <dd>{participant.firstTrialDate ? formatGermanDate(participant.firstTrialDate) : "–"}</dd>
           <dt>Letztes Training</dt>
-          <dd>{participant.lastTrialDate ?? "–"}</dd>
+          <dd>{participant.lastTrialDate ? formatGermanDate(participant.lastTrialDate) : "–"}</dd>
           <dt>Vertragsstatus</dt>
           <dd>{participant.contractStatus}</dd>
           {participant.beltColor && (
@@ -847,6 +905,7 @@ export function TrialConversionScreen({
 interface DirectMemberNewScreenProps {
   existingMemberIds: readonly string[];
   existingMemberNumbers: readonly string[];
+  existingPersons: readonly PersonForDuplicateCheck[];
   onSave: (result: DirectMemberResult, audit: AuditEntry) => void;
   onBack: () => void;
 }
@@ -876,6 +935,7 @@ const emptyDirectForm: DirectForm = {
 export function DirectMemberNewScreen({
   existingMemberIds,
   existingMemberNumbers,
+  existingPersons,
   onSave,
   onBack,
 }: DirectMemberNewScreenProps) {
@@ -886,13 +946,17 @@ export function DirectMemberNewScreen({
     const errs: Partial<DirectForm> = {};
     if (!form.firstName.trim()) errs.firstName = "Pflichtfeld";
     if (!form.lastName.trim()) errs.lastName = "Pflichtfeld";
-    if (!form.birthDate) errs.birthDate = "Pflichtfeld";
+    if (!isValidGermanDate(form.birthDate)) {
+      errs.birthDate = "Bitte ein gültiges Datum im Format TT.MM.JJJJ eingeben.";
+    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
 
   function handleSubmit() {
     if (!validate()) return;
+    const birthDate = parseGermanDate(form.birthDate);
+    if (!birthDate) return;
     const beltEntry = BELT_CATALOG[Number(form.beltIndex)] ?? BELT_CATALOG[0];
     const nextId = createPersonIdGenerator(existingMemberIds)();
     const nextNumber = createMemberNumberGenerator(existingMemberNumbers)();
@@ -902,12 +966,16 @@ export function DirectMemberNewScreen({
         firstName: form.firstName,
         lastName: form.lastName,
         gender: form.gender,
-        birthDate: form.birthDate,
+        birthDate,
+        contactPhone: form.contactPhone || undefined,
         beltColor: beltEntry?.color,
         beltGrade: beltEntry?.grade,
         qualification:
           form.qualification as (typeof MemberQualification)[keyof typeof MemberQualification],
         memberNumber: nextNumber,
+        existingPersonIds: existingMemberIds,
+        existingMemberNumbers,
+        existingPersons,
         createdBy: "Vorstand Demo",
         createdAt: new Date().toISOString(),
         note: form.note || undefined,
@@ -919,18 +987,28 @@ export function DirectMemberNewScreen({
   }
 
   function field(key: keyof DirectForm, label: string, type = "text") {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setForm((prev) => ({ ...prev, [key]: e.target.value }));
+      setErrors((prev) => ({ ...prev, [key]: undefined }));
+    };
     return (
       <label className="form-field">
         <span className="form-field__label">{label}</span>
-        <input
-          className={`form-field__input${errors[key] ? " form-field__input--error" : ""}`}
-          type={type}
-          value={form[key]}
-          onChange={(e) => {
-            setForm((prev) => ({ ...prev, [key]: e.target.value }));
-            setErrors((prev) => ({ ...prev, [key]: undefined }));
-          }}
-        />
+        {type === "date" ? (
+          <GermanDateInput
+            aria-label={label}
+            className={`form-field__input${errors[key] ? " form-field__input--error" : ""}`}
+            value={form[key]}
+            onChange={handleChange}
+          />
+        ) : (
+          <input
+            className={`form-field__input${errors[key] ? " form-field__input--error" : ""}`}
+            type={type}
+            value={form[key]}
+            onChange={handleChange}
+          />
+        )}
         {errors[key] && <span className="form-field__error">{errors[key]}</span>}
       </label>
     );

@@ -77,5 +77,4 @@ Paket 1.4 baut auf Paket 1.3 auf und ergänzt die vollständige Gürtelverwaltun
 
 - Echte Kamera-Integration (React Native / PWA Camera API)
 - Echtes Bilderkennungsmodell (serverside, DSGVO-konform)
-- Prüfungsordnung durch VTKB e.V. definieren und in BELT_CATALOG übernehmen
 - Prüfungsvoraussetzungen (Mindesttrainingseinheiten, Mindestalter etc.)

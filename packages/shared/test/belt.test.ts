@@ -155,7 +155,7 @@ describe("createBeltHistoryEntry", () => {
       previousBeltColor: "GRUEN",
       previousBeltGrade: "7. Kyu",
       newBeltColor: "BLAU",
-      newBeltGrade: "6. Kyu",
+      newBeltGrade: "5. Kyu",
       effectiveFrom: "2026-06-21",
       recordedBy: "Trainer Demo",
       recordedAt: "2026-06-21T19:00:00.000Z",
@@ -196,6 +196,23 @@ describe("createBeltHistoryEntry", () => {
         source: BeltChangeSource.MANUAL_CONFIRMED,
       }),
     ).toThrow("Guertelgrad");
+  });
+
+  it("lehnt unmögliche Gültigkeits- und Prüfungsdaten beim Erstellen ab", () => {
+    expect(() =>
+      createBeltHistoryEntry("belt-invalid-date", {
+        personId: "member-01",
+        previousBeltColor: "GRUEN",
+        previousBeltGrade: "6. Kyu",
+        newBeltColor: "BLAU",
+        newBeltGrade: "5. Kyu",
+        effectiveFrom: "2026-02-31",
+        examDate: "2026-13-01",
+        recordedBy: "Trainer Demo",
+        recordedAt: "2026-06-21T19:00:00.000Z",
+        source: BeltChangeSource.MANUAL_CONFIRMED,
+      }),
+    ).toThrow("gültiges Datum");
   });
 });
 
@@ -272,14 +289,29 @@ describe("applyBeltSuggestionDecision", () => {
     confidencePercent: 82,
     status: BeltSuggestionStatus.OPEN,
   };
+  const historyEntry = {
+    id: "belt-0001",
+    personId: "member-01",
+    previousBeltColor: "GRUEN",
+    previousBeltGrade: "6. Kyu",
+    newBeltColor: "BLAU",
+    newBeltGrade: "5. Kyu",
+    recordedBy: "Trainer Demo",
+    recordedAt: "2026-06-20T19:30:00.000Z",
+    source: BeltChangeSource.IMAGE_SUGGESTION_CONFIRMED,
+  };
 
   it("setzt Status auf CONFIRMED bei CONFIRM-Action", () => {
-    const result = applyBeltSuggestionDecision(baseSuggestion, {
-      action: "CONFIRM",
-      decidedBy: "Trainer Demo",
-      decidedAt: "2026-06-20T19:30:00.000Z",
-      historyEntryId: "belt-0001",
-    });
+    const result = applyBeltSuggestionDecision(
+      baseSuggestion,
+      {
+        action: "CONFIRM",
+        decidedBy: "Trainer Demo",
+        decidedAt: "2026-06-20T19:30:00.000Z",
+        historyEntryId: "belt-0001",
+      },
+      [historyEntry],
+    );
     expect(result.status).toBe(BeltSuggestionStatus.CONFIRMED);
     expect(result.historyEntryId).toBe("belt-0001");
   });
@@ -304,11 +336,22 @@ describe("applyBeltSuggestionDecision", () => {
 
   it("veraendert das Original nicht (Immutabilitaet)", () => {
     applyBeltSuggestionDecision(baseSuggestion, {
-      action: "CONFIRM",
+      action: "REJECT",
       decidedBy: "x",
       decidedAt: "2026-06-20T19:30:00.000Z",
     });
     expect(baseSuggestion.status).toBe(BeltSuggestionStatus.OPEN);
+  });
+
+  it("lehnt eine Bestätigung ohne passenden Historieneintrag ab", () => {
+    expect(() =>
+      applyBeltSuggestionDecision(baseSuggestion, {
+        action: "CONFIRM",
+        decidedBy: "Trainer Demo",
+        decidedAt: "2026-06-20T19:30:00.000Z",
+        historyEntryId: "fehlt",
+      }),
+    ).toThrow("Historieneintrag");
   });
 });
 

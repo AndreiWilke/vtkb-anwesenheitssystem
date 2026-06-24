@@ -14,6 +14,7 @@ import {
   TrainingSessionStatus,
   TrialOverrideStatus,
   type AttendanceRecord,
+  type AuditEntry,
   type ContractStatus as ContractStatusValue,
   type PersonMembershipStatus as PersonMembershipStatusValue,
   type TrialOverrideStatus as TrialOverrideStatusValue,
@@ -184,14 +185,45 @@ export function checkTrialEligibility(input: TrialEligibilityInput): TrialEligib
 // Vorstandsausnahme verwenden
 // ---------------------------------------------------------------------------
 
-export function useTrialOverride(participant: TrialParticipant): TrialParticipant {
+export interface UsedTrialOverrideResult {
+  updatedParticipant: TrialParticipant;
+  auditEntry: AuditEntry;
+}
+
+export function useTrialOverride(
+  participant: TrialParticipant,
+  attendedTrialCount: number,
+  usedBy: string,
+  usedAt: string,
+  sessionId: string,
+): UsedTrialOverrideResult {
   if (participant.overrideStatus !== TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED) {
     throw new Error("Keine genehmigte Vorstandsausnahme vorhanden.");
   }
   if (participant.overrideUsed) {
     throw new Error("Die Vorstandsausnahme wurde bereits verwendet.");
   }
-  return { ...participant, overrideUsed: true };
+  if (participant.membershipStatus !== PersonMembershipStatus.TRIAL || !participant.active) {
+    throw new Error("Die Vorstandsausnahme gilt nur für ein aktives Probetrainingprofil.");
+  }
+  if (attendedTrialCount !== MAX_FREE_TRIAL_SESSIONS) {
+    throw new Error(
+      "Die Vorstandsausnahme darf nur für die konkrete fünfte Teilnahme verwendet werden.",
+    );
+  }
+  return {
+    updatedParticipant: { ...participant, overrideUsed: true },
+    auditEntry: {
+      id: `audit-override-used-${participant.id}-${sessionId}`,
+      occurredAt: usedAt,
+      actor: usedBy,
+      action: "BOARD_OVERRIDE_USED",
+      object: `TrialParticipant:${participant.id}`,
+      previousValue: "ONE_ADDITIONAL_SESSION_APPROVED:UNUSED",
+      newValue: `ONE_ADDITIONAL_SESSION_APPROVED:USED:${sessionId}`,
+      reason: "Einmalige fünfte Probetrainingsteilnahme abgeschlossen.",
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------

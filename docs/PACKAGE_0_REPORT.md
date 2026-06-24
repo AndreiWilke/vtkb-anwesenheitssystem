@@ -1,8 +1,8 @@
 # Paket 0 - Abnahmebericht
 
-- Datum: 2026-06-20
-- Status: abgeschlossen und nach unabhaengigem Review korrigiert
-- Projektordner: `C:\Users\andre\OneDrive\Documents\Privat\VTKB\Anwesenheit`
+- Datum des aktuellen Korrekturstands: 2026-06-24
+- Status: Paket-0-Grundlage abgeschlossen; Repository inzwischen bis zum lokalen Paket-1.7-Prototyp erweitert
+- Projektordner: `D:\Anwesenheit`
 - Cloudaktionen: keine
 - Commit: keiner
 
@@ -30,7 +30,7 @@
 
 Die lokale Codex-Laufzeit stellt npm nicht global bereit. Die aufgefuehrten npm-Befehle wurden deshalb mit npm 11.4.2 ueber die gebuendelte Node-Laufzeit gestartet.
 
-## Ausgefuehrte Verifikation
+## Historische Paket-0-Verifikation
 
 | Befehl                 | Nachgewiesenes Ergebnis                                              |
 | ---------------------- | -------------------------------------------------------------------- |
@@ -51,7 +51,7 @@ Die lokale Codex-Laufzeit stellt npm nicht global bereit. Die aufgefuehrten npm-
 - Keine doppelte Anwesenheit derselben Person in derselben Einheit.
 - Mitgliedsdatensaetze muessen zur geprueften Einheit gehoeren.
 - Verantwortliche und assistierende Trainerfunktionen setzen Anwesenheit voraus.
-- Gaeste besitzen keine biometrische Enrollment-ID.
+- Probetrainingsteilnehmer werden als dauerhafte Profile manuell erfasst. Eine allgemeine Gastfunktion existiert nicht.
 - Anwesenheitsdatensätze beziehen sich ausschließlich auf Mitglieder oder dauerhafte Probetrainingprofile.
 - `assertValidTrainingSession` akzeptiert gueltige und verwirft ungueltige Daten.
 - `ConsentStatus` enthaelt `DECLINED`.
@@ -67,22 +67,21 @@ Die lokale Codex-Laufzeit stellt npm nicht global bereit. Die aufgefuehrten npm-
 - Die Autorenangabe in der als Planungsdokument gekennzeichneten Machbarkeitsstudie bleibt als Dokumentprovenienz erhalten.
 - Ein read-only Word-PDF-Export der aktualisierten Studie ergab 25 Seiten; alle 25 Seiten wurden visuell geprueft. Der kanonische LibreOffice-Renderer war auf diesem Windows-System technisch blockiert.
 
-## Annahmen
+## In späteren lokalen Paketen konkretisiert
 
-- Alle Zeitpunkte werden spaeter als ISO-8601-Zeitpunkte mit Zeitzonenbezug transportiert; die konkrete Dojo-Zeitzonenlogik folgt in Paket 3.
+- Alle fachlichen Zeitpunkte verwenden `Europe/Berlin`; vier Dojos und elf Wochenzeiten sind als getrennte Stammdaten umgesetzt.
 - `PREVIOUS_SESSION_SUGGESTION` ist nur eine unverbindliche Erfassungsquelle und erzeugt ohne Bestaetigung keine Anwesenheit.
 - Ein anwesendes Mitglied besitzt genau eine heutige Funktion; eine abwesende Person besitzt keine.
 - `DECLINED` bezeichnet eine ausdrueckliche Ablehnung; `WITHDRAWN` den spaeteren Widerruf einer zuvor erteilten biometrischen Einwilligung.
 
-## Offene Punkte fuer spaetere Pakete
+## Weiterhin offene Punkte fuer spaetere Produktivpakete
 
-- Genaue Trainingsvorlagen, Dojos und Zeitfenster fuer die automatische Einheitenauswahl.
 - Trainer-Korrekturfrist und Rollenmatrix fuer Vorstand/Administratoren.
 - Aufbewahrungsfrist fuer bestaetigte Anwesenheitsdaten.
 - Versionierter Einwilligungstext, DSFA und Verfahren fuer Nicht-Einwilligende.
 - DynamoDB-Zugriffsmuster und atomare Persistenz der Invarianten.
 - Rekognition-Schwellenwerte werden erst aus einem freigegebenen Erwachsenenpilot abgeleitet.
 
-## Ausdruecklicher Stopp
+## Aktuelle Abgrenzung
 
-Paket 1 ist nicht begonnen. Es gibt keine React-Oberflaeche, AWS-Ressource, Terraform-Ressource, Datenbankanbindung, Fotoverarbeitung, Rekognition-Integration oder Cloudbereitstellung.
+Der lokale React-Prototyp ist inzwischen vorhanden. Weiterhin existieren keine produktive AWS-Ressource, Datenbankanbindung, echte Fotoverarbeitung, Rekognition-Integration oder Cloudbereitstellung.

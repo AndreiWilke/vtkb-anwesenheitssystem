@@ -16,8 +16,11 @@ import {
 const completedSession: TrainingSession = {
   id: "session-example",
   templateId: "template-example",
+  scheduledSlotId: "slot-example",
   name: "Fiktive Testeinheit",
-  dojo: "Test-Dojo",
+  trainingType: "ALLGEMEINES_TRAINING",
+  dojoId: "dojo-example",
+  dojoNameSnapshot: "Test-Dojo",
   startsAt: "2026-06-20T16:00:00.000Z",
   endsAt: "2026-06-20T17:00:00.000Z",
   status: TrainingSessionStatus.COMPLETED,

@@ -1,9 +1,8 @@
 /**
  * Fachlogik fuer Guertelaenderungen, Guertelhistorie und Bildvorschlaege.
  *
- * HINWEIS: Der Guertel-Demo-Katalog (Farbe → Grad) ist fiktiv und dient
- * ausschliesslich dem lokalen Prototyp. Die endgueltige Reihenfolge und
- * Pruefungsordnung muss nach Paket 2 durch den VTKB e.V. bestaetigt werden.
+ * Der BELT_CATALOG ist der fuer diesen Projektstand verbindliche fachliche
+ * Katalog. Aenderungen erfolgen nur nach ausdruecklicher Freigabe des Vereins.
  *
  * Fachregeln (PROJECT_RULES):
  *   - Bildanalyse darf nur eine sichtbare Guertelfarbe als Pruefhinweis vorschlagen.
@@ -20,9 +19,10 @@ import {
   type BeltSuggestion,
   type BeltSuggestionStatus as BeltSuggestionStatusValue,
 } from "./domain.js";
+import { isValidIsoDate } from "./date.js";
 
 // ---------------------------------------------------------------------------
-// Fiktiver Demo-Guertelkatalog
+// Verbindlicher Guertelkatalog dieses Projektstands
 // ---------------------------------------------------------------------------
 
 export interface BeltLevel {
@@ -114,11 +114,13 @@ export interface BeltChangeInput {
 }
 
 export function createBeltHistoryEntry(id: string, input: BeltChangeInput): BeltHistoryEntry {
-  if (!input.newBeltColor.trim()) {
-    throw new Error("Guertelfarbe darf nicht leer sein.");
-  }
-  if (!input.newBeltGrade.trim()) {
-    throw new Error("Guertelgrad darf nicht leer sein.");
+  if (!id.trim()) throw new Error("Historieneintrag benötigt eine ID.");
+  const validation = validateBeltChange(input);
+  if (!validation.valid) throw new Error(validation.issues.join(" "));
+  if (!input.personId.trim()) throw new Error("Personen-ID ist Pflicht.");
+  if (!input.recordedBy.trim()) throw new Error("Erfassende Person ist Pflicht.");
+  if (Number.isNaN(Date.parse(input.recordedAt))) {
+    throw new Error("Erfassungszeitpunkt ist ungültig.");
   }
   return {
     id,
@@ -151,6 +153,7 @@ export interface BeltSuggestionDecision {
 export function applyBeltSuggestionDecision(
   suggestion: BeltSuggestion,
   decision: BeltSuggestionDecision,
+  historyEntries: readonly BeltHistoryEntry[] = [],
 ): BeltSuggestion {
   const statusMap: Record<BeltSuggestionDecision["action"], BeltSuggestionStatusValue> = {
     CONFIRM: BeltSuggestionStatus.CONFIRMED,
@@ -159,6 +162,12 @@ export function applyBeltSuggestionDecision(
     KEEP_STORED: BeltSuggestionStatus.REJECTED,
   };
 
+  if (decision.action === "CONFIRM") {
+    const historyEntry = historyEntries.find((entry) => entry.id === decision.historyEntryId);
+    if (!historyEntry || historyEntry.personId !== suggestion.memberId) {
+      throw new Error("Ein bestätigter Gürtelvorschlag benötigt einen passenden Historieneintrag.");
+    }
+  }
   return {
     ...suggestion,
     status: statusMap[decision.action],
@@ -200,7 +209,7 @@ export interface BeltChangeValidationResult {
  * Prueft eine Guertelaenderung auf fachliche Konsistenz.
  *
  * Regeln:
- *   - Neue Farbe und Grad muessen im Demo-Katalog enthalten sein.
+ *   - Neue Farbe und Grad muessen im verbindlichen BELT_CATALOG enthalten sein.
  *   - Grad muss zur Farbe passen.
  *   - Bildanalyse darf niemals einen Grad vorgeben (wird hier nicht geprueft –
  *     das ist eine UI-seitige Invariante).
@@ -228,8 +237,11 @@ export function validateBeltChange(input: BeltChangeInput): BeltChangeValidation
     }
   }
 
-  if (input.effectiveFrom && !/^\d{4}-\d{2}-\d{2}$/.test(input.effectiveFrom)) {
-    issues.push("Gueltig-ab-Datum muss im Format JJJJ-MM-TT angegeben sein.");
+  if (input.effectiveFrom && !isValidIsoDate(input.effectiveFrom)) {
+    issues.push("Gueltig-ab-Datum muss ein gültiges Datum im Format JJJJ-MM-TT sein.");
+  }
+  if (input.examDate && !isValidIsoDate(input.examDate)) {
+    issues.push("Prüfungsdatum muss ein gültiges Datum im Format JJJJ-MM-TT sein.");
   }
 
   if (
@@ -249,15 +261,16 @@ export function validateBeltChange(input: BeltChangeInput): BeltChangeValidation
 export interface BeltExamHint {
   /** Aktueller Sortierindex im Katalog */
   currentSortOrder: number | null;
-  /** Naechster Guertelschritt (Demo-Katalog) */
+  /** Naechster Guertelschritt im verbindlichen Katalog */
   nextLevel: BeltLevel | null;
-  /** true = hoechster bekannter Grad im Demo-Katalog */
+  /** true = hoechster bekannter Grad im verbindlichen Katalog */
   isHighest: boolean;
 }
 
 /**
  * Gibt einen unverbindlichen Pruefungshinweis auf den naechsten Gurt.
- * Der Hinweis basiert auf dem Demo-Katalog und ist nicht verbindlich.
+ * Der Hinweis basiert auf dem verbindlichen Katalog; die Pruefungsentscheidung
+ * bleibt eine manuell zu bestaetigende Vereinsentscheidung.
  * Pruefungsvoraussetzungen (Trainingseinheiten, Mindestalter etc.) werden
  * in Paket 2+ durch den Verein definiert.
  */

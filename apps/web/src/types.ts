@@ -1,5 +1,6 @@
 import type {
   AttendanceRecord,
+  CaptureSource,
   BeltHistoryEntry as SharedBeltHistoryEntry,
   BeltSuggestion as SharedBeltSuggestion,
   DemoRole,
@@ -65,6 +66,7 @@ export interface Member {
   initials: string;
   gender: Gender;
   birthDate?: string;
+  contactPhone?: string;
   beltColor: BeltColor;
   beltGrade: string;
   qualification: MemberQualification;
@@ -75,6 +77,7 @@ export interface Member {
 }
 
 export type TrainingType =
+  | "ALLGEMEINES_TRAINING"
   | "KINDERTRAINING"
   | "JUGENDTRAINING"
   | "ERWACHSENENTRAINING"
@@ -89,6 +92,9 @@ export interface HistoricalTrainingSession {
   timeZone: "Europe/Berlin";
   name: string;
   trainingType: TrainingType;
+  scheduledSlotId: string | null;
+  dojoId: string;
+  dojoNameSnapshot: string;
   dojo: string;
   status: TrainingSessionStatus;
   attendance: readonly AttendanceRecord[];
@@ -119,7 +125,11 @@ export type DemoRoleValue = DemoRole;
 
 export interface TrainingSessionMock {
   id: string;
+  scheduledSlotId: string;
   name: string;
+  trainingType: TrainingType;
+  dojoId: string;
+  dojoNameSnapshot: string;
   dojo: string;
   startsAt: Date;
   endsAt: Date;
@@ -130,6 +140,7 @@ export interface TrainingSessionMock {
 export interface AttendanceSelection {
   presenceStatus: PresenceStatus;
   sessionRole: SessionRole | null;
+  captureSource: CaptureSource;
 }
 
 export type AttendanceState = Record<string, AttendanceSelection>;

@@ -27,7 +27,7 @@ Paket 1.1 erweitert den bestehenden Smartphone-first-Prototyp um nachvollziehbar
 
 ## Datenmodell und historische Einheiten
 
-Der Prototyp erzeugt deterministisch 60 abgeschlossene Einheiten von Januar bis Juni 2026. Enthalten sind Kinder-, Jugend-, Erwachsenen-, Grundlagen- und Fortgeschrittenentraining, drei fiktive Dojos, unterschiedliche Wochentage und Uhrzeiten, direkt aufeinanderfolgende Einheiten sowie null, ein oder zwei Assistenztrainer. Das dauerhaft als Assistenztrainer qualifizierte `member-05` leitet einzelne Einheiten verantwortlich.
+Der aktuelle Prototyp erzeugt deterministisch 66 abgeschlossene Einheiten von Januar bis Juni 2026. Grundlage sind die vier Dojo-Stammdatensätze und elf verbindlichen Wochenzeiten. Enthalten sind parallele Einheiten in verschiedenen Dojos, direkt aufeinanderfolgende Einheiten im selben Dojo sowie unterschiedliche Trainer- und Assistenzrollen.
 
 Jede Einheit enthält ID, fachliches Datum, Start und Ende, `Europe/Berlin`, Bezeichnung, Trainingsart, Dojo, Status `COMPLETED`, genau einen verantwortlichen Trainer, null bis mehrere Assistenztrainer, Teilnehmer, Abschlusszeitpunkt und fiktive abschließende Person. Pro Person und Einheit wird genau ein Anwesenheitsdatensatz erzeugt.
 
@@ -102,7 +102,7 @@ Vite-Produktionsergebnis:
 | CSS        |  26,03 kB |  6,23 kB |
 | HTML       |   0,76 kB |  0,44 kB |
 
-Der PWA-Precache enthält sechs Einträge mit zusammen 304,47 KiB. Source Maps sind Buildartefakte und werden nicht committed.
+Produktionsbuilds erzeugen bewusst keine Source Maps. Buildgrößen sind standabhängig und werden nur aus dem jeweils ausgeführten Build berichtet.
 
 ## Testbefehle und Ergebnisse
 
@@ -126,7 +126,7 @@ Die Tests decken Anwesenheits- und Rollenaggregation, strikte `PRESENT`-/`COMPLE
 
 ## Browser-QA
 
-Der eingebettete Browser konnte wegen fehlender Sandbox-Metadaten der Desktop-Sitzung nicht initialisiert werden. Der ausdrücklich geforderte reproduzierbare Fallback lief mit dem vorhandenen Playwright 1.60.0 und lokalem Microsoft Edge.
+Die aktuelle portable Browser-QA verwendet standardmäßig den mit Playwright verwalteten Chromium-Browser. Ein lokaler Browser-Channel ist nur eine optionale Konfiguration; Microsoft Edge ist keine Voraussetzung. Browser und Preview-Prozess werden in einem äußeren Cleanup-Pfad zuverlässig beendet.
 
 Geprüft wurden Startansicht und Überlauf bei 375, 390, 430, 768 und 1280 Pixel sowie manueller und Foto-Demo-Ablauf, Vorstands-Dashboard, Monats-/Mitglieder-/Traineransichten, Mitgliedsdetail, Anlage eines gültigen Folgesatzes auf Smartphone und Desktop, verständliche Ablehnung eines überlappenden Satzes, automatische Neuberechnung, gültige und ungültige Korrekturbeträge, blockierte Prüfung bei fehlendem Satz, Freigabe, eingefrorener Juni-Snapshot nach Anlage des Juli-Satzes, Snapshotwerte in Abrechnungs- und Zahlungs-CSV, terminale Stornierung ohne Bearbeitungsschaltflächen, Ausschluss des stornierten Betrags aus der Dashboard-Gesamtsumme, Kassenwart-Zahlung und zentral gefilterte Kassenwart-Abrechnungsliste, Druckmedium, Rollenwechsel und eigene Trainerübersicht. Die Browserkonsole enthielt keine Fehler.
 

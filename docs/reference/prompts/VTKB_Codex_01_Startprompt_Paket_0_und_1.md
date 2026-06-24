@@ -36,7 +36,7 @@ Du arbeitest als Implementierungsagent für das Projekt **„VTKB Digitales Anwe
 - Ein Assistenztrainer kann heute Assistenztrainer oder normaler Teilnehmer sein.
 - Pro Person und Einheit existiert genau **eine** Anwesenheit. Trainer- oder Assistenzfunktion bedeutet automatisch anwesend; keine Doppelzählung als zusätzlicher Teilnehmer.
 - Dauerhafter Anwesenheitsstatus: `PRESENT` oder `ABSENT`.
-- Gäste und Probetrainingsteilnehmer werden manuell erfasst und nicht biometrisch aufgenommen.
+- Probetrainingsteilnehmer werden als dauerhafte Profile manuell erfasst und nicht biometrisch aufgenommen.
 - Trainer und Assistenztrainer dürfen eine aktuelle Einheit erfassen und speichern.
 - Ältere Korrekturen sind nur für besonders berechtigte Vorstand-/Administratorrollen zulässig und müssen protokolliert werden.
 - Gesichtserkennung ist nur eine spätere Vorschlagsfunktion. Die endgültige Entscheidung trifft immer ein Trainer.
@@ -125,14 +125,14 @@ VTKB-Anwesenheitssystem/
    - `TrainingTemplate`,
    - `TrainingSession`,
    - `AttendanceRecord`,
-   - `GuestAttendance`,
+   - `TrialParticipant`,
    - `ConsentStatus`.
 7. Implementiere Validierungstests für:
    - genau einen verantwortlichen Trainer je abgeschlossener Einheit,
    - keine Funktion für abwesende Personen,
    - keine doppelte Anwesenheit derselben Person in derselben Einheit,
    - Trainer-/Assistenzfunktion setzt Anwesenheit voraus,
-   - Gäste besitzen keine biometrische Enrollment-ID.
+   - Probetrainingprofile besitzen keine biometrische Enrollment-ID.
 8. Noch nicht implementieren:
    - echte AWS-Ressourcen,
    - Terraform-Ressourcen mit Deploymentabsicht,
@@ -188,7 +188,7 @@ Eine lokale, responsive PWA mit fiktiven Mockdaten, die den vollständigen Train
     - `RESPONSIBLE_TRAINER`,
     - `ASSISTANT_TRAINER`,
     - `PARTICIPANT`.
-12. Gäste und Probetrainingsteilnehmer manuell ergänzen.
+12. Probetrainingsteilnehmer als dauerhafte Profile manuell ergänzen.
 13. Manuelle Schnellerfassung:
     - alle zunächst abwesend,
     - Bild-/Namensraster,

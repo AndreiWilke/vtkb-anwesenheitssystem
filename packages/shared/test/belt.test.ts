@@ -20,8 +20,8 @@ import {
 // ---------------------------------------------------------------------------
 
 describe("BELT_CATALOG", () => {
-  it("enthaelt 19 Eintraege (inkl. Halbguertel, WEISS_GELB und VIOLETT)", () => {
-    expect(BELT_CATALOG).toHaveLength(19);
+  it("enthaelt exakt 23 Vereinsstufen", () => {
+    expect(BELT_CATALOG).toHaveLength(23);
   });
 
   it("hat aufsteigende sortOrder-Werte", () => {
@@ -31,7 +31,8 @@ describe("BELT_CATALOG", () => {
     }
   });
 
-  it("enthaelt alle sieben Guertelfarben", () => {
+  it("enthaelt exakt 13 Guertelfarben", () => {
+    expect(BELT_COLORS).toHaveLength(13);
     const colors = new Set(BELT_CATALOG.map((level) => level.color));
     for (const color of BELT_COLORS) {
       expect(colors.has(color)).toBe(true);
@@ -48,8 +49,27 @@ describe("gradesForColor", () => {
     expect(gradesForColor("WEISS")).toEqual(["10. Kyu"]);
   });
 
-  it("gibt vier Grade fuer BRAUN zurueck (4. Kyu ist jetzt VIOLETT)", () => {
-    expect(gradesForColor("BRAUN")).toHaveLength(4);
+  it("gibt drei Grade fuer BRAUN zurueck", () => {
+    expect(gradesForColor("BRAUN")).toEqual(["3. Kyu", "2. Kyu", "1. Kyu"]);
+  });
+
+  it("bildet die Vereinsvorgaben an den Übergängen exakt ab", () => {
+    expect(BELT_CATALOG.slice(0, 11).map(({ color, grade }) => [color, grade])).toEqual([
+      ["WEISS", "10. Kyu"],
+      ["WEISS_ROT", "9. Kyu"],
+      ["WEISS_GELB", "9a. Kyu"],
+      ["GELB", "8. Kyu"],
+      ["GELB_ORANGE", "8a. Kyu"],
+      ["ORANGE", "7. Kyu"],
+      ["ORANGE_GRUEN", "7a. Kyu"],
+      ["GRUEN", "6. Kyu"],
+      ["GRUEN_BLAU", "6a. Kyu"],
+      ["BLAU", "5. Kyu"],
+      ["VIOLETT", "4. Kyu"],
+    ]);
+    expect(gradesForColor("SCHWARZ")).toEqual(
+      Array.from({ length: 9 }, (_, index) => `${index + 1}. Dan`),
+    );
   });
 
   it("gibt leeres Array fuer unbekannte Farbe", () => {
@@ -64,9 +84,9 @@ describe("gradesForColor", () => {
 describe("validateBeltChange", () => {
   const baseInput = {
     personId: "member-01",
-    previousBeltColor: "GRUEN",
+    previousBeltColor: "ORANGE",
     previousBeltGrade: "7. Kyu",
-    newBeltColor: "BLAU",
+    newBeltColor: "GRUEN",
     newBeltGrade: "6. Kyu",
     effectiveFrom: "2026-06-21",
     recordedBy: "Trainer Demo",
@@ -98,7 +118,11 @@ describe("validateBeltChange", () => {
   });
 
   it("lehnt Grad ab der nicht zur Farbe passt", () => {
-    const result = validateBeltChange({ ...baseInput, newBeltColor: "WEISS", newBeltGrade: "5. Kyu" });
+    const result = validateBeltChange({
+      ...baseInput,
+      newBeltColor: "WEISS",
+      newBeltGrade: "5. Kyu",
+    });
     expect(result.valid).toBe(false);
     expect(result.issues.join(" ")).toContain("passt nicht");
   });
@@ -112,7 +136,7 @@ describe("validateBeltChange", () => {
   it("lehnt identische Farbe und Grad ab", () => {
     const result = validateBeltChange({
       ...baseInput,
-      newBeltColor: "GRUEN",
+      newBeltColor: "ORANGE",
       newBeltGrade: "7. Kyu",
     });
     expect(result.valid).toBe(false);
@@ -131,7 +155,7 @@ describe("createBeltHistoryEntry", () => {
       previousBeltColor: "GRUEN",
       previousBeltGrade: "7. Kyu",
       newBeltColor: "BLAU",
-      newBeltGrade: "6. Kyu",
+      newBeltGrade: "5. Kyu",
       effectiveFrom: "2026-06-21",
       recordedBy: "Trainer Demo",
       recordedAt: "2026-06-21T19:00:00.000Z",
@@ -173,6 +197,23 @@ describe("createBeltHistoryEntry", () => {
       }),
     ).toThrow("Guertelgrad");
   });
+
+  it("lehnt unmögliche Gültigkeits- und Prüfungsdaten beim Erstellen ab", () => {
+    expect(() =>
+      createBeltHistoryEntry("belt-invalid-date", {
+        personId: "member-01",
+        previousBeltColor: "GRUEN",
+        previousBeltGrade: "6. Kyu",
+        newBeltColor: "BLAU",
+        newBeltGrade: "5. Kyu",
+        effectiveFrom: "2026-02-31",
+        examDate: "2026-13-01",
+        recordedBy: "Trainer Demo",
+        recordedAt: "2026-06-21T19:00:00.000Z",
+        source: BeltChangeSource.MANUAL_CONFIRMED,
+      }),
+    ).toThrow("gültiges Datum");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -186,8 +227,8 @@ describe("suggestNextBelt", () => {
     expect(hint.isHighest).toBe(false);
   });
 
-  it("markiert 3. Dan als hoechsten Grad", () => {
-    const hint = suggestNextBelt("SCHWARZ", "3. Dan");
+  it("markiert 9. Dan als hoechsten Grad", () => {
+    const hint = suggestNextBelt("SCHWARZ", "9. Dan");
     expect(hint.nextLevel).toBeNull();
     expect(hint.isHighest).toBe(true);
   });
@@ -226,9 +267,9 @@ describe("calculateBeltDistribution", () => {
     expect(gelb.percent).toBe(25);
   });
 
-  it("gibt alle vierzehn Farben zurueck auch wenn count 0 (inkl. WEISS_GELB + VIOLETT)", () => {
+  it("gibt alle dreizehn Farben zurueck auch wenn count 0", () => {
     const dist = calculateBeltDistribution(["WEISS"]);
-    expect(dist).toHaveLength(14);
+    expect(dist).toHaveLength(13);
     expect(dist.find((e) => e.color === "SCHWARZ")!.count).toBe(0);
   });
 });
@@ -248,14 +289,29 @@ describe("applyBeltSuggestionDecision", () => {
     confidencePercent: 82,
     status: BeltSuggestionStatus.OPEN,
   };
+  const historyEntry = {
+    id: "belt-0001",
+    personId: "member-01",
+    previousBeltColor: "GRUEN",
+    previousBeltGrade: "6. Kyu",
+    newBeltColor: "BLAU",
+    newBeltGrade: "5. Kyu",
+    recordedBy: "Trainer Demo",
+    recordedAt: "2026-06-20T19:30:00.000Z",
+    source: BeltChangeSource.IMAGE_SUGGESTION_CONFIRMED,
+  };
 
   it("setzt Status auf CONFIRMED bei CONFIRM-Action", () => {
-    const result = applyBeltSuggestionDecision(baseSuggestion, {
-      action: "CONFIRM",
-      decidedBy: "Trainer Demo",
-      decidedAt: "2026-06-20T19:30:00.000Z",
-      historyEntryId: "belt-0001",
-    });
+    const result = applyBeltSuggestionDecision(
+      baseSuggestion,
+      {
+        action: "CONFIRM",
+        decidedBy: "Trainer Demo",
+        decidedAt: "2026-06-20T19:30:00.000Z",
+        historyEntryId: "belt-0001",
+      },
+      [historyEntry],
+    );
     expect(result.status).toBe(BeltSuggestionStatus.CONFIRMED);
     expect(result.historyEntryId).toBe("belt-0001");
   });
@@ -280,11 +336,22 @@ describe("applyBeltSuggestionDecision", () => {
 
   it("veraendert das Original nicht (Immutabilitaet)", () => {
     applyBeltSuggestionDecision(baseSuggestion, {
-      action: "CONFIRM",
+      action: "REJECT",
       decidedBy: "x",
       decidedAt: "2026-06-20T19:30:00.000Z",
     });
     expect(baseSuggestion.status).toBe(BeltSuggestionStatus.OPEN);
+  });
+
+  it("lehnt eine Bestätigung ohne passenden Historieneintrag ab", () => {
+    expect(() =>
+      applyBeltSuggestionDecision(baseSuggestion, {
+        action: "CONFIRM",
+        decidedBy: "Trainer Demo",
+        decidedAt: "2026-06-20T19:30:00.000Z",
+        historyEntryId: "fehlt",
+      }),
+    ).toThrow("Historieneintrag");
   });
 });
 
@@ -295,9 +362,36 @@ describe("applyBeltSuggestionDecision", () => {
 describe("openBeltSuggestions", () => {
   it("filtert nur OPEN-Vorschlaege", () => {
     const suggestions = [
-      { id: "1", status: BeltSuggestionStatus.OPEN, sessionId: "s", sessionDate: "2026-01-01", memberId: "m1", storedBeltColor: "WEISS", suggestedBeltColor: "GELB", confidencePercent: 70 },
-      { id: "2", status: BeltSuggestionStatus.CONFIRMED, sessionId: "s", sessionDate: "2026-01-01", memberId: "m2", storedBeltColor: "GELB", suggestedBeltColor: "ORANGE", confidencePercent: 80 },
-      { id: "3", status: BeltSuggestionStatus.REJECTED, sessionId: "s", sessionDate: "2026-01-01", memberId: "m3", storedBeltColor: "BLAU", suggestedBeltColor: "BRAUN", confidencePercent: 60 },
+      {
+        id: "1",
+        status: BeltSuggestionStatus.OPEN,
+        sessionId: "s",
+        sessionDate: "2026-01-01",
+        memberId: "m1",
+        storedBeltColor: "WEISS",
+        suggestedBeltColor: "GELB",
+        confidencePercent: 70,
+      },
+      {
+        id: "2",
+        status: BeltSuggestionStatus.CONFIRMED,
+        sessionId: "s",
+        sessionDate: "2026-01-01",
+        memberId: "m2",
+        storedBeltColor: "GELB",
+        suggestedBeltColor: "ORANGE",
+        confidencePercent: 80,
+      },
+      {
+        id: "3",
+        status: BeltSuggestionStatus.REJECTED,
+        sessionId: "s",
+        sessionDate: "2026-01-01",
+        memberId: "m3",
+        storedBeltColor: "BLAU",
+        suggestedBeltColor: "BRAUN",
+        confidencePercent: 60,
+      },
     ];
     const open = openBeltSuggestions(suggestions);
     expect(open).toHaveLength(1);
@@ -312,7 +406,7 @@ describe("openBeltSuggestions", () => {
 describe("simulateBeltColorSuggestion", () => {
   it("gibt eine bekannte Guertelfarbe zurueck", () => {
     const result = simulateBeltColorSuggestion("WEISS", 0);
-    expect(BELT_COLORS).toContain(result.suggestedColor as typeof BELT_COLORS[number]);
+    expect(BELT_COLORS).toContain(result.suggestedColor as (typeof BELT_COLORS)[number]);
   });
 
   it("gibt eine Konfidenz zwischen 35 und 94 zurueck", () => {

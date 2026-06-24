@@ -44,6 +44,17 @@ function clubDateParts(value: Date): DateParts {
   return parts as unknown as DateParts;
 }
 
+export function clubDateKey(value: Date): string {
+  const parts = clubDateParts(value);
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+}
+
+export function clubIsoWeekday(value: Date): 1 | 2 | 3 | 4 | 5 | 6 | 7 {
+  const parts = clubDateParts(value);
+  const weekday = new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay();
+  return (weekday === 0 ? 7 : weekday) as 1 | 2 | 3 | 4 | 5 | 6 | 7;
+}
+
 function clubWallTimeToInstant(parts: DateParts): Date {
   const wallTimeAsUtc = Date.UTC(
     parts.year,
@@ -76,4 +87,18 @@ function clubWallTimeToInstant(parts: DateParts): Date {
 export function createClubDateAtTime(reference: Date, hour: number, minute: number): Date {
   const date = clubDateParts(reference);
   return clubWallTimeToInstant({ ...date, hour, minute, second: 0 });
+}
+
+export function createClubDateFromIso(date: string, time: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  const clock = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time);
+  if (!match || !clock) throw new Error("Ungültiges Vereinsdatum oder ungültige Uhrzeit.");
+  return clubWallTimeToInstant({
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+    hour: Number(clock[1]),
+    minute: Number(clock[2]),
+    second: 0,
+  });
 }

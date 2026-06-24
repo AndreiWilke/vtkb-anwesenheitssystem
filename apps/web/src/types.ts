@@ -1,5 +1,6 @@
 import type {
   AttendanceRecord,
+  CaptureSource,
   BeltHistoryEntry as SharedBeltHistoryEntry,
   BeltSuggestion as SharedBeltSuggestion,
   DemoRole,
@@ -27,14 +28,21 @@ export type BeltSuggestion = SharedBeltSuggestion;
 export type TrialParticipant = SharedTrialParticipant;
 
 export type Gender = "MAENNLICH" | "WEIBLICH";
-export type BeltColor = "WEISS" | "WEISS_ROT" | "WEISS_GELB" | "GELB" | "GELB_ORANGE" | "ORANGE" | "ORANGE_GRUEN" | "GRUEN" | "GRUEN_BLAU" | "BLAU" | "BLAU_BRAUN" | "BRAUN" | "VIOLETT" | "SCHWARZ";
+export type BeltColor =
+  | "WEISS"
+  | "WEISS_ROT"
+  | "WEISS_GELB"
+  | "GELB"
+  | "GELB_ORANGE"
+  | "ORANGE"
+  | "ORANGE_GRUEN"
+  | "GRUEN"
+  | "GRUEN_BLAU"
+  | "BLAU"
+  | "VIOLETT"
+  | "BRAUN"
+  | "SCHWARZ";
 export type SessionUiStatus = "BEVORSTEHEND" | "LAEUFT" | "BEENDET";
-
-/**
- * Paket 1.2: GuestKind ist nur noch "GAST".
- * "PROBETRAINING" wurde durch TrialParticipant (eigenes Profil) ersetzt.
- */
-export type GuestKind = "GAST";
 
 export type ProposalStatus = "EINDEUTIG" | "PRUEFEN" | "UNBEKANNT" | "DUBLETTE";
 export type ProposalResolutionAction =
@@ -42,23 +50,23 @@ export type ProposalResolutionAction =
   | "CONFIRMED_MEMBER"
   | "SELECTED_MEMBER"
   | "MARKED_UNKNOWN"
-  | "GUEST_CREATED"
   | "DISCARDED";
 export type ProposalDecision =
   | "CONFIRM_CANDIDATE"
   | "SELECT_MEMBER"
   | "MARK_UNKNOWN"
-  | "CREATE_GUEST"
   | "DISCARD"
   | "RESET";
 export type CaptureMethod = "MANUAL" | "PHOTO_DEMO";
 
 export interface Member {
   id: string;
+  memberNumber?: string;
   name: string;
   initials: string;
   gender: Gender;
   birthDate?: string;
+  contactPhone?: string;
   beltColor: BeltColor;
   beltGrade: string;
   qualification: MemberQualification;
@@ -69,6 +77,7 @@ export interface Member {
 }
 
 export type TrainingType =
+  | "ALLGEMEINES_TRAINING"
   | "KINDERTRAINING"
   | "JUGENDTRAINING"
   | "ERWACHSENENTRAINING"
@@ -83,6 +92,9 @@ export interface HistoricalTrainingSession {
   timeZone: "Europe/Berlin";
   name: string;
   trainingType: TrainingType;
+  scheduledSlotId: string | null;
+  dojoId: string;
+  dojoNameSnapshot: string;
   dojo: string;
   status: TrainingSessionStatus;
   attendance: readonly AttendanceRecord[];
@@ -113,7 +125,11 @@ export type DemoRoleValue = DemoRole;
 
 export interface TrainingSessionMock {
   id: string;
+  scheduledSlotId: string;
   name: string;
+  trainingType: TrainingType;
+  dojoId: string;
+  dojoNameSnapshot: string;
   dojo: string;
   startsAt: Date;
   endsAt: Date;
@@ -124,16 +140,10 @@ export interface TrainingSessionMock {
 export interface AttendanceSelection {
   presenceStatus: PresenceStatus;
   sessionRole: SessionRole | null;
+  captureSource: CaptureSource;
 }
 
 export type AttendanceState = Record<string, AttendanceSelection>;
-
-export interface LocalGuest {
-  id: string;
-  firstName: string;
-  lastName?: string;
-  kind: GuestKind;
-}
 
 export interface PhotoProposal {
   id: string;
@@ -141,7 +151,6 @@ export interface PhotoProposal {
   status: ProposalStatus;
   candidateMemberId?: string;
   selectedMemberId?: string;
-  guestId?: string;
   resolutionAction: ProposalResolutionAction | null;
   resolved: boolean;
 }
@@ -184,4 +193,5 @@ export type AppScreen =
   // Verwaltungs-Hub
   | "MANAGEMENT"
   // Paket 1.6
-  | "RETRO_DATE_SELECT";
+  | "RETRO_DATE_SELECT"
+  | "RETRO_CREATE";

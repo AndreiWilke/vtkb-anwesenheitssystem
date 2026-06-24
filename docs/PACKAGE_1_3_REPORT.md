@@ -17,25 +17,25 @@ Paket 1.3 baut auf Paket 1.2 auf und ergänzt folgende Bereiche:
 
 ## Neue Dateien
 
-| Datei | Beschreibung |
-|---|---|
-| `packages/shared/src/conversion.ts` | `convertTrialParticipantToMember`, `createDirectMember`, `grantBoardOverride`, `checkConversionEligibility` |
-| `packages/shared/test/conversion.test.ts` | 24 Unit-Tests für Konvertierung, Direktanlage, Vorstandsausnahme |
-| `apps/web/src/trialReportScreen.tsx` | `TrialReportScreen` mit Kennzahlen, Tabelle, Filter, CSV-Export |
-| `docs/PACKAGE_1_3_REPORT.md` | Dieser Bericht |
+| Datei                                     | Beschreibung                                                                                                |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `packages/shared/src/conversion.ts`       | `convertTrialParticipantToMember`, `createDirectMember`, `grantBoardOverride`, `checkConversionEligibility` |
+| `packages/shared/test/conversion.test.ts` | 24 Unit-Tests für Konvertierung, Direktanlage, Vorstandsausnahme                                            |
+| `apps/web/src/trialReportScreen.tsx`      | `TrialReportScreen` mit Kennzahlen, Tabelle, Filter, CSV-Export                                             |
+| `docs/PACKAGE_1_3_REPORT.md`              | Dieser Bericht                                                                                              |
 
 ---
 
 ## Geänderte Dateien
 
-| Datei | Änderung |
-|---|---|
-| `packages/shared/src/index.ts` | + Re-Export `conversion.js` |
-| `apps/web/src/types.ts` | + `AuditEntry`, `ConversionResult`, `DirectMemberResult` Re-Exports; + 4 neue AppScreens |
-| `apps/web/src/trialScreens.tsx` | + `BoardOverrideScreen`, `TrialConversionScreen`, `DirectMemberNewScreen` |
-| `apps/web/src/mockData.ts` | trial-005 als umgewandelt markiert; + `demoAuditEntries` |
-| `apps/web/src/styles.css` | + Report-Screen CSS (MetricCard, ReportTable, SearchInput etc.) |
-| `apps/web/src/workflow.test.ts` | + 7 neue Tests (Konvertierung, Direktanlage, Vorstandsausnahme, Audit) |
+| Datei                           | Änderung                                                                                 |
+| ------------------------------- | ---------------------------------------------------------------------------------------- |
+| `packages/shared/src/index.ts`  | + Re-Export `conversion.js`                                                              |
+| `apps/web/src/types.ts`         | + `AuditEntry`, `ConversionResult`, `DirectMemberResult` Re-Exports; + 4 neue AppScreens |
+| `apps/web/src/trialScreens.tsx` | + `BoardOverrideScreen`, `TrialConversionScreen`, `DirectMemberNewScreen`                |
+| `apps/web/src/mockData.ts`      | trial-005 als umgewandelt markiert; + `demoAuditEntries`                                 |
+| `apps/web/src/styles.css`       | + Report-Screen CSS (MetricCard, ReportTable, SearchInput etc.)                          |
+| `apps/web/src/workflow.test.ts` | + 7 neue Tests (Konvertierung, Direktanlage, Vorstandsausnahme, Audit)                   |
 
 ---
 
@@ -46,7 +46,7 @@ Paket 1.3 baut auf Paket 1.2 auf und ergänzt folgende Bereiche:
 - Voraussetzung: `contractStatus === RECEIVED` oder `MEMBERSHIP_ACTIVATED`
 - `membershipStatus` wird auf `ACTIVE_MEMBER` gesetzt
 - `contractStatus` wird auf `MEMBERSHIP_ACTIVATED` gesetzt
-- `memberId` wird gesetzt (neue Mitglieds-ID)
+- `memberId` bleibt identisch zur bestehenden Personen-ID
 - Anwesenheitshistorie bleibt vollständig erhalten (keine Datenmigration nötig)
 - Jede Umwandlung erzeugt einen `AuditEntry` mit `TRIAL_CONVERTED_TO_MEMBER`
 - TrialParticipant-Profil wird **nicht** gelöscht
@@ -54,7 +54,7 @@ Paket 1.3 baut auf Paket 1.2 auf und ergänzt folgende Bereiche:
 ### Direktanlage
 
 - Nur für Personen ohne Probetraining (z. B. Vereinswechsel, Vorstandseinladung)
-- Standardgürtel: WEISS / 9. Kyu (überschreibbar)
+- Standardgürtel: WEISS / 10. Kyu (überschreibbar)
 - Erzeugt `AuditEntry` mit `DIRECT_MEMBER_CREATED`
 
 ### Vorstandsausnahme
@@ -68,7 +68,7 @@ Paket 1.3 baut auf Paket 1.2 auf und ergänzt folgende Bereiche:
 
 ## Demo-Datensätze (Paket 1.3 Ergänzungen)
 
-- `trial-005` (Mia Probetraining): wurde in Demo zu `member-41` umgewandelt
+- `trial-005` (Mia Probetraining): wurde unter derselben Personen-ID `trial-005` zum Mitglied umgewandelt
 - `demoAuditEntries`: 3 fiktive Audit-Einträge (Umwandlung, Vorstandsausnahme, Direktanlage)
 
 ---

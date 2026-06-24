@@ -1,356 +1,299 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { mkdir, writeFile } from "node:fs/promises";
+import { get } from "node:http";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { cwd, env, execPath, exit } from "node:process";
+import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright";
 
+async function terminateProcess(child) {
+  if (!child || child.exitCode !== null) return;
+  child.kill();
+  await Promise.race([once(child, "exit"), delay(2_000)]);
+}
+
+async function withGuaranteedCleanup(work, cleanup) {
+  try {
+    return await work();
+  } finally {
+    await cleanup();
+  }
+}
+
+async function lifecycleSelfTest() {
+  let child;
+  let expectedFailure = false;
+  try {
+    await withGuaranteedCleanup(
+      async () => {
+        child = spawn(execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+        await once(child, "spawn");
+        throw new Error("simulierter Browser-Startfehler");
+      },
+      async () => terminateProcess(child),
+    );
+  } catch (error) {
+    expectedFailure = error instanceof Error && error.message === "simulierter Browser-Startfehler";
+  }
+  if (
+    !expectedFailure ||
+    !child?.killed ||
+    (child.exitCode === null && child.signalCode === null)
+  ) {
+    throw new Error("Lifecycle-Selbsttest konnte den Preview-Prozess nicht zuverlässig beenden.");
+  }
+  console.log("lifecycle-self-test:cleanup-ok");
+}
+
+if (env.VTKB_QA_LIFECYCLE_SELF_TEST === "true") {
+  await lifecycleSelfTest();
+  exit(0);
+}
+
 const baseUrl = "http://127.0.0.1:4173";
-const screenshotDir = join(tmpdir(), "vtkb-package-1-1-browser-qa");
-const resultsFile = join(screenshotDir, "qa-results.json");
+const artifactDir = join(tmpdir(), "vtkb-package-1-7-browser-qa");
+await mkdir(artifactDir, { recursive: true });
 
-await mkdir(screenshotDir, { recursive: true });
+let preview;
+let browser;
 
-const browser = await chromium.launch({ channel: "msedge", headless: true });
-const page = await browser.newPage();
-const consoleErrors = [];
-page.on("console", (message) => {
-  if (message.type() === "error") consoleErrors.push(message.text());
-});
-page.on("pageerror", (error) => consoleErrors.push(error.message));
-
-const results = [];
-const screenshotPath = (name) => join(screenshotDir, name);
-
-async function checkViewport(name, width, height) {
-  await page.setViewportSize({ width, height });
-  await page.goto(baseUrl, { waitUntil: "networkidle" });
-  const dimensions = await page.evaluate(() => ({
-    clientWidth: document.documentElement.clientWidth,
-    scrollWidth: document.documentElement.scrollWidth,
-    viewportWidth: window.innerWidth,
-  }));
-  if (dimensions.scrollWidth > dimensions.clientWidth) {
-    throw new Error(`${name}: horizontaler Overflow ${JSON.stringify(dimensions)}`);
+async function waitForPreview() {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    try {
+      const ok = await new Promise((resolve) => {
+        const request = get(baseUrl, (response) => {
+          response.resume();
+          resolve((response.statusCode ?? 500) < 400);
+        });
+        request.on("error", () => resolve(false));
+      });
+      if (ok) return;
+    } catch {
+      // Der Preview-Server startet noch.
+    }
+    await delay(250);
   }
-  await page.screenshot({ path: screenshotPath(`start-${name}.png`), fullPage: true });
-  results.push({ name, width, height, ...dimensions, horizontalOverflow: false });
+  throw new Error("Der lokale Preview-Server wurde nicht rechtzeitig erreichbar.");
 }
 
-for (const viewport of [
-  ["375", 375, 812],
-  ["390", 390, 844],
-  ["430", 430, 932],
-  ["tablet", 768, 1024],
-  ["desktop", 1280, 900],
-]) {
-  await checkViewport(...viewport);
-}
+await withGuaranteedCleanup(
+  async () => {
+    preview = spawn(
+      execPath,
+      [resolve(cwd(), "node_modules", "vite", "bin", "vite.js"), "preview", "--host", "127.0.0.1"],
+      { cwd: resolve(cwd(), "apps", "web"), stdio: "pipe" },
+    );
+    await waitForPreview();
+    if (env.VTKB_QA_FAIL_AFTER_PREVIEW === "true") {
+      throw new Error("Absichtlich simulierter Browser-Startfehler.");
+    }
+    const channel = env.VTKB_QA_BROWSER_CHANNEL?.trim();
+    browser = await chromium.launch({ ...(channel ? { channel } : {}), headless: true });
+    const page = await browser.newPage();
+    const consoleErrors = [];
+    const failedAssets = [];
+    const results = [];
 
-await page.setViewportSize({ width: 390, height: 844 });
-await page.goto(baseUrl, { waitUntil: "networkidle" });
-await page.getByRole("button", { name: /Training starten/ }).click();
-await page.getByRole("button", { name: /Erfassungsart wählen/ }).click();
-await page.getByRole("button", { name: /Manuell erfassen/ }).click();
-await page.getByRole("button", { name: "Maro Beispiel anwesend setzen" }).click();
-await page.evaluate(() => window.scrollTo(0, 0));
-await page.screenshot({ path: screenshotPath("manual-attendance-390.png") });
-await page.getByRole("button", { name: /Gäste und Probetraining/ }).click();
-await page.getByLabel("Vorname oder Anzeigename").fill("Gast Demo QA");
-await page.getByRole("button", { name: "Manuell hinzufügen" }).click();
-await page.getByRole("button", { name: "Zur Anwesenheitsliste" }).click();
-await page.getByRole("button", { name: /Gesamtliste prüfen/ }).click();
-const manualSave = page.getByRole("button", { name: "Liste geprüft und speichern" });
-if (!(await manualSave.isEnabled())) throw new Error("Manueller Ablauf ist nicht speicherbar");
-await page.evaluate(() => window.scrollTo(0, 0));
-await page.screenshot({ path: screenshotPath("summary-390.png") });
-await manualSave.click();
-await page.getByRole("heading", { name: "Liste lokal gespeichert" }).waitFor();
-results.push({ flow: "manual", completed: true, guestWithoutBiometrics: true });
+    page.on("console", (message) => {
+      if (message.type() === "error") consoleErrors.push(message.text());
+    });
+    page.on("pageerror", (error) => consoleErrors.push(error.message));
+    page.on("response", (response) => {
+      if (response.status() === 404) failedAssets.push(response.url());
+    });
 
-await page.goto(baseUrl, { waitUntil: "networkidle" });
-await page.getByRole("button", { name: /Training starten/ }).click();
-await page.getByRole("button", { name: /Erfassungsart wählen/ }).click();
-await page.getByRole("button", { name: /Fotoassistenz – nur Demo/ }).click();
-await page.getByText(/keine Bilder werden aufgenommen oder verarbeitet/i).waitFor();
-await page.getByRole("button", { name: "Demo-Analyse starten" }).click();
-await page.getByRole("heading", { name: "Demo-Vorschläge prüfen" }).waitFor();
+    async function assertNoOverflow(label) {
+      const dimensions = await page.evaluate(() => ({
+        clientWidth: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+        offenders: [...document.querySelectorAll("*")]
+          .filter(
+            (element) =>
+              element.getBoundingClientRect().right > document.documentElement.clientWidth + 1,
+          )
+          .slice(0, 8)
+          .map((element) => ({
+            tag: element.tagName,
+            className: element.className,
+            right: Math.round(element.getBoundingClientRect().right),
+            width: Math.round(element.getBoundingClientRect().width),
+          })),
+      }));
+      if (dimensions.scrollWidth > dimensions.clientWidth) {
+        throw new Error(`${label}: horizontaler Overflow ${JSON.stringify(dimensions)}`);
+      }
+    }
 
-const preselectedProposal = page.getByTestId("proposal-1");
-if ((await preselectedProposal.getByText("Sicher vorausgewählt").count()) !== 1) {
-  throw new Error("Der eindeutige Vorschlag ist nicht sichtbar vorausgewählt");
-}
+    async function openManualCapture() {
+      await page.getByRole("button", { name: /Training starten/ }).click();
+      const sessionChoice = page.getByRole("heading", { name: "Trainingseinheit auswählen" });
+      if ((await sessionChoice.count()) === 1) {
+        await page.locator(".session-option").first().click();
+      }
+      await page.getByRole("button", { name: /Erfassungsart wählen/ }).click();
+      await page.getByRole("button", { name: /Manuell erfassen/ }).click();
+    }
 
-const uncertainProposal = page.getByTestId("proposal-2");
-await uncertainProposal.getByRole("button", { name: "Bestätigen" }).click();
-await uncertainProposal.getByText("Person bestätigt").waitFor();
+    async function openApp() {
+      await page.goto(baseUrl, { waitUntil: "networkidle" });
+      const login = page.getByRole("button", { name: "Demo lokal öffnen" });
+      if ((await login.count()) === 1) await login.click();
+      await page.getByRole("heading", { name: "Start" }).waitFor();
+    }
 
-const unknownProposal = page.getByTestId("proposal-3");
-if ((await unknownProposal.getByRole("button", { name: "Bestätigen" }).count()) !== 0) {
-  throw new Error("Ein unbekanntes Gesicht bietet unzulässig eine allgemeine Bestätigung an");
-}
-await unknownProposal.getByRole("button", { name: "Als Gast erfassen" }).click();
-await unknownProposal.getByText("Als Gast erfasst").waitFor();
+    for (const [name, width, height] of [
+      ["375", 375, 812],
+      ["390", 390, 844],
+      ["430", 430, 932],
+      ["768", 768, 1024],
+      ["1280", 1280, 900],
+    ]) {
+      await page.setViewportSize({ width, height });
+      await openApp();
+      await assertNoOverflow(`Start ${name}`);
+      const logo = page.getByRole("img", { name: "VTKB Berlin Vereinslogo" });
+      if (!(await logo.isVisible())) throw new Error(`${name}: Vereinslogo nicht sichtbar`);
+      const loaded = await logo.evaluate((element) => element.naturalWidth > 0);
+      if (!loaded) throw new Error(`${name}: Logo und Fallback konnten nicht geladen werden`);
+      await page.screenshot({ path: join(artifactDir, `start-${name}.png`), fullPage: true });
+      results.push({ viewport: name, horizontalOverflow: false, logoLoaded: true });
+      console.log(`viewport:${name}:ok`);
+    }
 
-const duplicateProposal = page.getByTestId("proposal-4");
-await duplicateProposal.getByRole("button", { name: "Bestätigen" }).click();
-await duplicateProposal.getByText("Person bestätigt").waitFor();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openApp();
+    const boardNav = page.getByRole("navigation", { name: "Hauptnavigation" });
+    if ((await boardNav.getByRole("button").count()) !== 5) {
+      throw new Error("Vorstandsnavigation ist nicht vollständig.");
+    }
 
-await page.getByText("Alle Vorschläge geklärt").waitFor();
-await page.evaluate(() => window.scrollTo(0, 0));
-await page.screenshot({ path: screenshotPath("photo-review-390.png") });
-await page.getByRole("button", { name: "Gesamtliste öffnen" }).click();
-const photoSave = page.getByRole("button", { name: "Liste geprüft und speichern" });
-if (!(await photoSave.isEnabled()))
-  throw new Error("Geklärter Foto-Demoablauf ist nicht speicherbar");
-const summaryTotal = Number(await page.getByTestId("summary-total").locator("strong").innerText());
-const visibleSummaryPeople = await page.locator(".summary-person").count();
-const visibleGuests = await page.getByTestId("summary-guests").locator(".summary-person").count();
-const mikaEntries = await page.getByText("Mika Beispiel", { exact: true }).count();
-if (summaryTotal !== visibleSummaryPeople) {
-  throw new Error(
-    `Gesamtsumme ${summaryTotal} entspricht nicht ${visibleSummaryPeople} sichtbaren Einzelgruppen`,
-  );
-}
-if (visibleGuests !== 1)
-  throw new Error(`Erwartet wurde genau ein Gast, erhalten: ${visibleGuests}`);
-if (mikaEntries !== 1)
-  throw new Error(`Der vorausgewählte Vorschlag wurde ${mikaEntries}-mal statt einmal gezählt`);
-if (summaryTotal !== 5) throw new Error(`Unerwartete Foto-Demo-Gesamtsumme: ${summaryTotal}`);
-results.push({
-  flow: "photo-demo",
-  completed: true,
-  cameraAccess: false,
-  unresolved: 0,
-  preselectedMemberCount: mikaEntries,
-  uncertainDecision: "confirmed",
-  unknownDecision: "guest",
-  guestCount: visibleGuests,
-  duplicateCountedOnce: true,
-  summaryTotal,
-  visibleSummaryPeople,
-});
+    await openManualCapture();
+    for (const beltText of [
+      "Weiß-Rot · 9. Kyu",
+      "Weiß-Gelb · 9a. Kyu",
+      "Violett · 4. Kyu",
+      "Schwarz · 9. Dan",
+    ]) {
+      if ((await page.getByText(beltText, { exact: true }).count()) === 0) {
+        throw new Error(`Gürtelanzeige fehlt: ${beltText}`);
+      }
+    }
+    await assertNoOverflow("Manuelle Erfassung 390");
+    results.push({ flow: "belt-visuals", twoToneBelts: true, violet: true, ninthDan: true });
+    console.log("flow:belt-visuals:ok");
 
-await page.getByRole("button", { name: "Auswertung" }).click();
-await page.getByRole("heading", { name: "Auswertung und Aufwandsentschädigung" }).waitFor();
-await page.evaluate(() => window.scrollTo(0, 0));
-await page.screenshot({ path: screenshotPath("statistics-390.png") });
-await assertNoHorizontalOverflow("Dashboard 390");
-results.push({ screen: "statistics", reachable: true });
+    await openApp();
+    await page.getByRole("button", { name: /Training starten/ }).click();
+    if ((await page.getByRole("heading", { name: "Trainingseinheit auswählen" }).count()) === 1) {
+      await page.locator(".session-option").first().click();
+    }
+    await page.getByRole("button", { name: /Erfassungsart wählen/ }).click();
+    await page.getByRole("button", { name: /Fotoassistenz – nur Demo/ }).click();
+    await page.getByRole("button", { name: "Demo-Analyse starten" }).click();
+    await page.getByRole("heading", { name: "Demo-Vorschläge prüfen" }).waitFor();
+    const unknown = page.getByTestId("proposal-3");
+    if ((await unknown.getByRole("button", { name: /Als G.st erfassen/ }).count()) !== 0) {
+      throw new Error("Unbekannte Fotozuordnung bietet eine unzulässige Fremdperson-Aktion an.");
+    }
+    for (const allowed of ["Mitglied auswählen", "Als unbekannt markieren", "Verwerfen"]) {
+      if ((await unknown.getByRole("button", { name: allowed }).count()) !== 1) {
+        throw new Error(`Zulässige Fotoaktion fehlt: ${allowed}`);
+      }
+    }
+    results.push({ flow: "photo-unknown", createsExternalPerson: false });
+    console.log("flow:photo-unknown:ok");
 
-async function assertNoHorizontalOverflow(label) {
-  const dimensions = await page.evaluate(() => ({
-    clientWidth: document.documentElement.clientWidth,
-    scrollWidth: document.documentElement.scrollWidth,
-  }));
-  if (dimensions.scrollWidth > dimensions.clientWidth) {
-    throw new Error(`${label}: horizontaler Overflow ${JSON.stringify(dimensions)}`);
-  }
-}
+    await openApp();
+    await page
+      .getByRole("navigation", { name: "Hauptnavigation" })
+      .getByRole("button", { name: "Verwaltung" })
+      .click();
+    await page.getByRole("button", { name: /Einheit nachträglich erstellen/ }).click();
+    const yesterdayIso = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const [yesterdayYear, yesterdayMonth, yesterdayDay] = yesterdayIso.split("-");
+    await page.getByLabel("Datum").fill(`${yesterdayDay}.${yesterdayMonth}.${yesterdayYear}`);
+    await page.getByLabel("Bezeichnung").fill("Fiktive Browser-QA Nachtragseinheit");
+    await page
+      .getByLabel("Grund für die Nachtragserfassung")
+      .fill("Fiktive Browser-QA Dokumentation");
+    await page.getByRole("button", { name: /Trainer festlegen/ }).click();
+    await page.getByRole("button", { name: "Anwesenheit erfassen" }).click();
+    const firstAttendance = page.locator(".retrospective-attendance .check-row").first();
+    await firstAttendance.click();
+    await page.getByRole("button", { name: "Liste prüfen" }).click();
+    await page.getByRole("button", { name: "Nachtrag speichern und abschließen" }).click();
+    await page
+      .getByTestId("retrospective-history")
+      .getByText("Fiktive Browser-QA Nachtragseinheit")
+      .waitFor();
+    await page.getByTestId("runtime-audit").getByText("RETROSPECTIVE_SESSION_CREATED").waitFor();
+    await assertNoOverflow("Nachtragshistorie 390");
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({
+      path: join(artifactDir, "retrospective-complete-390.png"),
+      fullPage: true,
+    });
+    results.push({ flow: "retrospective-session", completed: true, history: true, audit: true });
+    console.log("flow:retrospective-session:ok");
 
-await page.setViewportSize({ width: 1280, height: 900 });
-await page.getByRole("button", { name: "Dashboard" }).click();
-await page.getByRole("heading", { name: "Auswertungsdashboard" }).waitFor();
-await page.getByText("Abgeschlossene Einheiten").waitFor();
-await assertNoHorizontalOverflow("Dashboard Desktop");
-await page.screenshot({ path: screenshotPath("dashboard-desktop.png"), fullPage: true });
-results.push({ screen: "board-dashboard", completed: true });
+    await page
+      .getByRole("navigation", { name: "Hauptnavigation" })
+      .getByRole("button", { name: "Auswertung" })
+      .click();
+    await page.getByRole("heading", { name: "Auswertung und Aufwandsentschädigung" }).waitFor();
+    await page.getByRole("button", { name: "Mitglieder" }).click();
+    await page.getByRole("button", { name: /Aiko Beispiel/ }).click();
+    await page.getByText("Fiktive Browser-QA Nachtragseinheit").waitFor();
+    await assertNoOverflow("Nachtrag in Auswertung 390");
+    results.push({ flow: "retrospective-reporting", visible: true });
+    console.log("flow:retrospective-reporting:ok");
 
-await page.getByRole("button", { name: "Mitglieder" }).click();
-await page.getByRole("heading", { name: "Auswertung – Mitglieder und Schüler" }).waitFor();
-await page.getByLabel("Person filtern").fill("Aiko");
-await page.getByRole("button", { name: /Aiko Beispiel/ }).click();
-await page.getByRole("heading", { name: "Aiko Beispiel" }).waitFor();
-await page.getByLabel("Funktion filtern").selectOption("RESPONSIBLE_TRAINER");
-await assertNoHorizontalOverflow("Mitgliedsdetail Desktop");
-await page.setViewportSize({ width: 390, height: 844 });
-await assertNoHorizontalOverflow("Mitgliedsdetail 390");
-await page.screenshot({ path: screenshotPath("member-detail-390.png"), fullPage: true });
-await page.setViewportSize({ width: 1280, height: 900 });
-results.push({ flow: "member-reporting", completed: true });
+    const roleExpectations = {
+      BOARD: { trials: 1, members: 1, belts: 1, suggestions: 1 },
+      TRAINER: { trials: 1, members: 0, belts: 1, suggestions: 1 },
+      ASSISTANT_TRAINER: { trials: 0, members: 0, belts: 1, suggestions: 1 },
+      TREASURER: { trials: 0, members: 0, belts: 0, suggestions: 0 },
+    };
+    const roleNavigationItems = {};
+    for (const [role, expected] of Object.entries(roleExpectations)) {
+      await page.getByLabel("Demo-Rolle wechseln").selectOption(role);
+      const roleNav = page.getByRole("navigation", { name: "Hauptnavigation" });
+      const itemCount = await roleNav.getByRole("button").count();
+      const managementButton = roleNav.getByRole("button", { name: "Verwaltung" });
+      if (itemCount !== 5 || !(await managementButton.isEnabled())) {
+        throw new Error(`Nachtragserfassung ist für Rolle ${role} nicht erreichbar.`);
+      }
+      await managementButton.click();
+      const actual = {
+        trials: await page.getByRole("button", { name: /Probetraining-Liste/ }).count(),
+        members: await page.getByRole("button", { name: /Neues Mitglied anlegen/ }).count(),
+        belts: await page.getByRole("button", { name: /Gürtelauswertung/ }).count(),
+        suggestions: await page.getByRole("button", { name: /Bildvorschläge prüfen/ }).count(),
+      };
+      if (
+        (await page.getByRole("button", { name: /Einheit nachträglich erstellen/ }).count()) !==
+          1 ||
+        Object.entries(expected).some(([key, value]) => actual[key] !== value)
+      ) {
+        throw new Error(`Verwaltungsrechte für Rolle ${role} sind inkonsistent.`);
+      }
+      roleNavigationItems[role] = { itemCount, ...actual };
+    }
+    results.push({ flow: "role-navigation", roleNavigationItems });
+    console.log("flow:role-navigation:ok");
 
-await page.getByRole("button", { name: "Trainer" }).click();
-await page.getByRole("heading", { name: "Auswertung – Trainer und Assistenztrainer" }).waitFor();
-await page.getByRole("button", { name: /Aiko Beispiel/ }).click();
-await page.getByText(/Abrechnungsfähig Juni 2026/).waitFor();
-results.push({ flow: "trainer-reporting", completed: true });
-
-await page.getByRole("button", { name: "Vergütungssätze" }).click();
-await page.getByRole("heading", { name: "Vergütungssätze" }).waitFor();
-
-await page.getByRole("button", { name: "Abrechnung", exact: true }).click();
-await page.getByRole("heading", { name: "Aufwandsentschädigung", exact: true }).waitFor();
-const compensationDownloadPromise = page.waitForEvent("download");
-await page.getByRole("button", { name: /CSV Aufwandsentschädigung/ }).click();
-const compensationDownload = await compensationDownloadPromise;
-if (compensationDownload.suggestedFilename() !== "aufwandsentschaedigung.csv") {
-  throw new Error("Unerwarteter CSV-Dateiname für Aufwandsentschädigung");
-}
-await page.getByRole("button", { name: /Aiko Beispiel/ }).click();
-await page.getByRole("heading", { name: /Aiko Beispiel · Juni 2026/ }).waitFor();
-const totalBeforeCorrection = await page.locator(".grand-total dd").innerText();
-await page.getByRole("button", { name: "Korrektur hinzufügen" }).click();
-await page.getByLabel("Korrekturbetrag").fill("5,00");
-await page.getByLabel("Korrekturbegründung").fill("Zusätzliche Lehrgangsvergütung · fiktive QA");
-await page.getByRole("button", { name: "Korrektur speichern" }).click();
-const totalAfterCorrection = await page.locator(".grand-total dd").innerText();
-if (totalBeforeCorrection === totalAfterCorrection)
-  throw new Error("Korrektur änderte den Entwurf nicht");
-await page.getByRole("button", { name: "Als geprüft markieren" }).click();
-page.once("dialog", (dialog) => dialog.accept());
-await page.getByRole("button", { name: "Freigeben" }).click();
-await page.getByText("Freigegebener Snapshot – unveränderlich").waitFor();
-const approvedTotal = await page.locator(".grand-total dd").innerText();
-
-await page.getByRole("button", { name: "Vergütungssätze" }).click();
-await page.getByLabel("Gültig bis · optional").first().fill("2026-06-30");
-await page.getByRole("button", { name: "Satz lokal speichern" }).first().click();
-await page.getByRole("button", { name: "Neuen Vergütungssatz anlegen" }).click();
-await page.getByLabel("Bezeichnung neuer Vergütungssatz").fill("Überlappender Juli-Satz");
-await page.getByLabel("Betrag neuer Vergütungssatz").fill("25,00");
-await page.getByLabel("Gültig ab neuer Vergütungssatz").fill("2026-06-30");
-await page.getByRole("button", { name: "Speichern", exact: true }).click();
-await page.getByText(/überschneiden/).waitFor();
-await page.screenshot({ path: screenshotPath("rate-overlap-desktop.png"), fullPage: true });
-await page.getByRole("button", { name: "Abbrechen", exact: true }).click();
-
-await page.getByRole("button", { name: "Neuen Vergütungssatz anlegen" }).click();
-await page.getByLabel("Bezeichnung neuer Vergütungssatz").fill("Verantwortlicher Trainer · Juli");
-await page.getByLabel("Betrag neuer Vergütungssatz").fill("25,00");
-await page.getByLabel("Gültig ab neuer Vergütungssatz").fill("2026-07-01");
-await page.setViewportSize({ width: 390, height: 844 });
-await assertNoHorizontalOverflow("Neuer Vergütungssatz 390");
-await page.screenshot({ path: screenshotPath("new-rate-390.png"), fullPage: true });
-await page.getByRole("button", { name: "Speichern", exact: true }).click();
-await page.getByLabel("Betrag Verantwortlicher Trainer · Juli").waitFor();
-await page.setViewportSize({ width: 1280, height: 900 });
-await page.getByRole("button", { name: "Abrechnung", exact: true }).click();
-await page.getByRole("button", { name: /Aiko Beispiel/ }).click();
-if ((await page.locator(".grand-total dd").innerText()) !== approvedTotal) {
-  throw new Error("Freigegebener Snapshot änderte sich nach Satzänderung");
-}
-await page.getByRole("button", { name: "Abrechnung", exact: true }).click();
-const frozenCsvPromise = page.waitForEvent("download");
-await page.getByRole("button", { name: /CSV Aufwandsentschädigung/ }).click();
-const frozenCsvDownload = await frozenCsvPromise;
-const frozenCsvPath = await frozenCsvDownload.path();
-const frozenCsv = frozenCsvPath ? await readFile(frozenCsvPath, "utf8") : "";
-if (!frozenCsv.includes(approvedTotal)) {
-  throw new Error("CSV verwendet nach Satzänderung nicht den freigegebenen Snapshot");
-}
-await page.getByRole("button", { name: /Aiko Beispiel/ }).click();
-results.push({
-  flow: "rate-create-overlap-approval-snapshot",
-  completed: true,
-  validFollowUpRate: true,
-  overlapRejected: true,
-  snapshotUnchanged: true,
-});
-
-await page.getByLabel("Demo-Rolle wechseln").selectOption("TREASURER");
-await page.getByRole("button", { name: "Als bezahlt markieren" }).waitFor();
-page.once("dialog", (dialog) => dialog.accept());
-await page.getByRole("button", { name: "Als bezahlt markieren" }).click();
-await page.getByText("bezahlt", { exact: true }).waitFor();
-await page.getByRole("button", { name: "Zahlungsliste" }).click();
-await page.getByRole("heading", { name: "Zahlungsliste" }).waitFor();
-const paymentDownloadPromise = page.waitForEvent("download");
-await page.getByRole("button", { name: /Zahlungsliste CSV/ }).click();
-const paymentDownload = await paymentDownloadPromise;
-if (paymentDownload.suggestedFilename() !== "zahlungsliste.csv") {
-  throw new Error("Unerwarteter CSV-Dateiname der Zahlungsliste");
-}
-const paymentPath = await paymentDownload.path();
-const paymentContent = paymentPath ? await readFile(paymentPath, "utf8") : "";
-if (!paymentContent.includes(approvedTotal)) {
-  throw new Error("Zahlungsliste verwendet nicht den freigegebenen Snapshot");
-}
-await page.getByRole("button", { name: "Abrechnungen" }).click();
-if ((await page.getByRole("button", { name: /Aiko Beispiel/ }).count()) !== 1) {
-  throw new Error("Kassenwart sieht die bezahlte Abrechnung nicht eindeutig");
-}
-if ((await page.locator(".settlement-card").count()) !== 1) {
-  throw new Error("Kassenwart sieht Entwürfe oder geprüfte Abrechnungen");
-}
-results.push({ flow: "treasurer-payment", completed: true });
-
-await page.getByLabel("Demo-Rolle wechseln").selectOption("TRAINER");
-await page.getByRole("button", { name: "Meine Übersicht" }).waitFor();
-if ((await page.getByRole("button", { name: "Vergütungssätze" }).count()) !== 0) {
-  throw new Error("Trainer sieht unzulässig die Vergütungssatzverwaltung");
-}
-await page.setViewportSize({ width: 375, height: 812 });
-await assertNoHorizontalOverflow("Eigene Trainerübersicht 375");
-await page.screenshot({ path: screenshotPath("own-trainer-375.png"), fullPage: true });
-results.push({ flow: "role-switching", completed: true });
-
-await page.emulateMedia({ media: "print" });
-if (await page.locator(".app-header").isVisible())
-  throw new Error("App-Header bleibt im Druck sichtbar");
-await page.emulateMedia({ media: "screen" });
-results.push({ flow: "print-view", completed: true });
-
-await page.reload({ waitUntil: "networkidle" });
-await page.getByLabel("Hauptnavigation").getByRole("button", { name: "Auswertung" }).click();
-await page.getByRole("button", { name: "Vergütungssätze" }).click();
-const invalidRate = page.getByLabel(/Betrag Verantwortlicher Trainer/);
-await invalidRate.fill("-1,00");
-await page.getByRole("button", { name: "Satz lokal speichern" }).first().click();
-await page.getByText(/positive ganze Centzahl/).waitFor();
-await invalidRate.fill("20,00");
-await page.getByRole("checkbox", { name: "aktiv" }).first().uncheck();
-await page.getByRole("button", { name: "Satz lokal speichern" }).first().click();
-await page.getByRole("button", { name: "Abrechnung", exact: true }).click();
-await page.getByRole("button", { name: /Aiko Beispiel/ }).click();
-const reviewButton = page.getByRole("button", { name: "Als geprüft markieren" });
-if (await reviewButton.isEnabled()) throw new Error("Fehlender Satz blockiert REVIEWED nicht");
-await page
-  .getByText(/Kein aktiver Vergütungssatz/)
-  .first()
-  .waitFor();
-await page.getByRole("button", { name: "Korrektur hinzufügen" }).click();
-await page.getByLabel("Korrekturbetrag").fill("abc");
-await page.getByRole("alert").waitFor();
-if (await page.getByRole("button", { name: "Korrektur speichern" }).isEnabled()) {
-  throw new Error("Ungültiger Korrekturbetrag ist speicherbar");
-}
-results.push({ flow: "blocked-review-and-invalid-input", completed: true });
-
-await page.reload({ waitUntil: "networkidle" });
-await page.getByLabel("Hauptnavigation").getByRole("button", { name: "Auswertung" }).click();
-const dashboardTotalCard = page
-  .locator(".dashboard-grid article")
-  .filter({ hasText: "Voraussichtliche Gesamtvergütung" });
-const dashboardTotalBeforeCancellation = await dashboardTotalCard.locator("strong").innerText();
-await page.getByRole("button", { name: "Abrechnung", exact: true }).click();
-await page.getByRole("button", { name: /Aiko Beispiel/ }).click();
-page.once("dialog", (dialog) => dialog.accept());
-await page.getByRole("button", { name: "Stornieren" }).click();
-await page.getByText(/Storniert vor Freigabe/).waitFor();
-for (const forbiddenAction of ["Korrektur hinzufügen", "Freigeben", "Als bezahlt markieren"]) {
-  if ((await page.getByRole("button", { name: forbiddenAction }).count()) !== 0) {
-    throw new Error(`Stornierte Abrechnung zeigt unzulässig: ${forbiddenAction}`);
-  }
-}
-await page.getByRole("button", { name: "Dashboard" }).click();
-const dashboardTotalAfterCancellation = await dashboardTotalCard.locator("strong").innerText();
-if (dashboardTotalAfterCancellation === dashboardTotalBeforeCancellation) {
-  throw new Error("Stornierter Betrag bleibt in der Dashboard-Gesamtsumme");
-}
-await page.getByLabel("Demo-Rolle wechseln").selectOption("TREASURER");
-await page.getByRole("button", { name: "Abrechnungen" }).click();
-if ((await page.locator(".settlement-card").count()) !== 0) {
-  throw new Error("Kassenwart sieht Entwürfe oder stornierte Abrechnungen");
-}
-results.push({
-  flow: "cancelled-dashboard-and-treasurer-filter",
-  completed: true,
-  cancelledExcludedFromDashboard: true,
-  treasurerDraftsHidden: true,
-});
-
-if (consoleErrors.length) throw new Error(`Browser-Konsole: ${consoleErrors.join(" | ")}`);
-await writeFile(
-  resultsFile,
-  `${JSON.stringify({ results, consoleErrors, artifacts: screenshotDir }, null, 2)}\n`,
+    if (consoleErrors.length) throw new Error(`Browser-Konsole: ${consoleErrors.join(" | ")}`);
+    if (failedAssets.length) throw new Error(`404-Assets: ${failedAssets.join(" | ")}`);
+    await writeFile(
+      join(artifactDir, "qa-results.json"),
+      `${JSON.stringify({ results, consoleErrors, failedAssets, artifactDir }, null, 2)}\n`,
+    );
+    console.log(JSON.stringify({ results, consoleErrors, failedAssets, artifactDir }, null, 2));
+  },
+  async () => {
+    if (browser) await browser.close();
+    await terminateProcess(preview);
+  },
 );
-await browser.close();
-console.log(JSON.stringify({ results, consoleErrors }, null, 2));

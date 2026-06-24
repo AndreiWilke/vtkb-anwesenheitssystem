@@ -3,121 +3,25 @@ import {
   CompensationBillingType,
   SessionRole,
   TrainingSessionStatus,
+  PersonMembershipStatus,
+  SCHEDULED_TRAINING_SLOTS,
+  dojoById,
   type AttendanceRecord,
   type CompensationRate,
 } from "@vtkb/shared";
 
 import { members } from "./mockData";
-import { createClubDateAtTime } from "./time";
-import type { HistoricalTrainingSession, TrainingType } from "./types";
-
-const schedules: ReadonlyArray<{
-  day: number;
-  startHour: number;
-  startMinute: number;
-  durationMinutes: number;
-  name: string;
-  trainingType: TrainingType;
-  dojo: string;
-}> = [
-  {
-    day: 3,
-    startHour: 16,
-    startMinute: 0,
-    durationMinutes: 75,
-    name: "Kindertraining",
-    trainingType: "KINDERTRAINING",
-    dojo: "Dojo Nord",
-  },
-  {
-    day: 6,
-    startHour: 17,
-    startMinute: 30,
-    durationMinutes: 90,
-    name: "Grundlagentraining",
-    trainingType: "GRUNDLAGENTRAINING",
-    dojo: "Dojo VTKB Berlin",
-  },
-  {
-    day: 8,
-    startHour: 19,
-    startMinute: 0,
-    durationMinutes: 90,
-    name: "Fortgeschrittenentraining",
-    trainingType: "FORTGESCHRITTENENTRAINING",
-    dojo: "Dojo VTKB Berlin",
-  },
-  {
-    day: 11,
-    startHour: 17,
-    startMinute: 0,
-    durationMinutes: 75,
-    name: "Jugendtraining",
-    trainingType: "JUGENDTRAINING",
-    dojo: "Dojo Nord",
-  },
-  {
-    day: 14,
-    startHour: 18,
-    startMinute: 30,
-    durationMinutes: 90,
-    name: "Erwachsenentraining",
-    trainingType: "ERWACHSENENTRAINING",
-    dojo: "Dojo Süd",
-  },
-  {
-    day: 17,
-    startHour: 16,
-    startMinute: 30,
-    durationMinutes: 75,
-    name: "Kindertraining",
-    trainingType: "KINDERTRAINING",
-    dojo: "Dojo Süd",
-  },
-  {
-    day: 20,
-    startHour: 17,
-    startMinute: 30,
-    durationMinutes: 90,
-    name: "Grundlagentraining",
-    trainingType: "GRUNDLAGENTRAINING",
-    dojo: "Dojo VTKB Berlin",
-  },
-  {
-    day: 20,
-    startHour: 19,
-    startMinute: 0,
-    durationMinutes: 90,
-    name: "Fortgeschrittenentraining",
-    trainingType: "FORTGESCHRITTENENTRAINING",
-    dojo: "Dojo VTKB Berlin",
-  },
-  {
-    day: 24,
-    startHour: 18,
-    startMinute: 0,
-    durationMinutes: 90,
-    name: "Erwachsenentraining",
-    trainingType: "ERWACHSENENTRAINING",
-    dojo: "Dojo Nord",
-  },
-  {
-    day: 27,
-    startHour: 17,
-    startMinute: 0,
-    durationMinutes: 75,
-    name: "Jugendtraining",
-    trainingType: "JUGENDTRAINING",
-    dojo: "Dojo Süd",
-  },
-];
-
-function plusMinutes(value: Date, minutes: number): Date {
-  return new Date(value.getTime() + minutes * 60_000);
-}
+import { createClubDateFromIso } from "./time";
+import type { HistoricalTrainingSession } from "./types";
 
 function dateKey(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function firstDateForWeekday(year: number, month: number, weekday: number): string {
+  const firstWeekday = new Date(Date.UTC(year, month - 1, 1)).getUTCDay() || 7;
+  const day = 1 + ((weekday - firstWeekday + 7) % 7);
+  return dateKey(year, month, day);
 }
 
 function attendanceFor(sessionId: string, sequence: number): AttendanceRecord[] {
@@ -144,19 +48,20 @@ function attendanceFor(sessionId: string, sequence: number): AttendanceRecord[] 
     presenceStatus: "PRESENT",
     sessionRole,
     captureSource: CaptureSource.MANUAL,
+    membershipStatusAtTime: PersonMembershipStatus.ACTIVE_MEMBER,
   }));
 }
 
-export const historicalSessions: HistoricalTrainingSession[] = Array.from(
+const generatedHistoricalSessions: HistoricalTrainingSession[] = Array.from(
   { length: 6 },
   (_, monthIndex) =>
-    schedules.map((schedule, scheduleIndex) => {
+    SCHEDULED_TRAINING_SLOTS.map((slot, scheduleIndex) => {
       const month = monthIndex + 1;
-      const sequence = monthIndex * schedules.length + scheduleIndex;
-      const date = dateKey(2026, month, schedule.day);
-      const reference = new Date(`${date}T12:00:00.000Z`);
-      const startsAt = createClubDateAtTime(reference, schedule.startHour, schedule.startMinute);
-      const endsAt = plusMinutes(startsAt, schedule.durationMinutes);
+      const sequence = monthIndex * SCHEDULED_TRAINING_SLOTS.length + scheduleIndex;
+      const date = firstDateForWeekday(2026, month, slot.weekday);
+      const startsAt = createClubDateFromIso(date, slot.startTime);
+      const endsAt = createClubDateFromIso(date, slot.endTime);
+      const dojo = dojoById(slot.dojoId);
       const id = `history-2026-${String(month).padStart(2, "0")}-${String(scheduleIndex + 1).padStart(2, "0")}`;
       return {
         id,
@@ -164,16 +69,51 @@ export const historicalSessions: HistoricalTrainingSession[] = Array.from(
         startsAt: startsAt.toISOString(),
         endsAt: endsAt.toISOString(),
         timeZone: "Europe/Berlin" as const,
-        name: schedule.name,
-        trainingType: schedule.trainingType,
-        dojo: schedule.dojo,
+        name: slot.name,
+        trainingType: slot.trainingType,
+        scheduledSlotId: slot.id,
+        dojoId: dojo.id,
+        dojoNameSnapshot: dojo.name,
+        dojo: dojo.name,
         status: TrainingSessionStatus.COMPLETED,
         attendance: attendanceFor(id, sequence),
-        completedAt: plusMinutes(endsAt, 5).toISOString(),
+        completedAt: new Date(endsAt.getTime() + 5 * 60_000).toISOString(),
         completedBy: sequence % 2 === 0 ? "Vorstand Demo A" : "Trainer Demo B",
       };
     }),
 ).flat();
+
+const trialVisits: Readonly<Record<string, number>> = {
+  "trial-001": 0,
+  "trial-002": 1,
+  "trial-003": 2,
+  "trial-004": 3,
+  "trial-005": 4,
+  "trial-006": 5,
+  "trial-007": 4,
+};
+
+Object.entries(trialVisits).forEach(([participantId, count]) => {
+  generatedHistoricalSessions.slice(0, count).forEach((session) => {
+    session.attendance = [
+      ...session.attendance,
+      {
+        sessionId: session.id,
+        memberId: participantId,
+        presenceStatus: "PRESENT",
+        sessionRole: SessionRole.PARTICIPANT,
+        captureSource: CaptureSource.MANUAL,
+        membershipStatusAtTime: PersonMembershipStatus.TRIAL,
+      },
+    ];
+  });
+});
+
+export const initialHistoricalSessions: readonly HistoricalTrainingSession[] = Object.freeze(
+  generatedHistoricalSessions.map((session) =>
+    Object.freeze({ ...session, attendance: Object.freeze([...session.attendance]) }),
+  ),
+);
 
 export const initialCompensationRates: CompensationRate[] = [
   {

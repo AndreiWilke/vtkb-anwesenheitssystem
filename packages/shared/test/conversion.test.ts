@@ -82,9 +82,7 @@ describe("checkConversionEligibility", () => {
   });
 
   it("blockiert Doppelkonvertierung (memberId bereits gesetzt)", () => {
-    const result = checkConversionEligibility(
-      baseParticipant({ memberId: "member-99" }),
-    );
+    const result = checkConversionEligibility(baseParticipant({ memberId: "member-99" }));
     expect(result.eligible).toBe(false);
     expect(result.reason).toContain("memberId");
   });
@@ -103,8 +101,8 @@ describe("checkConversionEligibility", () => {
 describe("convertTrialParticipantToMember", () => {
   const input = {
     participant: baseParticipant(),
-    newMemberId: "member-042",
     memberNumber: "M-1042",
+    existingMemberNumbers: [] as string[],
     qualification: MemberQualification.NONE,
     convertedBy: "Vorstand Demo",
     convertedAt: "2026-06-21T10:00:00.000Z",
@@ -120,9 +118,23 @@ describe("convertTrialParticipantToMember", () => {
     expect(result.updatedParticipant.contractStatus).toBe(ContractStatus.MEMBERSHIP_ACTIVATED);
   });
 
-  it("setzt memberId auf die neue Mitglieds-ID", () => {
+  it("speichert den tatsächlichen Umwandlungszeitpunkt", () => {
     const result = convertTrialParticipantToMember(input);
-    expect(result.updatedParticipant.memberId).toBe("member-042");
+    expect(result.updatedParticipant.convertedAt).toBe(input.convertedAt);
+  });
+
+  it("lehnt eine bereits vergebene Mitgliedsnummer ab", () => {
+    expect(() =>
+      convertTrialParticipantToMember({
+        ...input,
+        existingMemberNumbers: [input.memberNumber],
+      }),
+    ).toThrow("bereits vergeben");
+  });
+
+  it("behält die Personen-ID als Mitglieds-ID", () => {
+    const result = convertTrialParticipantToMember(input);
+    expect(result.updatedParticipant.memberId).toBe("trial-001");
   });
 
   it("gibt die korrekte memberNumber zurueck", () => {
@@ -136,7 +148,8 @@ describe("convertTrialParticipantToMember", () => {
     expect(result.auditEntry.actor).toBe("Vorstand Demo");
     expect(result.auditEntry.object).toContain("trial-001");
     expect(result.auditEntry.previousValue).toBe(PersonMembershipStatus.TRIAL);
-    expect(result.auditEntry.newValue).toContain("member-042");
+    expect(result.auditEntry.newValue).toContain("trial-001");
+    expect(result.auditEntry.newValue).toContain("M-1042");
   });
 
   it("haengt eine optionale Notiz an bestehende Notiz an", () => {
@@ -179,6 +192,14 @@ describe("createDirectMember", () => {
     gender: "MAENNLICH" as const,
     birthDate: "1985-03-10",
     memberNumber: "M-1050",
+    existingPersonIds: [] as string[],
+    existingMemberNumbers: [] as string[],
+    existingPersons: [] as Array<{
+      id: string;
+      firstName: string;
+      lastName: string;
+      birthDate: string;
+    }>,
     createdBy: "Vorstand Demo",
     createdAt: "2026-06-21T11:00:00.000Z",
   };
@@ -220,6 +241,37 @@ describe("createDirectMember", () => {
     expect(result.auditEntry.newValue).toContain("M-1050");
   });
 
+  it("übernimmt Geburtsdatum und Telefonnummer verlustfrei", () => {
+    const result = createDirectMember({ ...input, contactPhone: "030-555-0199" });
+    expect(result.birthDate).toBe("1985-03-10");
+    expect(result.contactPhone).toBe("030-555-0199");
+  });
+
+  it("lehnt doppelte Personen-ID und Mitgliedsnummer an der Fachgrenze ab", () => {
+    expect(() => createDirectMember({ ...input, existingPersonIds: [input.id] })).toThrow(
+      "Personen-ID",
+    );
+    expect(() =>
+      createDirectMember({ ...input, existingMemberNumbers: [input.memberNumber] }),
+    ).toThrow("Mitgliedsnummer");
+  });
+
+  it("prüft Dubletten gegen Probetraining- und Mitgliederprofile", () => {
+    expect(() =>
+      createDirectMember({
+        ...input,
+        existingPersons: [
+          {
+            id: "trial-existing",
+            firstName: "Klaus",
+            lastName: "Direktmitglied",
+            birthDate: "1985-11-30",
+          },
+        ],
+      }),
+    ).toThrow("existiert bereits");
+  });
+
   it("wirft bei leerem Vornamen", () => {
     expect(() => createDirectMember({ ...input, firstName: "  " })).toThrow("Vorname");
   });
@@ -246,6 +298,7 @@ describe("grantBoardOverride", () => {
   it("setzt overrideStatus auf ONE_ADDITIONAL_SESSION_APPROVED", () => {
     const result = grantBoardOverride({
       participant: base,
+      attendedTrialCount: 4,
       grantedBy: "Vorstand Demo",
       grantedAt: "2026-06-21T12:00:00.000Z",
       reason: "Terminkonflikt beim Vertragseingang",
@@ -254,15 +307,14 @@ describe("grantBoardOverride", () => {
       TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED,
     );
     expect(result.updatedParticipant.overrideGrantedBy).toBe("Vorstand Demo");
-    expect(result.updatedParticipant.overrideReason).toBe(
-      "Terminkonflikt beim Vertragseingang",
-    );
+    expect(result.updatedParticipant.overrideReason).toBe("Terminkonflikt beim Vertragseingang");
     expect(result.updatedParticipant.overrideUsed).toBe(false);
   });
 
   it("erzeugt einen AuditEntry mit BOARD_OVERRIDE_GRANTED", () => {
     const result = grantBoardOverride({
       participant: base,
+      attendedTrialCount: 4,
       grantedBy: "Vorstand Demo",
       grantedAt: "2026-06-21T12:00:00.000Z",
       reason: "Ausnahme begruendet",
@@ -275,6 +327,7 @@ describe("grantBoardOverride", () => {
     expect(() =>
       grantBoardOverride({
         participant: base,
+        attendedTrialCount: 4,
         grantedBy: "Vorstand Demo",
         grantedAt: "2026-06-21T12:00:00.000Z",
         reason: "  ",
@@ -289,6 +342,7 @@ describe("grantBoardOverride", () => {
     expect(() =>
       grantBoardOverride({
         participant: alreadyGranted,
+        attendedTrialCount: 4,
         grantedBy: "Vorstand Demo",
         grantedAt: "2026-06-21T12:00:00.000Z",
         reason: "Zweite Ausnahme",
@@ -303,6 +357,7 @@ describe("grantBoardOverride", () => {
     expect(() =>
       grantBoardOverride({
         participant: member,
+        attendedTrialCount: 4,
         grantedBy: "Vorstand Demo",
         grantedAt: "2026-06-21T12:00:00.000Z",
         reason: "Versuch",
@@ -314,10 +369,47 @@ describe("grantBoardOverride", () => {
     const original = { ...base };
     grantBoardOverride({
       participant: base,
+      attendedTrialCount: 4,
       grantedBy: "Vorstand Demo",
       grantedAt: "2026-06-21T12:00:00.000Z",
       reason: "Begruendung",
     });
     expect(base.overrideStatus).toBe(original.overrideStatus);
+  });
+
+  it.each([0, 1, 2, 3, 5])("lehnt die Ausnahme bei %s bisherigen Besuchen ab", (count) => {
+    expect(() =>
+      grantBoardOverride({
+        participant: base,
+        attendedTrialCount: count,
+        grantedBy: "Vorstand Demo",
+        grantedAt: "2026-06-21T12:00:00.000Z",
+        reason: "Falscher Zeitpunkt",
+      }),
+    ).toThrow("genau vier");
+  });
+
+  it("lehnt die Ausnahme für ein inaktives Probetrainingprofil ab", () => {
+    expect(() =>
+      grantBoardOverride({
+        participant: { ...base, active: false },
+        attendedTrialCount: 4,
+        grantedBy: "Vorstand Demo",
+        grantedAt: "2026-06-21T12:00:00.000Z",
+        reason: "Inaktiv",
+      }),
+    ).toThrow("aktives Probetrainingprofil");
+  });
+
+  it("lehnt die Ausnahme ab, wenn ein eingegangener Vertrag die Teilnahme bereits erlaubt", () => {
+    expect(() =>
+      grantBoardOverride({
+        participant: { ...base, contractStatus: ContractStatus.RECEIVED },
+        attendedTrialCount: 4,
+        grantedBy: "Vorstand Demo",
+        grantedAt: "2026-06-21T12:00:00.000Z",
+        reason: "Nicht erforderlich",
+      }),
+    ).toThrow("keine Vorstandsausnahme nötig");
   });
 });

@@ -5,16 +5,9 @@ import {
   TrainingSessionStatus,
   validateTrainingSession,
   type AttendanceRecord,
-  type GuestAttendance,
 } from "@vtkb/shared";
 
-import type {
-  AttendanceState,
-  LocalGuest,
-  Member,
-  SessionUiStatus,
-  TrainingSessionMock,
-} from "./types";
+import type { AttendanceState, Member, SessionUiStatus, TrainingSessionMock } from "./types";
 
 export function sessionUiStatus(session: TrainingSessionMock, now = new Date()): SessionUiStatus {
   if (now < session.startsAt) return "BEVORSTEHEND";
@@ -32,6 +25,18 @@ export function suggestSession(
   return upcoming ?? sessions.at(-1) ?? sessions[0]!;
 }
 
+export function hasParallelSessionChoice(
+  sessions: readonly TrainingSessionMock[],
+  selected: TrainingSessionMock,
+): boolean {
+  return sessions.some(
+    (session) =>
+      session.id !== selected.id &&
+      session.startsAt.getTime() === selected.startsAt.getTime() &&
+      session.dojoId !== selected.dojoId,
+  );
+}
+
 export function createInitialAttendance(
   members: readonly Member[],
   session: TrainingSessionMock,
@@ -43,8 +48,19 @@ export function createInitialAttendance(
         ? {
             presenceStatus: PresenceStatus.PRESENT,
             sessionRole: SessionRole.RESPONSIBLE_TRAINER,
+            captureSource: CaptureSource.PREVIOUS_SESSION_SUGGESTION,
           }
-        : { presenceStatus: PresenceStatus.ABSENT, sessionRole: null },
+        : session.assistantTrainerIds.includes(member.id)
+          ? {
+              presenceStatus: PresenceStatus.PRESENT,
+              sessionRole: SessionRole.ASSISTANT_TRAINER,
+              captureSource: CaptureSource.PREVIOUS_SESSION_SUGGESTION,
+            }
+          : {
+              presenceStatus: PresenceStatus.ABSENT,
+              sessionRole: null,
+              captureSource: CaptureSource.MANUAL,
+            },
     ]),
   );
 }
@@ -55,18 +71,24 @@ export function presentMemberIds(attendance: AttendanceState): string[] {
     .map(([memberId]) => memberId);
 }
 
-export function createLocalGuestIdFactory(prefix = "guest"): () => string {
-  let nextId = 0;
-  return () => {
-    nextId += 1;
-    return `${prefix}-${String(nextId).padStart(3, "0")}`;
-  };
+export function attendanceRecordsForSession(
+  session: TrainingSessionMock,
+  attendance: AttendanceState,
+): AttendanceRecord[] {
+  return Object.entries(attendance)
+    .filter(([, selection]) => selection.presenceStatus === PresenceStatus.PRESENT)
+    .map(([memberId, selection]) => ({
+      sessionId: session.id,
+      memberId,
+      presenceStatus: selection.presenceStatus,
+      sessionRole: selection.sessionRole,
+      captureSource: selection.captureSource,
+    }));
 }
 
 export function canCompleteSession(
   session: TrainingSessionMock,
   attendance: AttendanceState,
-  guests: readonly LocalGuest[],
   unresolvedProposalCount: number,
   blockedTrialParticipants: ReadonlyArray<{ displayName: string; reason: string }> = [],
 ): { allowed: boolean; messages: string[] } {
@@ -76,23 +98,18 @@ export function canCompleteSession(
       memberId,
       presenceStatus: selection.presenceStatus,
       sessionRole: selection.sessionRole,
-      captureSource: CaptureSource.MANUAL,
+      captureSource: selection.captureSource,
     }),
   );
-  const guestRecords: GuestAttendance[] = guests.map((guest) => ({
-    sessionId: session.id,
-    guestId: guest.id,
-    displayName: [guest.firstName, guest.lastName].filter(Boolean).join(" "),
-    presenceStatus: PresenceStatus.PRESENT,
-    sessionRole: SessionRole.PARTICIPANT,
-    captureSource: CaptureSource.MANUAL,
-  }));
   const issues = validateTrainingSession({
     session: {
       id: session.id,
       templateId: null,
+      scheduledSlotId: session.scheduledSlotId,
       name: session.name,
-      dojo: session.dojo,
+      trainingType: session.trainingType,
+      dojoId: session.dojoId,
+      dojoNameSnapshot: session.dojoNameSnapshot,
       startsAt: session.startsAt.toISOString(),
       endsAt: session.endsAt.toISOString(),
       status: TrainingSessionStatus.COMPLETED,
@@ -100,7 +117,6 @@ export function canCompleteSession(
       completedByUserId: "demo-user",
     },
     attendance: attendanceRecords,
-    guests: guestRecords,
   });
   const messages = issues.map((issue) => issue.message);
   if (unresolvedProposalCount > 0) {

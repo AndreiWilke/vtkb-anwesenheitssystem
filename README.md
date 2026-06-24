@@ -1,6 +1,6 @@
 # VTKB Digitales Anwesenheitssystem
 
-> **Status:** Lokaler klickbarer UX- und Fachlogik-Prototyp (Paket 1 und 1.1). Es besteht keine Produktivfreigabe. Es werden keine AWS-Ressourcen bereitgestellt und keine echten Personen-, Zahlungs-, Foto- oder biometrischen Daten verarbeitet.
+> **Status:** Lokaler klickbarer UX- und Fachlogik-Prototyp (Pakete 1 bis 1.7). Es besteht keine Produktivfreigabe. Es werden keine AWS-Ressourcen bereitgestellt und keine echten Personen-, Zahlungs-, Foto- oder biometrischen Daten verarbeitet.
 
 ## Projektziel
 
@@ -8,12 +8,19 @@ Das System soll Trainern und Assistenztrainern eine schnelle, nachvollziehbare A
 
 Es gibt keinen festen Kader. Alle aktiven Mitglieder koennen grundsaetzlich an einer Einheit teilnehmen. Die Anwendung schlaegt die passende Einheit anhand von Datum, Uhrzeit und Dojo vor, laesst aber eine Aenderung zu.
 
+Die Dojo-Stammdaten enthalten genau `Seikatsu Dojo`, `Ebereschen Dojo`, `Senshi Dojo` und `Musashi Dojo`. Elf stabile Wochenzeiten bilden den aktuellen Plan ab: montags drei, mittwochs zwei, donnerstags drei und freitags drei Einheiten. Paralleltermine in verschiedenen Dojos sind erlaubt und muessen ausdrücklich anhand von Zeit und Dojo ausgewählt werden. Überlappungen im selben Dojo werden abgelehnt.
+
+- Montag: Ebereschen 16:00–17:00; Seikatsu 17:00–18:00 und 18:00–19:30.
+- Mittwoch: Ebereschen 16:00–17:00; Senshi 16:00–18:00.
+- Donnerstag: Musashi 17:00–18:00, 18:00–19:00 und 19:00–20:00.
+- Freitag: Seikatsu 17:30–18:15, 18:15–19:00 und 19:00–20:00.
+
 ## Fachlicher Kernprozess
 
 1. Eine berechtigte Person waehlt oder bestaetigt die vorgeschlagene Trainingseinheit.
 2. Genau ein verantwortlicher Trainer und optional mehrere Assistenztrainer werden festgelegt.
 3. Anwesende Mitglieder werden manuell oder spaeter mit Fotoassistenz vorgeschlagen.
-4. Gaeste und Probetrainingsteilnehmer werden ausschliesslich manuell erfasst.
+4. Probetrainingsteilnehmer werden als dauerhafte Profile manuell erfasst. Eine allgemeine Gastfunktion existiert nicht.
 5. Der Trainer prueft die Gesamtliste und schliesst die Einheit ab.
 6. Pro Person und Einheit bleibt genau ein Anwesenheitsdatensatz mit genau einer heutigen Funktion.
 
@@ -31,7 +38,7 @@ Die Smartphone-first-PWA in `apps/web` bildet den vollständigen lokalen Bediena
 
 - vorgeschlagene oder frei gewählte Trainingseinheit,
 - genau ein verantwortlicher Trainer und optionale Assistenztrainer,
-- vollständige manuelle Anwesenheit mit Suche, Filtern, Rollen und Gästen,
+- vollständige manuelle Anwesenheit mit Suche, Filtern, Rollen und dauerhaften Probetrainingprofilen,
 - rein simulierte Fotoassistenz ohne Kamera, Upload, Bilder oder Gesichtserkennung,
 - verpflichtende Trainerprüfung, lokale Abschlussansicht und interne Demo-Auswertung.
 
@@ -41,7 +48,7 @@ Der Prototyp speichert nur im React-Zustand des aktuellen Browser-Tabs. Ein Neul
 
 ## Paket-1.1-Auswertung und Aufwandsentschaedigung
 
-Der lokale Prototyp enthaelt zusaetzlich einen vollstaendigen Auswertungs- und Abrechnungsbereich mit 60 fiktiven abgeschlossenen Einheiten von Januar bis Juni 2026:
+Der lokale Prototyp enthaelt zusaetzlich einen vollstaendigen Auswertungs- und Abrechnungsbereich mit 66 fiktiven abgeschlossenen Einheiten von Januar bis Juni 2026:
 
 - Mitglieder- und Schuelerauswertung fuer Monat, Jahr oder freien Zeitraum ohne unzulaessige Fehlzeitenquote,
 - chronologische Mitgliedsdetails und aus Einheiten berechnete Monatswerte,
@@ -96,12 +103,17 @@ npm run format:check
 npm run lint
 npm run typecheck
 npm test
+npm run test:coverage
 npm run check
 npm run build
 npm run preview
 ```
 
 `npm ci` installiert exakt den Stand aus `package-lock.json` und ist deshalb der reproduzierbare Standard. `npm run check` fuehrt alle nicht veraendernden Qualitaetspruefungen nacheinander aus. Fuer automatische Formatierung steht `npm run format` bereit.
+
+Die portable Browser-QA startet mit `npm run qa:browser` standardmaessig Playwright Chromium. Ein lokal installiertes alternatives Chromium-Channel kann optional ueber `VTKB_QA_BROWSER_CHANNEL` gewählt werden. Preview-Prozess und Browser werden auch bei Startfehlern beendet; Artefakte liegen ausschließlich im Betriebssystem-Tempordner.
+
+Nach einer neuen Playwright-Installation muss das passende lokale Test-Binary gegebenenfalls einmalig mit `npx playwright install chromium` bereitgestellt werden.
 
 ## Entwicklungsphasen
 

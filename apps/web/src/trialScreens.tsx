@@ -21,12 +21,17 @@ import {
   PersonMembershipStatus,
   TrialOverrideStatus,
   canTransitionContract,
+  checkTrialEligibility,
   checkConversionEligibility,
   checkForDuplicates,
   convertTrialParticipantToMember,
   createDirectMember,
   createTrialParticipantIdGenerator,
   grantBoardOverride,
+  formatGermanDate,
+  isValidGermanDate,
+  parseGermanDate,
+  type PersonForDuplicateCheck,
 } from "@vtkb/shared";
 import React, { useState } from "react";
 
@@ -35,11 +40,15 @@ import type {
   ConversionResult,
   DirectMemberResult,
   HistoricalTrainingSession,
-  Member,
   TrialParticipant,
 } from "./types";
-import { buildNewTrialParticipant, computeTrialSessionCount, getTrialWarning } from "./trialWorkflow";
+import {
+  buildNewTrialParticipant,
+  computeTrialSessionCount,
+  getTrialWarning,
+} from "./trialWorkflow";
 import { createMemberNumberGenerator, createPersonIdGenerator } from "@vtkb/shared";
+import { GermanDateInput } from "./components";
 
 // ---------------------------------------------------------------------------
 // Hilfsfunktionen
@@ -47,28 +56,27 @@ import { createMemberNumberGenerator, createPersonIdGenerator } from "@vtkb/shar
 
 function contractStatusLabel(status: string): string {
   switch (status) {
-    case ContractStatus.NOT_ISSUED: return "Nicht ausgestellt";
-    case ContractStatus.ISSUED: return "Ausgestellt (ausstehend)";
-    case ContractStatus.RECEIVED: return "Eingegangen";
-    case ContractStatus.MEMBERSHIP_ACTIVATED: return "Mitgliedschaft aktiviert";
-    default: return status;
-  }
-}
-
-function membershipStatusLabel(status: string): string {
-  switch (status) {
-    case PersonMembershipStatus.TRIAL: return "Probetraining";
-    case PersonMembershipStatus.ACTIVE_MEMBER: return "Aktives Mitglied";
-    case PersonMembershipStatus.INACTIVE_MEMBER: return "Inaktives Mitglied";
-    default: return status;
+    case ContractStatus.NOT_ISSUED:
+      return "Nicht ausgestellt";
+    case ContractStatus.ISSUED:
+      return "Ausgestellt (ausstehend)";
+    case ContractStatus.RECEIVED:
+      return "Eingegangen";
+    case ContractStatus.MEMBERSHIP_ACTIVATED:
+      return "Mitgliedschaft aktiviert";
+    default:
+      return status;
   }
 }
 
 function genderLabel(gender: string): string {
   switch (gender) {
-    case "MAENNLICH": return "Männlich";
-    case "WEIBLICH": return "Weiblich";
-    default: return gender;
+    case "MAENNLICH":
+      return "Männlich";
+    case "WEIBLICH":
+      return "Weiblich";
+    default:
+      return gender;
   }
 }
 
@@ -99,9 +107,13 @@ export function TrialListScreen({
       const { attended } = computeTrialSessionCount(p.id, history);
       return (
         p.active &&
-        attended >= 4 &&
-        p.contractStatus === ContractStatus.NOT_ISSUED &&
-        p.overrideStatus !== TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED
+        !checkTrialEligibility({
+          attendedCount: attended,
+          contractStatus: p.contractStatus,
+          membershipStatus: p.membershipStatus,
+          overrideStatus: p.overrideStatus,
+          overrideUsed: p.overrideUsed,
+        }).allowed
       );
     }
     return true;
@@ -110,9 +122,13 @@ export function TrialListScreen({
   return (
     <div className="screen">
       <header className="screen-header">
-        <button className="btn-back" onClick={onBack}>← Zurück</button>
+        <button className="btn-back" onClick={onBack}>
+          ← Zurück
+        </button>
         <h1>Probetraining</h1>
-        <button className="btn-primary" onClick={onNew}>+ Neu</button>
+        <button className="btn-primary" onClick={onNew}>
+          + Neu
+        </button>
       </header>
 
       <div className="filter-tabs">
@@ -128,9 +144,7 @@ export function TrialListScreen({
       </div>
 
       <ul className="trial-list">
-        {displayed.length === 0 && (
-          <li className="trial-list__empty">Keine Einträge.</li>
-        )}
+        {displayed.length === 0 && <li className="trial-list__empty">Keine Einträge.</li>}
         {displayed.map((p) => {
           const { attended, remaining } = computeTrialSessionCount(p.id, history);
           const warning = getTrialWarning(p, history);
@@ -142,8 +156,7 @@ export function TrialListScreen({
             >
               <div className="trial-list__name">{p.displayName}</div>
               <div className="trial-list__meta">
-                {genderLabel(p.gender)} · {p.birthDate?.slice(0, 4) ?? "–"} ·{" "}
-                {attended}/{4} Einheiten
+                {genderLabel(p.gender)} · {p.birthDate.slice(0, 4)} · {attended}/{4} Einheiten
                 {remaining > 0 && ` (${remaining} verbl.)`}
               </div>
               <div className="trial-list__status">
@@ -169,6 +182,7 @@ export function TrialListScreen({
 
 interface TrialNewScreenProps {
   existingParticipants: readonly TrialParticipant[];
+  existingPersons: readonly PersonForDuplicateCheck[];
   onSave: (participant: TrialParticipant) => void;
   onBack: () => void;
   /** Nur BOARD darf Dubletten bewusst ueberschreiben */
@@ -199,12 +213,13 @@ const emptyForm: NewForm = {
 
 export function TrialNewScreen({
   existingParticipants,
+  existingPersons,
   onSave,
   onBack,
   isBoard,
 }: TrialNewScreenProps) {
   const [form, setForm] = useState<NewForm>(emptyForm);
-  const [duplicates, setDuplicates] = useState<TrialParticipant[]>([]);
+  const [duplicates, setDuplicates] = useState<PersonForDuplicateCheck[]>([]);
   const [forceCreate, setForceCreate] = useState(false);
   const [errors, setErrors] = useState<Partial<NewForm>>({});
 
@@ -212,7 +227,9 @@ export function TrialNewScreen({
     const errs: Partial<NewForm> = {};
     if (!form.firstName.trim()) errs.firstName = "Pflichtfeld";
     if (!form.lastName.trim()) errs.lastName = "Pflichtfeld";
-    if (!form.birthDate) errs.birthDate = "Pflichtfeld";
+    if (!isValidGermanDate(form.birthDate)) {
+      errs.birthDate = "Bitte ein gültiges Datum im Format TT.MM.JJJJ eingeben.";
+    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -223,18 +240,26 @@ export function TrialNewScreen({
       {
         firstName: form.firstName,
         lastName: form.lastName,
-        birthDate: form.birthDate,
+        birthDate: parseGermanDate(form.birthDate)!,
       },
-      existingParticipants,
+      existingPersons,
     );
     if (result.hasProbableDuplicate && !forceCreate) {
-      setDuplicates(result.matches as TrialParticipant[]);
+      setDuplicates(result.matches);
     } else {
       handleCreate();
     }
   }
 
   function handleCreate() {
+    const birthDate = parseGermanDate(form.birthDate);
+    if (!birthDate) {
+      setErrors((current) => ({
+        ...current,
+        birthDate: "Bitte ein gültiges Datum im Format TT.MM.JJJJ eingeben.",
+      }));
+      return;
+    }
     const nextId = createTrialParticipantIdGenerator(existingParticipants.map((p) => p.id));
     const id = nextId();
     const participant = buildNewTrialParticipant(
@@ -243,7 +268,7 @@ export function TrialNewScreen({
         firstName: form.firstName,
         lastName: form.lastName,
         gender: form.gender,
-        birthDate: form.birthDate,
+        birthDate,
         contactName: form.contactName || undefined,
         contactPhone: form.contactPhone || undefined,
         contactEmail: form.contactEmail || undefined,
@@ -255,20 +280,30 @@ export function TrialNewScreen({
   }
 
   function field(key: keyof NewForm, label: string, type = "text") {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setForm((prev) => ({ ...prev, [key]: e.target.value }));
+      setErrors((prev) => ({ ...prev, [key]: undefined }));
+      setDuplicates([]);
+      setForceCreate(false);
+    };
     return (
       <label className="form-field">
         <span className="form-field__label">{label}</span>
-        <input
-          className={`form-field__input${errors[key] ? " form-field__input--error" : ""}`}
-          type={type}
-          value={form[key]}
-          onChange={(e) => {
-            setForm((prev) => ({ ...prev, [key]: e.target.value }));
-            setErrors((prev) => ({ ...prev, [key]: undefined }));
-            setDuplicates([]);
-            setForceCreate(false);
-          }}
-        />
+        {type === "date" ? (
+          <GermanDateInput
+            aria-label={label}
+            className={`form-field__input${errors[key] ? " form-field__input--error" : ""}`}
+            value={form[key]}
+            onChange={handleChange}
+          />
+        ) : (
+          <input
+            className={`form-field__input${errors[key] ? " form-field__input--error" : ""}`}
+            type={type}
+            value={form[key]}
+            onChange={handleChange}
+          />
+        )}
         {errors[key] && <span className="form-field__error">{errors[key]}</span>}
       </label>
     );
@@ -277,11 +312,19 @@ export function TrialNewScreen({
   return (
     <div className="screen">
       <header className="screen-header">
-        <button className="btn-back" onClick={onBack}>← Zurück</button>
+        <button className="btn-back" onClick={onBack}>
+          ← Zurück
+        </button>
         <h1>Neues Probetraining</h1>
       </header>
 
-      <form className="form" onSubmit={(e) => { e.preventDefault(); handleCheck(); }}>
+      <form
+        className="form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleCheck();
+        }}
+      >
         <fieldset className="form-group">
           <legend>Personalien</legend>
           {field("firstName", "Vorname")}
@@ -291,7 +334,9 @@ export function TrialNewScreen({
             <select
               className="form-field__input"
               value={form.gender}
-              onChange={(e) => setForm((prev) => ({ ...prev, gender: e.target.value as "MAENNLICH" | "WEIBLICH" }))}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, gender: e.target.value as "MAENNLICH" | "WEIBLICH" }))
+              }
             >
               <option value="MAENNLICH">Männlich</option>
               <option value="WEIBLICH">Weiblich</option>
@@ -315,7 +360,7 @@ export function TrialNewScreen({
             <ul>
               {duplicates.map((d) => (
                 <li key={d.id}>
-                  {d.displayName} ({d.birthDate?.slice(0, 4) ?? "–"})
+                  {d.firstName} {d.lastName} ({d.birthDate.slice(0, 4)})
                 </li>
               ))}
             </ul>
@@ -323,7 +368,10 @@ export function TrialNewScreen({
               <button
                 type="button"
                 className="btn-secondary"
-                onClick={() => { setForceCreate(true); handleCreate(); }}
+                onClick={() => {
+                  setForceCreate(true);
+                  handleCreate();
+                }}
               >
                 Trotzdem neu anlegen (Vorstand)
               </button>
@@ -336,8 +384,12 @@ export function TrialNewScreen({
         )}
 
         <div className="form-actions">
-          <button type="submit" className="btn-primary">Anlegen & Dublette prüfen</button>
-          <button type="button" className="btn-secondary" onClick={onBack}>Abbrechen</button>
+          <button type="submit" className="btn-primary">
+            Anlegen & Dublette prüfen
+          </button>
+          <button type="button" className="btn-secondary" onClick={onBack}>
+            Abbrechen
+          </button>
         </div>
       </form>
     </div>
@@ -352,6 +404,8 @@ interface TrialProfileScreenProps {
   participant: TrialParticipant;
   history: readonly HistoricalTrainingSession[];
   onContractView: () => void;
+  onBoardOverride?: () => void;
+  onConvert?: () => void;
   onBack: () => void;
 }
 
@@ -359,6 +413,8 @@ export function TrialProfileScreen({
   participant,
   history,
   onContractView,
+  onBoardOverride,
+  onConvert,
   onBack,
 }: TrialProfileScreenProps) {
   const { attended, remaining } = computeTrialSessionCount(participant.id, history);
@@ -367,7 +423,9 @@ export function TrialProfileScreen({
   return (
     <div className="screen">
       <header className="screen-header">
-        <button className="btn-back" onClick={onBack}>← Zurück</button>
+        <button className="btn-back" onClick={onBack}>
+          ← Zurück
+        </button>
         <h1>{participant.displayName}</h1>
       </header>
 
@@ -380,11 +438,26 @@ export function TrialProfileScreen({
       <section className="detail-section">
         <h2 className="detail-section__title">Stammdaten</h2>
         <dl className="detail-list">
-          <dt>Geschlecht</dt><dd>{genderLabel(participant.gender)}</dd>
-          <dt>Geburtsdatum</dt><dd>{participant.birthDate}</dd>
-          <dt>Erstellt am</dt><dd>{participant.createdAt.slice(0, 10)}</dd>
-          {participant.beltColor && <><dt>Gürtel</dt><dd>{participant.beltColor} – {participant.beltGrade}</dd></>}
-          {participant.note && <><dt>Notiz</dt><dd>{participant.note}</dd></>}
+          <dt>Geschlecht</dt>
+          <dd>{genderLabel(participant.gender)}</dd>
+          <dt>Geburtsdatum</dt>
+          <dd>{formatGermanDate(participant.birthDate)}</dd>
+          <dt>Erstellt am</dt>
+          <dd>{formatGermanDate(participant.createdAt.slice(0, 10))}</dd>
+          {participant.beltColor && (
+            <>
+              <dt>Gürtel</dt>
+              <dd>
+                {participant.beltColor} – {participant.beltGrade}
+              </dd>
+            </>
+          )}
+          {participant.note && (
+            <>
+              <dt>Notiz</dt>
+              <dd>{participant.note}</dd>
+            </>
+          )}
         </dl>
       </section>
 
@@ -403,15 +476,17 @@ export function TrialProfileScreen({
             </div>
             {attended} / 4 (noch {remaining} kostenfrei)
           </dd>
-          <dt>Erstes Training</dt><dd>{participant.firstTrialDate ?? "–"}</dd>
-          <dt>Letztes Training</dt><dd>{participant.lastTrialDate ?? "–"}</dd>
+          <dt>Erstes Training</dt>
+          <dd>{participant.firstTrialDate ? formatGermanDate(participant.firstTrialDate) : "–"}</dd>
+          <dt>Letztes Training</dt>
+          <dd>{participant.lastTrialDate ? formatGermanDate(participant.lastTrialDate) : "–"}</dd>
         </dl>
 
         {participant.overrideStatus === TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED && (
           <div className="notice notice--info">
             Vorstandsausnahme genehmigt
-            {participant.overrideReason ? `: ${participant.overrideReason}` : ""}.
-            Status: {participant.overrideUsed ? "bereits genutzt" : "noch nicht genutzt"}.
+            {participant.overrideReason ? `: ${participant.overrideReason}` : ""}. Status:{" "}
+            {participant.overrideUsed ? "bereits genutzt" : "noch nicht genutzt"}.
           </div>
         )}
       </section>
@@ -422,15 +497,40 @@ export function TrialProfileScreen({
         <button className="btn-secondary" onClick={onContractView}>
           Vertragsstatus verwalten →
         </button>
+        {onConvert && participant.membershipStatus === PersonMembershipStatus.TRIAL ? (
+          <button className="btn-secondary" onClick={onConvert}>
+            Profil in Mitglied umwandeln →
+          </button>
+        ) : null}
+        {onBoardOverride && participant.membershipStatus === PersonMembershipStatus.TRIAL ? (
+          <button className="btn-secondary" onClick={onBoardOverride}>
+            Vorstandsausnahme prüfen →
+          </button>
+        ) : null}
       </section>
 
       {participant.contactName || participant.contactEmail || participant.contactPhone ? (
         <section className="detail-section">
           <h2 className="detail-section__title">Kontakt</h2>
           <dl className="detail-list">
-            {participant.contactName && <><dt>Person</dt><dd>{participant.contactName}</dd></>}
-            {participant.contactPhone && <><dt>Telefon</dt><dd>{participant.contactPhone}</dd></>}
-            {participant.contactEmail && <><dt>E-Mail</dt><dd>{participant.contactEmail}</dd></>}
+            {participant.contactName && (
+              <>
+                <dt>Person</dt>
+                <dd>{participant.contactName}</dd>
+              </>
+            )}
+            {participant.contactPhone && (
+              <>
+                <dt>Telefon</dt>
+                <dd>{participant.contactPhone}</dd>
+              </>
+            )}
+            {participant.contactEmail && (
+              <>
+                <dt>E-Mail</dt>
+                <dd>{participant.contactEmail}</dd>
+              </>
+            )}
           </dl>
         </section>
       ) : null}
@@ -464,7 +564,7 @@ export function TrialContractScreen({
   isBoard,
 }: TrialContractScreenProps) {
   function advance() {
-    const currentIdx = CONTRACT_STEPS.indexOf(participant.contractStatus as typeof CONTRACT_STEPS[number]);
+    const currentIdx = CONTRACT_STEPS.indexOf(participant.contractStatus);
     const next = CONTRACT_STEPS[currentIdx + 1];
     if (!next) return;
     if (!canTransitionContract(participant.contractStatus, next)) return;
@@ -484,8 +584,9 @@ export function TrialContractScreen({
     onUpdate({ ...participant, contractStatus: ContractStatus.NOT_ISSUED });
   }
 
-  const currentIdx = CONTRACT_STEPS.indexOf(participant.contractStatus as typeof CONTRACT_STEPS[number]);
+  const currentIdx = CONTRACT_STEPS.indexOf(participant.contractStatus);
   const nextStep = CONTRACT_STEPS[currentIdx + 1];
+  const nextStepLabel = nextStep ? contractStatusLabel(nextStep) : null;
   const canAdvance =
     !!nextStep &&
     canTransitionContract(participant.contractStatus, nextStep) &&
@@ -494,7 +595,9 @@ export function TrialContractScreen({
   return (
     <div className="screen">
       <header className="screen-header">
-        <button className="btn-back" onClick={onBack}>← Zurück</button>
+        <button className="btn-back" onClick={onBack}>
+          ← Zurück
+        </button>
         <h1>Vertragsmanagement</h1>
       </header>
 
@@ -513,11 +616,11 @@ export function TrialContractScreen({
       </ol>
 
       <div className="form-actions">
-        {canAdvance && (
+        {canAdvance ? (
           <button className="btn-primary" onClick={advance}>
-            Weiter: {contractStatusLabel(nextStep!)}
+            Weiter: {nextStepLabel}
           </button>
-        )}
+        ) : null}
         {participant.contractStatus === ContractStatus.ISSUED && (
           <button className="btn-secondary" onClick={retract}>
             Zurücksetzen auf „Nicht ausgestellt"
@@ -539,12 +642,14 @@ export function TrialContractScreen({
 
 interface BoardOverrideScreenProps {
   participant: TrialParticipant;
+  attendedTrialCount: number;
   onSave: (updated: TrialParticipant, audit: AuditEntry) => void;
   onBack: () => void;
 }
 
 export function BoardOverrideScreen({
   participant,
+  attendedTrialCount,
   onSave,
   onBack,
 }: BoardOverrideScreenProps) {
@@ -562,6 +667,7 @@ export function BoardOverrideScreen({
     try {
       const result = grantBoardOverride({
         participant,
+        attendedTrialCount,
         grantedBy: "Vorstand Demo",
         grantedAt: new Date().toISOString(),
         reason: reason.trim(),
@@ -575,7 +681,9 @@ export function BoardOverrideScreen({
   return (
     <div className="screen">
       <header className="screen-header">
-        <button className="btn-back" onClick={onBack}>← Zurück</button>
+        <button className="btn-back" onClick={onBack}>
+          ← Zurück
+        </button>
         <h1>Vorstandsausnahme</h1>
       </header>
 
@@ -595,9 +703,13 @@ export function BoardOverrideScreen({
         <>
           <div className="notice notice--warn">
             Die Vorstandsausnahme erlaubt <strong>genau eine</strong> weitere kostenlose
-            Probeeinheit über das reguläre Limit von 4 hinaus. Sie kann pro Person nur
-            einmal erteilt werden.
+            Probeeinheit über das reguläre Limit von 4 hinaus. Sie kann pro Person nur einmal
+            erteilt werden.
           </div>
+          <p className="screen-subtitle">
+            Nachgewiesene reguläre Besuche: {attendedTrialCount} von 4. Eine Erteilung ist nur exakt
+            nach dem vierten Besuch möglich.
+          </p>
 
           <form
             className="form"
@@ -622,7 +734,7 @@ export function BoardOverrideScreen({
             </label>
 
             <div className="form-actions">
-              <button type="submit" className="btn-primary">
+              <button type="submit" className="btn-primary" disabled={attendedTrialCount !== 4}>
                 Ausnahme erteilen
               </button>
               <button type="button" className="btn-secondary" onClick={onBack}>
@@ -642,7 +754,6 @@ export function BoardOverrideScreen({
 
 interface TrialConversionScreenProps {
   participant: TrialParticipant;
-  existingMemberIds: readonly string[];
   existingMemberNumbers: readonly string[];
   history: readonly HistoricalTrainingSession[];
   onConvert: (result: ConversionResult) => void;
@@ -651,7 +762,6 @@ interface TrialConversionScreenProps {
 
 export function TrialConversionScreen({
   participant,
-  existingMemberIds,
   existingMemberNumbers,
   history,
   onConvert,
@@ -665,14 +775,14 @@ export function TrialConversionScreen({
 
   function handleConvert() {
     if (!confirmed) return;
-    const nextMemberId = createPersonIdGenerator(existingMemberIds)();
     const nextMemberNumber = createMemberNumberGenerator(existingMemberNumbers)();
     try {
       const result = convertTrialParticipantToMember({
         participant,
-        newMemberId: nextMemberId,
         memberNumber: nextMemberNumber,
-        qualification: qualification as typeof MemberQualification[keyof typeof MemberQualification],
+        existingMemberNumbers,
+        qualification:
+          qualification as (typeof MemberQualification)[keyof typeof MemberQualification],
         convertedBy: "Vorstand Demo",
         convertedAt: new Date().toISOString(),
         note: note.trim() || undefined,
@@ -687,13 +797,15 @@ export function TrialConversionScreen({
     return (
       <div className="screen">
         <header className="screen-header">
-          <button className="btn-back" onClick={onBack}>← Zurück</button>
+          <button className="btn-back" onClick={onBack}>
+            ← Zurück
+          </button>
           <h1>Umwandlung zum Mitglied</h1>
         </header>
-        <div className="notice notice--error">
-          Umwandlung nicht möglich: {eligibility.reason}
-        </div>
-        <button className="btn-secondary" onClick={onBack}>Zurück</button>
+        <div className="notice notice--error">Umwandlung nicht möglich: {eligibility.reason}</div>
+        <button className="btn-secondary" onClick={onBack}>
+          Zurück
+        </button>
       </div>
     );
   }
@@ -701,7 +813,9 @@ export function TrialConversionScreen({
   return (
     <div className="screen">
       <header className="screen-header">
-        <button className="btn-back" onClick={onBack}>← Zurück</button>
+        <button className="btn-back" onClick={onBack}>
+          ← Zurück
+        </button>
         <h1>Umwandlung zum Mitglied</h1>
       </header>
 
@@ -710,12 +824,21 @@ export function TrialConversionScreen({
       <section className="detail-section">
         <h2 className="detail-section__title">Probetraining-Zusammenfassung</h2>
         <dl className="detail-list">
-          <dt>Besuchte Einheiten</dt><dd>{attended}</dd>
-          <dt>Erstes Training</dt><dd>{participant.firstTrialDate ?? "–"}</dd>
-          <dt>Letztes Training</dt><dd>{participant.lastTrialDate ?? "–"}</dd>
-          <dt>Vertragsstatus</dt><dd>{participant.contractStatus}</dd>
+          <dt>Besuchte Einheiten</dt>
+          <dd>{attended}</dd>
+          <dt>Erstes Training</dt>
+          <dd>{participant.firstTrialDate ? formatGermanDate(participant.firstTrialDate) : "–"}</dd>
+          <dt>Letztes Training</dt>
+          <dd>{participant.lastTrialDate ? formatGermanDate(participant.lastTrialDate) : "–"}</dd>
+          <dt>Vertragsstatus</dt>
+          <dd>{participant.contractStatus}</dd>
           {participant.beltColor && (
-            <><dt>Gürtel</dt><dd>{participant.beltColor} – {participant.beltGrade}</dd></>
+            <>
+              <dt>Gürtel</dt>
+              <dd>
+                {participant.beltColor} – {participant.beltGrade}
+              </dd>
+            </>
           )}
         </dl>
       </section>
@@ -782,6 +905,7 @@ export function TrialConversionScreen({
 interface DirectMemberNewScreenProps {
   existingMemberIds: readonly string[];
   existingMemberNumbers: readonly string[];
+  existingPersons: readonly PersonForDuplicateCheck[];
   onSave: (result: DirectMemberResult, audit: AuditEntry) => void;
   onBack: () => void;
 }
@@ -811,6 +935,7 @@ const emptyDirectForm: DirectForm = {
 export function DirectMemberNewScreen({
   existingMemberIds,
   existingMemberNumbers,
+  existingPersons,
   onSave,
   onBack,
 }: DirectMemberNewScreenProps) {
@@ -821,13 +946,17 @@ export function DirectMemberNewScreen({
     const errs: Partial<DirectForm> = {};
     if (!form.firstName.trim()) errs.firstName = "Pflichtfeld";
     if (!form.lastName.trim()) errs.lastName = "Pflichtfeld";
-    if (!form.birthDate) errs.birthDate = "Pflichtfeld";
+    if (!isValidGermanDate(form.birthDate)) {
+      errs.birthDate = "Bitte ein gültiges Datum im Format TT.MM.JJJJ eingeben.";
+    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
 
   function handleSubmit() {
     if (!validate()) return;
+    const birthDate = parseGermanDate(form.birthDate);
+    if (!birthDate) return;
     const beltEntry = BELT_CATALOG[Number(form.beltIndex)] ?? BELT_CATALOG[0];
     const nextId = createPersonIdGenerator(existingMemberIds)();
     const nextNumber = createMemberNumberGenerator(existingMemberNumbers)();
@@ -837,11 +966,16 @@ export function DirectMemberNewScreen({
         firstName: form.firstName,
         lastName: form.lastName,
         gender: form.gender,
-        birthDate: form.birthDate,
+        birthDate,
+        contactPhone: form.contactPhone || undefined,
         beltColor: beltEntry?.color,
         beltGrade: beltEntry?.grade,
-        qualification: form.qualification as typeof MemberQualification[keyof typeof MemberQualification],
+        qualification:
+          form.qualification as (typeof MemberQualification)[keyof typeof MemberQualification],
         memberNumber: nextNumber,
+        existingPersonIds: existingMemberIds,
+        existingMemberNumbers,
+        existingPersons,
         createdBy: "Vorstand Demo",
         createdAt: new Date().toISOString(),
         note: form.note || undefined,
@@ -853,18 +987,28 @@ export function DirectMemberNewScreen({
   }
 
   function field(key: keyof DirectForm, label: string, type = "text") {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setForm((prev) => ({ ...prev, [key]: e.target.value }));
+      setErrors((prev) => ({ ...prev, [key]: undefined }));
+    };
     return (
       <label className="form-field">
         <span className="form-field__label">{label}</span>
-        <input
-          className={`form-field__input${errors[key] ? " form-field__input--error" : ""}`}
-          type={type}
-          value={form[key]}
-          onChange={(e) => {
-            setForm((prev) => ({ ...prev, [key]: e.target.value }));
-            setErrors((prev) => ({ ...prev, [key]: undefined }));
-          }}
-        />
+        {type === "date" ? (
+          <GermanDateInput
+            aria-label={label}
+            className={`form-field__input${errors[key] ? " form-field__input--error" : ""}`}
+            value={form[key]}
+            onChange={handleChange}
+          />
+        ) : (
+          <input
+            className={`form-field__input${errors[key] ? " form-field__input--error" : ""}`}
+            type={type}
+            value={form[key]}
+            onChange={handleChange}
+          />
+        )}
         {errors[key] && <span className="form-field__error">{errors[key]}</span>}
       </label>
     );
@@ -873,7 +1017,9 @@ export function DirectMemberNewScreen({
   return (
     <div className="screen">
       <header className="screen-header">
-        <button className="btn-back" onClick={onBack}>← Zurück</button>
+        <button className="btn-back" onClick={onBack}>
+          ← Zurück
+        </button>
         <h1>Direkt-Mitglied anlegen</h1>
       </header>
 
@@ -898,7 +1044,9 @@ export function DirectMemberNewScreen({
             <select
               className="form-field__input"
               value={form.gender}
-              onChange={(e) => setForm((prev) => ({ ...prev, gender: e.target.value as "MAENNLICH" | "WEIBLICH" }))}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, gender: e.target.value as "MAENNLICH" | "WEIBLICH" }))
+              }
             >
               <option value="MAENNLICH">Männlich</option>
               <option value="WEIBLICH">Weiblich</option>
@@ -941,8 +1089,12 @@ export function DirectMemberNewScreen({
         {field("note", "Notiz (optional)")}
 
         <div className="form-actions">
-          <button type="submit" className="btn-primary">Mitglied anlegen</button>
-          <button type="button" className="btn-secondary" onClick={onBack}>Abbrechen</button>
+          <button type="submit" className="btn-primary">
+            Mitglied anlegen
+          </button>
+          <button type="button" className="btn-secondary" onClick={onBack}>
+            Abbrechen
+          </button>
         </div>
       </form>
     </div>

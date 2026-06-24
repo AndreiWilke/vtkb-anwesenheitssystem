@@ -91,9 +91,7 @@ export function createPersonIdGenerator(existingIds: readonly string[]): () => s
   };
 }
 
-export function createMemberNumberGenerator(
-  existingNumbers: readonly string[],
-): () => string {
+export function createMemberNumberGenerator(existingNumbers: readonly string[]): () => string {
   const issued = new Set(existingNumbers);
   let seq = 1001;
   return () => {

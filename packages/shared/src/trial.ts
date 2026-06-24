@@ -14,6 +14,7 @@ import {
   TrainingSessionStatus,
   TrialOverrideStatus,
   type AttendanceRecord,
+  type AuditEntry,
   type ContractStatus as ContractStatusValue,
   type PersonMembershipStatus as PersonMembershipStatusValue,
   type TrialOverrideStatus as TrialOverrideStatusValue,
@@ -26,20 +27,14 @@ export const MAX_FREE_TRIAL_SESSIONS = 4;
 // Erlaubte Vertragsstatus-Uebergaenge
 // ---------------------------------------------------------------------------
 
-const allowedContractTransitions: Record<
-  ContractStatusValue,
-  readonly ContractStatusValue[]
-> = {
+const allowedContractTransitions: Record<ContractStatusValue, readonly ContractStatusValue[]> = {
   NOT_ISSUED: [ContractStatus.ISSUED],
   ISSUED: [ContractStatus.RECEIVED, ContractStatus.NOT_ISSUED],
   RECEIVED: [ContractStatus.MEMBERSHIP_ACTIVATED],
   MEMBERSHIP_ACTIVATED: [],
 };
 
-export function canTransitionContract(
-  from: ContractStatusValue,
-  to: ContractStatusValue,
-): boolean {
+export function canTransitionContract(from: ContractStatusValue, to: ContractStatusValue): boolean {
   return allowedContractTransitions[from].includes(to);
 }
 
@@ -48,9 +43,7 @@ export function transitionContract(
   to: ContractStatusValue,
 ): ContractStatusValue {
   if (!canTransitionContract(from, to)) {
-    throw new Error(
-      `Vertragsstatusuebergang von ${from} nach ${to} ist nicht zulaessig.`,
-    );
+    throw new Error(`Vertragsstatusuebergang von ${from} nach ${to} ist nicht zulaessig.`);
   }
   return to;
 }
@@ -77,9 +70,7 @@ export interface TrialSessionRecord {
  *   - sessionStatus === COMPLETED
  *   - keine doppelten sessionIds
  */
-export function countTrialSessionsAttended(
-  records: readonly TrialSessionRecord[],
-): number {
+export function countTrialSessionsAttended(records: readonly TrialSessionRecord[]): number {
   const seen = new Set<string>();
   let count = 0;
   for (const record of records) {
@@ -129,16 +120,8 @@ export interface TrialEligibilityResult {
  *   2. contractStatus ist RECEIVED oder MEMBERSHIP_ACTIVATED
  *   3. Vorstandsausnahme genehmigt und noch nicht verwendet
  */
-export function checkTrialEligibility(
-  input: TrialEligibilityInput,
-): TrialEligibilityResult {
-  const {
-    attendedCount,
-    contractStatus,
-    membershipStatus,
-    overrideStatus,
-    overrideUsed,
-  } = input;
+export function checkTrialEligibility(input: TrialEligibilityInput): TrialEligibilityResult {
+  const { attendedCount, contractStatus, membershipStatus, overrideStatus, overrideUsed } = input;
 
   // Aktive Mitglieder sind immer berechtigt
   if (
@@ -158,8 +141,7 @@ export function checkTrialEligibility(
   const hasContract = contractStatus === ContractStatus.RECEIVED;
 
   const hasUnusedOverride =
-    overrideStatus === TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED &&
-    !overrideUsed;
+    overrideStatus === TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED && !overrideUsed;
 
   if (attendedCount < MAX_FREE_TRIAL_SESSIONS) {
     return {
@@ -203,17 +185,45 @@ export function checkTrialEligibility(
 // Vorstandsausnahme verwenden
 // ---------------------------------------------------------------------------
 
-export function useTrialOverride(participant: TrialParticipant): TrialParticipant {
-  if (
-    participant.overrideStatus !==
-    TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED
-  ) {
+export interface UsedTrialOverrideResult {
+  updatedParticipant: TrialParticipant;
+  auditEntry: AuditEntry;
+}
+
+export function useTrialOverride(
+  participant: TrialParticipant,
+  attendedTrialCount: number,
+  usedBy: string,
+  usedAt: string,
+  sessionId: string,
+): UsedTrialOverrideResult {
+  if (participant.overrideStatus !== TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED) {
     throw new Error("Keine genehmigte Vorstandsausnahme vorhanden.");
   }
   if (participant.overrideUsed) {
     throw new Error("Die Vorstandsausnahme wurde bereits verwendet.");
   }
-  return { ...participant, overrideUsed: true };
+  if (participant.membershipStatus !== PersonMembershipStatus.TRIAL || !participant.active) {
+    throw new Error("Die Vorstandsausnahme gilt nur für ein aktives Probetrainingprofil.");
+  }
+  if (attendedTrialCount !== MAX_FREE_TRIAL_SESSIONS) {
+    throw new Error(
+      "Die Vorstandsausnahme darf nur für die konkrete fünfte Teilnahme verwendet werden.",
+    );
+  }
+  return {
+    updatedParticipant: { ...participant, overrideUsed: true },
+    auditEntry: {
+      id: `audit-override-used-${participant.id}-${sessionId}`,
+      occurredAt: usedAt,
+      actor: usedBy,
+      action: "BOARD_OVERRIDE_USED",
+      object: `TrialParticipant:${participant.id}`,
+      previousValue: "ONE_ADDITIONAL_SESSION_APPROVED:UNUSED",
+      newValue: `ONE_ADDITIONAL_SESSION_APPROVED:USED:${sessionId}`,
+      reason: "Einmalige fünfte Probetrainingsteilnahme abgeschlossen.",
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -255,9 +265,7 @@ export function countTrialAttendancesFromRecords(
 // ID-Generator fuer TrialParticipant
 // ---------------------------------------------------------------------------
 
-export function createTrialParticipantIdGenerator(
-  existingIds: readonly string[],
-): () => string {
+export function createTrialParticipantIdGenerator(existingIds: readonly string[]): () => string {
   const issued = new Set(existingIds);
   let seq = 1;
   return () => {

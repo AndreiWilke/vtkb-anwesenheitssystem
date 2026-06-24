@@ -60,7 +60,8 @@ export type TrainingSessionStatus =
 export interface TrainingTemplate {
   id: string;
   name: string;
-  dojo: string;
+  dojoId: string;
+  dojoNameSnapshot: string;
   weekday: number;
   startTime: string;
   durationMinutes: number;
@@ -71,8 +72,11 @@ export interface TrainingTemplate {
 export interface TrainingSession {
   id: string;
   templateId: string | null;
+  scheduledSlotId: string | null;
   name: string;
-  dojo: string;
+  trainingType: string;
+  dojoId: string;
+  dojoNameSnapshot: string;
   startsAt: string;
   endsAt: string;
   status: TrainingSessionStatus;
@@ -151,8 +155,7 @@ export const TrialOverrideStatus = {
   ONE_ADDITIONAL_SESSION_APPROVED: "ONE_ADDITIONAL_SESSION_APPROVED",
 } as const;
 
-export type TrialOverrideStatus =
-  (typeof TrialOverrideStatus)[keyof typeof TrialOverrideStatus];
+export type TrialOverrideStatus = (typeof TrialOverrideStatus)[keyof typeof TrialOverrideStatus];
 
 /** Quelle einer Guertelaenderung */
 export const BeltChangeSource = {
@@ -171,8 +174,7 @@ export const BeltSuggestionStatus = {
   DEFERRED: "DEFERRED",
 } as const;
 
-export type BeltSuggestionStatus =
-  (typeof BeltSuggestionStatus)[keyof typeof BeltSuggestionStatus];
+export type BeltSuggestionStatus = (typeof BeltSuggestionStatus)[keyof typeof BeltSuggestionStatus];
 
 /** Dauerhaftes Profil eines Probetrainingsteilnehmers */
 export interface TrialParticipant {
@@ -200,6 +202,7 @@ export interface TrialParticipant {
   membershipStatus: PersonMembershipStatus;
   /** Gesetzt nach erfolgreicher Umwandlung zum regulaeren Mitglied */
   memberId?: string;
+  convertedAt?: string;
   beltColor?: string;
   beltGrade?: string;
   active: boolean;
@@ -300,16 +303,8 @@ export interface AttendanceRecord {
   presenceStatus: PresenceStatus;
   sessionRole: SessionRole | null;
   captureSource: CaptureSource;
-}
-
-export interface GuestAttendance {
-  sessionId: string;
-  guestId: string;
-  displayName: string;
-  presenceStatus: typeof PresenceStatus.PRESENT;
-  sessionRole: typeof SessionRole.PARTICIPANT;
-  captureSource: typeof CaptureSource.MANUAL;
-  biometricEnrollmentId?: never;
+  /** Unveraenderlicher Status-Snapshot fuer historische Auswertungen. */
+  membershipStatusAtTime?: PersonMembershipStatus;
 }
 
 /**

@@ -20,20 +20,19 @@ import {
   BeltChangeSource,
   BeltSuggestionStatus,
   BELT_CATALOG,
-  BELT_COLORS,
   applyBeltSuggestionDecision,
   createBeltHistoryEntry,
   createBeltHistoryIdGenerator,
+  formatGermanDate,
+  isValidGermanDate,
+  parseGermanDate,
   simulateBeltColorSuggestion,
   suggestNextBelt,
   validateBeltChange,
 } from "@vtkb/shared";
 
-import type {
-  BeltHistoryEntry,
-  BeltSuggestion,
-  Member,
-} from "./types";
+import type { BeltHistoryEntry, BeltSuggestion, Member } from "./types";
+import { GermanDateInput } from "./components";
 
 // ---------------------------------------------------------------------------
 // BeltHistoryScreen
@@ -49,45 +48,58 @@ export interface BeltHistoryScreenProps {
 
 // Primärfarbe für einfarbige und Halbgürtel
 const BELT_COLOR_CSS: Record<string, string> = {
-  WEISS:        "#f5f5f5",
-  WEISS_ROT:    "#f5f5f5",
-  GELB:         "#f5e642",
-  GELB_ORANGE:  "#f5e642",
-  ORANGE:       "#f5a623",
+  WEISS: "#f5f5f5",
+  WEISS_ROT: "#f5f5f5",
+  WEISS_GELB: "#f5f5f5",
+  GELB: "#f5e642",
+  GELB_ORANGE: "#f5e642",
+  ORANGE: "#f5a623",
   ORANGE_GRUEN: "#f5a623",
-  GRUEN:        "#4caf50",
-  GRUEN_BLAU:   "#4caf50",
-  BLAU:         "#2196f3",
-  BLAU_BRAUN:   "#2196f3",
-  BRAUN:        "#795548",
-  SCHWARZ:      "#212121",
+  GRUEN: "#4caf50",
+  GRUEN_BLAU: "#4caf50",
+  BLAU: "#2196f3",
+  VIOLETT: "#6b4a9e",
+  BRAUN: "#795548",
+  SCHWARZ: "#212121",
 };
 
 // Sekundärfarbe (rechte Hälfte) für Halbgürtel
 const BELT_COLOR2_CSS: Record<string, string> = {
-  WEISS_ROT:    "#e53935",
-  GELB_ORANGE:  "#f5a623",
+  WEISS_ROT: "#e53935",
+  WEISS_GELB: "#f2c200",
+  GELB_ORANGE: "#f5a623",
   ORANGE_GRUEN: "#4caf50",
-  GRUEN_BLAU:   "#2196f3",
-  BLAU_BRAUN:   "#795548",
+  GRUEN_BLAU: "#2196f3",
 };
 
 const BELT_TEXT_COLOR: Record<string, string> = {
-  WEISS: "#333", WEISS_ROT: "#333",
-  GELB: "#333",  GELB_ORANGE: "#333",
-  ORANGE: "#333", ORANGE_GRUEN: "#333",
-  GRUEN: "#fff",  GRUEN_BLAU: "#fff",
-  BLAU: "#fff",   BLAU_BRAUN: "#fff",
+  WEISS: "#333",
+  WEISS_ROT: "#333",
+  WEISS_GELB: "#333",
+  GELB: "#333",
+  GELB_ORANGE: "#333",
+  ORANGE: "#333",
+  ORANGE_GRUEN: "#333",
+  GRUEN: "#fff",
+  GRUEN_BLAU: "#fff",
+  BLAU: "#fff",
+  VIOLETT: "#fff",
   BRAUN: "#fff",
   SCHWARZ: "#fff",
 };
 
 const BELT_LABEL: Record<string, string> = {
-  WEISS: "Weiß", WEISS_ROT: "Weiß-Rot",
-  GELB: "Gelb",  GELB_ORANGE: "Gelb-Orange",
-  ORANGE: "Orange", ORANGE_GRUEN: "Orange-Grün",
-  GRUEN: "Grün", GRUEN_BLAU: "Grün-Blau",
-  BLAU: "Blau",  BLAU_BRAUN: "Blau-Braun",
+  WEISS: "Weiß",
+  WEISS_ROT: "Weiß-Rot",
+  WEISS_GELB: "Weiß-Gelb",
+  GELB: "Gelb",
+  GELB_ORANGE: "Gelb-Orange",
+  ORANGE: "Orange",
+  ORANGE_GRUEN: "Orange-Grün",
+  GRUEN: "Grün",
+  GRUEN_BLAU: "Grün-Blau",
+  BLAU: "Blau",
+  VIOLETT: "Violett",
   BRAUN: "Braun",
   SCHWARZ: "Schwarz",
 };
@@ -96,15 +108,10 @@ function BeltBadge({ color, grade }: { color: string; grade: string }) {
   const c1 = BELT_COLOR_CSS[color] ?? "#ccc";
   const c2 = BELT_COLOR2_CSS[color];
   const fg = BELT_TEXT_COLOR[color] ?? "#333";
-  const bg = c2
-    ? `linear-gradient(90deg, ${c1} 50%, ${c2} 50%)`
-    : c1;
+  const bg = c2 ? `linear-gradient(90deg, ${c1} 50%, ${c2} 50%)` : c1;
   const label = BELT_LABEL[color] ?? color;
   return (
-    <span
-      className="belt-badge"
-      style={{ background: bg, color: fg }}
-    >
+    <span className="belt-badge" style={{ background: bg, color: fg }}>
       {label} – {grade}
     </span>
   );
@@ -131,7 +138,9 @@ export function BeltHistoryScreen({
 
   return (
     <div className="screen">
-      <button className="btn-back" onClick={onBack}>← Zurück</button>
+      <button className="btn-back" onClick={onBack}>
+        ← Zurück
+      </button>
       <h2>Gürtelhistorie – {member.name}</h2>
 
       <div className="detail-section">
@@ -141,12 +150,14 @@ export function BeltHistoryScreen({
         </div>
         {hint.isHighest ? (
           <p className="notice notice--success">
-            Höchster Demo-Grad erreicht (3. Dan). Kein weiterer Prüfungshinweis verfügbar.
+            Höchster Vereinsgrad erreicht (9. Dan). Kein weiterer Prüfungshinweis verfügbar.
           </p>
         ) : hint.nextLevel ? (
           <p className="notice">
             Nächster Demo-Prüfungsschritt (unverbindlich):{" "}
-            <strong>{hint.nextLevel.color} – {hint.nextLevel.grade}</strong>
+            <strong>
+              {hint.nextLevel.color} – {hint.nextLevel.grade}
+            </strong>
           </p>
         ) : null}
       </div>
@@ -181,14 +192,23 @@ export function BeltHistoryScreen({
                 </div>
                 <dl className="belt-history-card__meta">
                   {entry.effectiveFrom && (
-                    <><dt>Datum</dt><dd>{entry.effectiveFrom}</dd></>
+                    <>
+                      <dt>Datum</dt>
+                      <dd>{formatGermanDate(entry.effectiveFrom)}</dd>
+                    </>
                   )}
                   <dt>Quelle</dt>
-                  <dd><span className="badge">{sourceLabel[entry.source] ?? entry.source}</span></dd>
+                  <dd>
+                    <span className="badge">{sourceLabel[entry.source] ?? entry.source}</span>
+                  </dd>
                   {entry.examiner && (
-                    <><dt>Prüfer</dt><dd>{entry.examiner}</dd></>
+                    <>
+                      <dt>Prüfer</dt>
+                      <dd>{entry.examiner}</dd>
+                    </>
                   )}
-                  <dt>Erfasst von</dt><dd>{entry.recordedBy}</dd>
+                  <dt>Erfasst von</dt>
+                  <dd>{entry.recordedBy}</dd>
                 </dl>
               </div>
             ))}
@@ -221,13 +241,14 @@ export function BeltChangeDialog({
   suggestedColor,
 }: BeltChangeDialogProps) {
   // Initialauswahl: wenn Bildvorschlag → Einträge dieser Farbe, sonst nächster Grad
-  const initialEntry = BELT_CATALOG.find(
-    (l) => l.color === (suggestedColor ?? member.beltColor) && l.grade !== member.beltGrade,
-  ) ?? BELT_CATALOG[0];
+  const initialEntry =
+    BELT_CATALOG.find(
+      (l) => l.color === (suggestedColor ?? member.beltColor) && l.grade !== member.beltGrade,
+    ) ?? BELT_CATALOG[0]!;
 
   const [selectedIndex, setSelectedIndex] = useState<number>(() => {
     const idx = BELT_CATALOG.findIndex(
-      (l) => l.color === initialEntry?.color && l.grade === initialEntry?.grade,
+      (l) => l.color === initialEntry.color && l.grade === initialEntry.grade,
     );
     return idx >= 0 ? idx : 0;
   });
@@ -238,13 +259,18 @@ export function BeltChangeDialog({
 
   const handleSubmit = () => {
     if (!selected) return;
+    if (effectiveFrom && !isValidGermanDate(effectiveFrom)) {
+      setErrors(["Bitte ein gültiges Datum im Format TT.MM.JJJJ eingeben."]);
+      return;
+    }
+    const effectiveFromIso = effectiveFrom ? parseGermanDate(effectiveFrom) : null;
     const input = {
       personId: member.id,
       previousBeltColor: member.beltColor,
       previousBeltGrade: member.beltGrade,
       newBeltColor: selected.color,
       newBeltGrade: selected.grade,
-      ...(effectiveFrom ? { effectiveFrom } : {}),
+      ...(effectiveFromIso ? { effectiveFrom: effectiveFromIso } : {}),
       recordedBy: actorName,
       recordedAt: new Date().toISOString(),
       source: suggestedColor
@@ -270,17 +296,14 @@ export function BeltChangeDialog({
 
         {suggestedColor && (
           <div className="notice notice--info">
-            <strong>Hinweis:</strong> Bildvorschlag (Farbe: {BELT_LABEL[suggestedColor] ?? suggestedColor}).
-            Grad wird niemals automatisch bestimmt.
+            <strong>Hinweis:</strong> Bildvorschlag (Farbe:{" "}
+            {BELT_LABEL[suggestedColor] ?? suggestedColor}). Grad wird niemals automatisch bestimmt.
           </div>
         )}
 
         <div className="form-field">
           <label>Neuer Gürtel</label>
-          <select
-            value={selectedIndex}
-            onChange={(e) => setSelectedIndex(Number(e.target.value))}
-          >
+          <select value={selectedIndex} onChange={(e) => setSelectedIndex(Number(e.target.value))}>
             {BELT_CATALOG.map((level, idx) => (
               <option key={idx} value={idx}>
                 {level.grade} – {BELT_LABEL[level.color] ?? level.color}
@@ -291,10 +314,13 @@ export function BeltChangeDialog({
 
         <div className="form-field">
           <label>Gültig ab (optional)</label>
-          <input
-            type="date"
+          <GermanDateInput
+            aria-label="Gültig ab Gürteländerung"
             value={effectiveFrom}
-            onChange={(e) => setEffectiveFrom(e.target.value)}
+            onChange={(e) => {
+              setEffectiveFrom(e.target.value);
+              setErrors([]);
+            }}
           />
         </div>
 
@@ -302,13 +328,17 @@ export function BeltChangeDialog({
           <div className="notice notice--error">
             <strong>Fehler:</strong>
             <ul>
-              {errors.map((err, i) => <li key={i}>{err}</li>)}
+              {errors.map((err, i) => (
+                <li key={i}>{err}</li>
+              ))}
             </ul>
           </div>
         )}
 
         <div className="dialog-actions">
-          <button className="btn btn--secondary" onClick={onCancel}>Abbrechen</button>
+          <button className="btn btn--secondary" onClick={onCancel}>
+            Abbrechen
+          </button>
           <button className="btn btn--primary" onClick={handleSubmit}>
             Änderung speichern
           </button>
@@ -326,10 +356,7 @@ export interface BeltSuggestionReviewScreenProps {
   suggestions: readonly BeltSuggestion[];
   members: readonly Member[];
   existingHistoryIds: readonly string[];
-  onDecide: (
-    updated: BeltSuggestion,
-    newHistoryEntry: BeltHistoryEntry | null,
-  ) => void;
+  onDecide: (updated: BeltSuggestion, newHistoryEntry: BeltHistoryEntry | null) => void;
   onBack: () => void;
   actorName: string;
   canEdit: boolean;
@@ -347,12 +374,8 @@ export function BeltSuggestionReviewScreen({
   const [activeSuggestion, setActiveSuggestion] = useState<BeltSuggestion | null>(null);
   const [showChangeDialog, setShowChangeDialog] = useState(false);
 
-  const openSuggestions = suggestions.filter(
-    (s) => s.status === BeltSuggestionStatus.OPEN,
-  );
-  const closedSuggestions = suggestions.filter(
-    (s) => s.status !== BeltSuggestionStatus.OPEN,
-  );
+  const openSuggestions = suggestions.filter((s) => s.status === BeltSuggestionStatus.OPEN);
+  const closedSuggestions = suggestions.filter((s) => s.status !== BeltSuggestionStatus.OPEN);
 
   const memberById = (id: string) => members.find((m) => m.id === id);
 
@@ -381,12 +404,16 @@ export function BeltSuggestionReviewScreen({
 
   const handleBeltChangeConfirmed = (entry: BeltHistoryEntry) => {
     if (!activeSuggestion) return;
-    const updated = applyBeltSuggestionDecision(activeSuggestion, {
-      action: "CONFIRM",
-      decidedBy: actorName,
-      decidedAt: new Date().toISOString(),
-      historyEntryId: entry.id,
-    });
+    const updated = applyBeltSuggestionDecision(
+      activeSuggestion,
+      {
+        action: "CONFIRM",
+        decidedBy: actorName,
+        decidedAt: new Date().toISOString(),
+        historyEntryId: entry.id,
+      },
+      [entry],
+    );
     onDecide(updated, entry);
     setShowChangeDialog(false);
     setActiveSuggestion(null);
@@ -404,13 +431,15 @@ export function BeltSuggestionReviewScreen({
 
   return (
     <div className="screen">
-      <button className="btn-back" onClick={onBack}>← Zurück</button>
+      <button className="btn-back" onClick={onBack}>
+        ← Zurück
+      </button>
       <h2>Bildvorschläge Gürtelfarbe</h2>
 
       <div className="notice notice--info">
-        <strong>Demo-Modus:</strong> Die folgenden Farbvorschläge stammen aus einem
-        simulierten Bilderkennungs-Demo (keine echte KI). Kein Grad wird vorgeschlagen –
-        das ist bewusste Fachlogik. Bestätigungen erfordern manuelle Gradeingabe.
+        <strong>Demo-Modus:</strong> Die folgenden Farbvorschläge stammen aus einem simulierten
+        Bilderkennungs-Demo (keine echte KI). Kein Grad wird vorgeschlagen – das ist bewusste
+        Fachlogik. Bestätigungen erfordern manuelle Gradeingabe.
       </div>
 
       <h3>Offene Vorschläge ({openSuggestions.length})</h3>
@@ -418,64 +447,58 @@ export function BeltSuggestionReviewScreen({
         <p className="notice">Keine offenen Bildvorschläge.</p>
       ) : (
         <div className="table-scroll">
-        <table className="report-table">
-          <thead>
-            <tr>
-              <th>Mitglied</th>
-              <th>Gespeichert</th>
-              <th>Vorschlag</th>
-              <th>Konfidenz</th>
-              <th>Sitzung</th>
-              {canEdit && <th>Aktion</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {openSuggestions.map((s) => {
-              const m = memberById(s.memberId);
-              return (
-                <tr key={s.id}>
-                  <td>{m?.name ?? s.memberId}</td>
-                  <td>
-                    <BeltBadge color={s.storedBeltColor} grade={m?.beltGrade ?? "–"} />
-                  </td>
-                  <td>
-                    <BeltBadge color={s.suggestedBeltColor} grade="(Grad offen)" />
-                  </td>
-                  <td>
-                    <span className={`badge ${confidenceClass(s.confidencePercent)}`}>
-                      {s.confidencePercent}%
-                    </span>
-                  </td>
-                  <td>{s.sessionDate}</td>
-                  {canEdit && (
+          <table className="report-table">
+            <thead>
+              <tr>
+                <th>Mitglied</th>
+                <th>Gespeichert</th>
+                <th>Vorschlag</th>
+                <th>Konfidenz</th>
+                <th>Sitzung</th>
+                {canEdit && <th>Aktion</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {openSuggestions.map((s) => {
+                const m = memberById(s.memberId);
+                return (
+                  <tr key={s.id}>
+                    <td>{m?.name ?? s.memberId}</td>
                     <td>
-                      <div className="belt-suggestion-actions">
-                        <button
-                          className="btn-sm btn--primary"
-                          onClick={() => handleConfirmStart(s)}
-                        >
-                          Bestätigen
-                        </button>
-                        <button
-                          className="btn-sm btn--secondary"
-                          onClick={() => handleDefer(s)}
-                        >
-                          Zurückstellen
-                        </button>
-                        <button
-                          className="btn-sm btn--danger"
-                          onClick={() => handleReject(s)}
-                        >
-                          Ablehnen
-                        </button>
-                      </div>
+                      <BeltBadge color={s.storedBeltColor} grade={m?.beltGrade ?? "–"} />
                     </td>
-                  )}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    <td>
+                      <BeltBadge color={s.suggestedBeltColor} grade="(Grad offen)" />
+                    </td>
+                    <td>
+                      <span className={`badge ${confidenceClass(s.confidencePercent)}`}>
+                        {s.confidencePercent}%
+                      </span>
+                    </td>
+                    <td>{formatGermanDate(s.sessionDate)}</td>
+                    {canEdit && (
+                      <td>
+                        <div className="belt-suggestion-actions">
+                          <button
+                            className="btn-sm btn--primary"
+                            onClick={() => handleConfirmStart(s)}
+                          >
+                            Bestätigen
+                          </button>
+                          <button className="btn-sm btn--secondary" onClick={() => handleDefer(s)}>
+                            Zurückstellen
+                          </button>
+                          <button className="btn-sm btn--danger" onClick={() => handleReject(s)}>
+                            Ablehnen
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -484,35 +507,35 @@ export function BeltSuggestionReviewScreen({
         <p className="notice">Keine abgeschlossenen Bildvorschläge.</p>
       ) : (
         <div className="table-scroll">
-        <table className="report-table">
-          <thead>
-            <tr>
-              <th>Mitglied</th>
-              <th>Vorschlag</th>
-              <th>Status</th>
-              <th>Entschieden von</th>
-              <th>Sitzung</th>
-            </tr>
-          </thead>
-          <tbody>
-            {closedSuggestions.map((s) => {
-              const m = memberById(s.memberId);
-              return (
-                <tr key={s.id}>
-                  <td>{m?.name ?? s.memberId}</td>
-                  <td>
-                    <BeltBadge color={s.suggestedBeltColor} grade="(Grad)" />
-                  </td>
-                  <td>
-                    <span className="badge">{statusLabel[s.status] ?? s.status}</span>
-                  </td>
-                  <td>{s.decidedBy ?? "–"}</td>
-                  <td>{s.sessionDate}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+          <table className="report-table">
+            <thead>
+              <tr>
+                <th>Mitglied</th>
+                <th>Vorschlag</th>
+                <th>Status</th>
+                <th>Entschieden von</th>
+                <th>Sitzung</th>
+              </tr>
+            </thead>
+            <tbody>
+              {closedSuggestions.map((s) => {
+                const m = memberById(s.memberId);
+                return (
+                  <tr key={s.id}>
+                    <td>{m?.name ?? s.memberId}</td>
+                    <td>
+                      <BeltBadge color={s.suggestedBeltColor} grade="(Grad)" />
+                    </td>
+                    <td>
+                      <span className="badge">{statusLabel[s.status] ?? s.status}</span>
+                    </td>
+                    <td>{s.decidedBy ?? "–"}</td>
+                    <td>{formatGermanDate(s.sessionDate)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -613,15 +636,16 @@ export function BeltSimulationDemoScreen({
 
   return (
     <div className="screen">
-      <button className="btn-back" onClick={onBack}>← Zurück</button>
+      <button className="btn-back" onClick={onBack}>
+        ← Zurück
+      </button>
       <h2>Bildvorschlag simulieren (Demo)</h2>
 
       <div className="notice notice--info">
-        <strong>Demo-Erklärung:</strong> Dieser Screen simuliert eine Gürtelfarbanalyse
-        aus Fotos. In einem echten System würde hier ein Kamerabild ausgewertet.
-        Im Demo-Prototyp wird ein deterministischer Zufallswert erzeugt.{" "}
-        <strong>Kein Grad wird vorgeschlagen</strong> – das ist eine unveränderliche
-        Fachsregel. Bildanalyse liefert nur eine Farbhypothese.
+        <strong>Demo-Erklärung:</strong> Dieser Screen simuliert eine Gürtelfarbanalyse aus Fotos.
+        In einem echten System würde hier ein Kamerabild ausgewertet. Im Demo-Prototyp wird ein
+        deterministischer Zufallswert erzeugt. <strong>Kein Grad wird vorgeschlagen</strong> – das
+        ist eine unveränderliche Fachsregel. Bildanalyse liefert nur eine Farbhypothese.
       </div>
 
       <div className="form-field">
@@ -689,15 +713,12 @@ export function BeltSimulationDemoScreen({
           )}
 
           <p className="notice">
-            <strong>Wichtig:</strong> Kein Grad wird aus der Bildanalyse abgeleitet.
-            Bei Bestätigung muss der Grad manuell eingegeben werden.
+            <strong>Wichtig:</strong> Kein Grad wird aus der Bildanalyse abgeleitet. Bei Bestätigung
+            muss der Grad manuell eingegeben werden.
           </p>
 
           {!suggestionCreated ? (
-            <button
-              className="btn btn--secondary"
-              onClick={handleCreateSuggestion}
-            >
+            <button className="btn btn--secondary" onClick={handleCreateSuggestion}>
               Als offenen Vorschlag speichern
             </button>
           ) : (

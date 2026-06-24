@@ -1,9 +1,8 @@
 /**
  * Fachlogik fuer Guertelaenderungen, Guertelhistorie und Bildvorschlaege.
  *
- * HINWEIS: Der Guertel-Demo-Katalog (Farbe → Grad) ist fiktiv und dient
- * ausschliesslich dem lokalen Prototyp. Die endgueltige Reihenfolge und
- * Pruefungsordnung muss nach Paket 2 durch den VTKB e.V. bestaetigt werden.
+ * Der BELT_CATALOG ist der fuer diesen Projektstand verbindliche fachliche
+ * Katalog. Aenderungen erfolgen nur nach ausdruecklicher Freigabe des Vereins.
  *
  * Fachregeln (PROJECT_RULES):
  *   - Bildanalyse darf nur eine sichtbare Guertelfarbe als Pruefhinweis vorschlagen.
@@ -20,9 +19,10 @@ import {
   type BeltSuggestion,
   type BeltSuggestionStatus as BeltSuggestionStatusValue,
 } from "./domain.js";
+import { isValidIsoDate } from "./date.js";
 
 // ---------------------------------------------------------------------------
-// Fiktiver Demo-Guertelkatalog
+// Verbindlicher Guertelkatalog dieses Projektstands
 // ---------------------------------------------------------------------------
 
 export interface BeltLevel {
@@ -32,29 +32,28 @@ export interface BeltLevel {
 }
 
 /**
- * Guertelkatalog des VTKB Berlin (inkl. Halbguertel).
- * Halbguertel werden mit Suffix "a" bezeichnet (z. B. 9a. Kyu = Weiss-Rot).
+ * Verbindlicher Guertelkatalog des VTKB Berlin (inkl. Zwischenstufen).
  */
 export const BELT_CATALOG: readonly BeltLevel[] = [
-  { color: "WEISS",        grade: "10. Kyu", sortOrder: 1 },
-  { color: "WEISS_ROT",    grade: "9a. Kyu", sortOrder: 2 },
-  { color: "WEISS_GELB",   grade: "9b. Kyu", sortOrder: 3 },  // Paket 1.7: Vereinsordnung
-  { color: "GELB",         grade: "9. Kyu",  sortOrder: 4 },
-  { color: "GELB_ORANGE",  grade: "8a. Kyu", sortOrder: 5 },
-  { color: "ORANGE",       grade: "8. Kyu",  sortOrder: 6 },
+  { color: "WEISS", grade: "10. Kyu", sortOrder: 1 },
+  { color: "WEISS_ROT", grade: "9. Kyu", sortOrder: 2 },
+  { color: "WEISS_GELB", grade: "9a. Kyu", sortOrder: 3 },
+  { color: "GELB", grade: "8. Kyu", sortOrder: 4 },
+  { color: "GELB_ORANGE", grade: "8a. Kyu", sortOrder: 5 },
+  { color: "ORANGE", grade: "7. Kyu", sortOrder: 6 },
   { color: "ORANGE_GRUEN", grade: "7a. Kyu", sortOrder: 7 },
-  { color: "GRUEN",        grade: "7. Kyu",  sortOrder: 8 },
-  { color: "GRUEN_BLAU",   grade: "6a. Kyu", sortOrder: 9 },
-  { color: "BLAU",         grade: "6. Kyu",  sortOrder: 10 },
-  { color: "BLAU_BRAUN",   grade: "5a. Kyu", sortOrder: 11 },
-  { color: "BRAUN",        grade: "5. Kyu",  sortOrder: 12 },
-  { color: "VIOLETT",      grade: "4. Kyu",  sortOrder: 13 },  // Paket 1.7: Vereinsordnung
-  { color: "BRAUN",        grade: "3. Kyu",  sortOrder: 14 },
-  { color: "BRAUN",        grade: "2. Kyu",  sortOrder: 15 },
-  { color: "BRAUN",        grade: "1. Kyu",  sortOrder: 16 },
-  { color: "SCHWARZ",      grade: "1. Dan",  sortOrder: 17 },
-  { color: "SCHWARZ",      grade: "2. Dan",  sortOrder: 18 },
-  { color: "SCHWARZ",      grade: "3. Dan",  sortOrder: 19 },
+  { color: "GRUEN", grade: "6. Kyu", sortOrder: 8 },
+  { color: "GRUEN_BLAU", grade: "6a. Kyu", sortOrder: 9 },
+  { color: "BLAU", grade: "5. Kyu", sortOrder: 10 },
+  { color: "VIOLETT", grade: "4. Kyu", sortOrder: 11 },
+  { color: "BRAUN", grade: "3. Kyu", sortOrder: 12 },
+  { color: "BRAUN", grade: "2. Kyu", sortOrder: 13 },
+  { color: "BRAUN", grade: "1. Kyu", sortOrder: 14 },
+  ...Array.from({ length: 9 }, (_, index) => ({
+    color: "SCHWARZ",
+    grade: `${index + 1}. Dan`,
+    sortOrder: index + 15,
+  })),
 ] as const;
 
 export const BELT_COLORS = [
@@ -68,18 +67,31 @@ export const BELT_COLORS = [
   "GRUEN",
   "GRUEN_BLAU",
   "BLAU",
-  "BLAU_BRAUN",
-  "BRAUN",
   "VIOLETT",
+  "BRAUN",
   "SCHWARZ",
 ] as const;
 
 export type BeltColor = (typeof BELT_COLORS)[number];
 
+export const BELT_LABELS: Record<BeltColor, string> = {
+  WEISS: "Weiß",
+  WEISS_ROT: "Weiß-Rot",
+  WEISS_GELB: "Weiß-Gelb",
+  GELB: "Gelb",
+  GELB_ORANGE: "Gelb-Orange",
+  ORANGE: "Orange",
+  ORANGE_GRUEN: "Orange-Grün",
+  GRUEN: "Grün",
+  GRUEN_BLAU: "Grün-Blau",
+  BLAU: "Blau",
+  VIOLETT: "Violett",
+  BRAUN: "Braun",
+  SCHWARZ: "Schwarz",
+};
+
 export function gradesForColor(color: string): string[] {
-  return BELT_CATALOG.filter((level) => level.color === color).map(
-    (level) => level.grade,
-  );
+  return BELT_CATALOG.filter((level) => level.color === color).map((level) => level.grade);
 }
 
 // ---------------------------------------------------------------------------
@@ -101,15 +113,14 @@ export interface BeltChangeInput {
   source: BeltChangeSourceValue;
 }
 
-export function createBeltHistoryEntry(
-  id: string,
-  input: BeltChangeInput,
-): BeltHistoryEntry {
-  if (!input.newBeltColor.trim()) {
-    throw new Error("Guertelfarbe darf nicht leer sein.");
-  }
-  if (!input.newBeltGrade.trim()) {
-    throw new Error("Guertelgrad darf nicht leer sein.");
+export function createBeltHistoryEntry(id: string, input: BeltChangeInput): BeltHistoryEntry {
+  if (!id.trim()) throw new Error("Historieneintrag benötigt eine ID.");
+  const validation = validateBeltChange(input);
+  if (!validation.valid) throw new Error(validation.issues.join(" "));
+  if (!input.personId.trim()) throw new Error("Personen-ID ist Pflicht.");
+  if (!input.recordedBy.trim()) throw new Error("Erfassende Person ist Pflicht.");
+  if (Number.isNaN(Date.parse(input.recordedAt))) {
+    throw new Error("Erfassungszeitpunkt ist ungültig.");
   }
   return {
     id,
@@ -133,11 +144,7 @@ export function createBeltHistoryEntry(
 // ---------------------------------------------------------------------------
 
 export interface BeltSuggestionDecision {
-  action:
-    | "CONFIRM"
-    | "REJECT"
-    | "DEFER"
-    | "KEEP_STORED";
+  action: "CONFIRM" | "REJECT" | "DEFER" | "KEEP_STORED";
   historyEntryId?: string;
   decidedBy: string;
   decidedAt: string;
@@ -146,6 +153,7 @@ export interface BeltSuggestionDecision {
 export function applyBeltSuggestionDecision(
   suggestion: BeltSuggestion,
   decision: BeltSuggestionDecision,
+  historyEntries: readonly BeltHistoryEntry[] = [],
 ): BeltSuggestion {
   const statusMap: Record<BeltSuggestionDecision["action"], BeltSuggestionStatusValue> = {
     CONFIRM: BeltSuggestionStatus.CONFIRMED,
@@ -154,6 +162,12 @@ export function applyBeltSuggestionDecision(
     KEEP_STORED: BeltSuggestionStatus.REJECTED,
   };
 
+  if (decision.action === "CONFIRM") {
+    const historyEntry = historyEntries.find((entry) => entry.id === decision.historyEntryId);
+    if (!historyEntry || historyEntry.personId !== suggestion.memberId) {
+      throw new Error("Ein bestätigter Gürtelvorschlag benötigt einen passenden Historieneintrag.");
+    }
+  }
   return {
     ...suggestion,
     status: statusMap[decision.action],
@@ -178,12 +192,8 @@ export function beltSuggestionChangeSource(): BeltChangeSourceValue {
 // Offene Gurthinweise filtern
 // ---------------------------------------------------------------------------
 
-export function openBeltSuggestions(
-  suggestions: readonly BeltSuggestion[],
-): BeltSuggestion[] {
-  return suggestions.filter(
-    (suggestion) => suggestion.status === BeltSuggestionStatus.OPEN,
-  );
+export function openBeltSuggestions(suggestions: readonly BeltSuggestion[]): BeltSuggestion[] {
+  return suggestions.filter((suggestion) => suggestion.status === BeltSuggestionStatus.OPEN);
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +209,7 @@ export interface BeltChangeValidationResult {
  * Prueft eine Guertelaenderung auf fachliche Konsistenz.
  *
  * Regeln:
- *   - Neue Farbe und Grad muessen im Demo-Katalog enthalten sein.
+ *   - Neue Farbe und Grad muessen im verbindlichen BELT_CATALOG enthalten sein.
  *   - Grad muss zur Farbe passen.
  *   - Bildanalyse darf niemals einen Grad vorgeben (wird hier nicht geprueft –
  *     das ist eine UI-seitige Invariante).
@@ -227,8 +237,11 @@ export function validateBeltChange(input: BeltChangeInput): BeltChangeValidation
     }
   }
 
-  if (input.effectiveFrom && !/^\d{4}-\d{2}-\d{2}$/.test(input.effectiveFrom)) {
-    issues.push("Gueltig-ab-Datum muss im Format JJJJ-MM-TT angegeben sein.");
+  if (input.effectiveFrom && !isValidIsoDate(input.effectiveFrom)) {
+    issues.push("Gueltig-ab-Datum muss ein gültiges Datum im Format JJJJ-MM-TT sein.");
+  }
+  if (input.examDate && !isValidIsoDate(input.examDate)) {
+    issues.push("Prüfungsdatum muss ein gültiges Datum im Format JJJJ-MM-TT sein.");
   }
 
   if (
@@ -248,22 +261,20 @@ export function validateBeltChange(input: BeltChangeInput): BeltChangeValidation
 export interface BeltExamHint {
   /** Aktueller Sortierindex im Katalog */
   currentSortOrder: number | null;
-  /** Naechster Guertelschritt (Demo-Katalog) */
+  /** Naechster Guertelschritt im verbindlichen Katalog */
   nextLevel: BeltLevel | null;
-  /** true = hoechster bekannter Grad im Demo-Katalog */
+  /** true = hoechster bekannter Grad im verbindlichen Katalog */
   isHighest: boolean;
 }
 
 /**
  * Gibt einen unverbindlichen Pruefungshinweis auf den naechsten Gurt.
- * Der Hinweis basiert auf dem Demo-Katalog und ist nicht verbindlich.
+ * Der Hinweis basiert auf dem verbindlichen Katalog; die Pruefungsentscheidung
+ * bleibt eine manuell zu bestaetigende Vereinsentscheidung.
  * Pruefungsvoraussetzungen (Trainingseinheiten, Mindestalter etc.) werden
  * in Paket 2+ durch den Verein definiert.
  */
-export function suggestNextBelt(
-  currentColor: string,
-  currentGrade: string,
-): BeltExamHint {
+export function suggestNextBelt(currentColor: string, currentGrade: string): BeltExamHint {
   const current = BELT_CATALOG.find(
     (level) => level.color === currentColor && level.grade === currentGrade,
   );
@@ -293,9 +304,7 @@ export interface BeltDistributionEntry {
  * Berechnet die Verteilung der Guertelfarben ueber eine Liste von Personen.
  * Gibt alle bekannten Farben zurueck, auch wenn count === 0.
  */
-export function calculateBeltDistribution(
-  beltColors: readonly string[],
-): BeltDistributionEntry[] {
+export function calculateBeltDistribution(beltColors: readonly string[]): BeltDistributionEntry[] {
   const total = beltColors.length;
   const counts = new Map<string, number>();
   for (const color of BELT_COLORS) counts.set(color, 0);
@@ -337,7 +346,7 @@ export function simulateBeltColorSuggestion(
   // Mit ~30% "naechste Farbe" (echte Abweichung), ~10% "andere Farbe"
   const roll = rng % 10;
 
-  const currentIdx = BELT_COLORS.indexOf(storedBeltColor as typeof BELT_COLORS[number]);
+  const currentIdx = BELT_COLORS.indexOf(storedBeltColor as (typeof BELT_COLORS)[number]);
   const safeIdx = currentIdx >= 0 ? currentIdx : 0;
 
   let suggestedColor: string;
@@ -361,9 +370,7 @@ export function simulateBeltColorSuggestion(
 // ID-Generator fuer Guertelhistorie
 // ---------------------------------------------------------------------------
 
-export function createBeltHistoryIdGenerator(
-  existingIds: readonly string[],
-): () => string {
+export function createBeltHistoryIdGenerator(existingIds: readonly string[]): () => string {
   const issued = new Set(existingIds);
   let seq = 1;
   return () => {

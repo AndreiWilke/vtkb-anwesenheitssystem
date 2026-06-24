@@ -8,9 +8,9 @@
 import React, { useState } from "react";
 
 import {
-  BeltSuggestionStatus,
-  BELT_COLORS,
+  BELT_LABELS,
   calculateBeltDistribution,
+  formatGermanDate,
   openBeltSuggestions,
   suggestNextBelt,
 } from "@vtkb/shared";
@@ -24,20 +24,32 @@ import { beltReportCsv } from "./reporting";
 
 const BELT_COLOR_CSS: Record<string, string> = {
   WEISS: "#f5f5f5",
+  WEISS_ROT: "linear-gradient(90deg, #fff 50%, #c62828 50%)",
+  WEISS_GELB: "linear-gradient(90deg, #fff 50%, #f2c200 50%)",
   GELB: "#f5e642",
+  GELB_ORANGE: "linear-gradient(90deg, #f2c200 50%, #e07b1e 50%)",
   ORANGE: "#f5a623",
+  ORANGE_GRUEN: "linear-gradient(90deg, #e07b1e 50%, #2f8a4e 50%)",
   GRUEN: "#4caf50",
+  GRUEN_BLAU: "linear-gradient(90deg, #2f8a4e 50%, #2f6fb0 50%)",
   BLAU: "#2196f3",
+  VIOLETT: "#6b4a9e",
   BRAUN: "#795548",
   SCHWARZ: "#212121",
 };
 
 const BELT_TEXT_COLOR: Record<string, string> = {
   WEISS: "#333",
+  WEISS_ROT: "#333",
+  WEISS_GELB: "#333",
   GELB: "#333",
+  GELB_ORANGE: "#333",
   ORANGE: "#333",
+  ORANGE_GRUEN: "#333",
   GRUEN: "#fff",
+  GRUEN_BLAU: "#fff",
   BLAU: "#fff",
+  VIOLETT: "#fff",
   BRAUN: "#fff",
   SCHWARZ: "#fff",
 };
@@ -47,12 +59,9 @@ function BeltColorBar({ color, percent }: { color: string; percent: number }) {
   const fg = BELT_TEXT_COLOR[color] ?? "#333";
   return (
     <div className="belt-bar-row">
-      <span className="belt-bar-label">{color}</span>
+      <span className="belt-bar-label">{BELT_LABELS[color as keyof typeof BELT_LABELS]}</span>
       <div className="belt-bar-track">
-        <div
-          className="belt-bar-fill"
-          style={{ width: `${percent}%`, backgroundColor: bg }}
-        />
+        <div className="belt-bar-fill" style={{ width: `${percent}%`, background: bg }} />
       </div>
       <span className="belt-bar-pct" style={{ color: fg !== "#fff" ? "#333" : undefined }}>
         {percent}%
@@ -142,7 +151,9 @@ export function BeltReportScreen({
 
   return (
     <div className="screen">
-      <button className="btn-back" onClick={onBack}>← Zurück</button>
+      <button className="btn-back" onClick={onBack}>
+        ← Zurück
+      </button>
       <h2>Gürtelauswertung</h2>
 
       {/* Kennzahlen */}
@@ -208,9 +219,7 @@ export function BeltReportScreen({
       </div>
 
       {/* Tabelle */}
-      <div className="report-count">
-        {filteredMembers.length} Mitglieder angezeigt
-      </div>
+      <div className="report-count">{filteredMembers.length} Mitglieder angezeigt</div>
 
       {filteredMembers.length === 0 ? (
         <p className="notice">Keine Mitglieder für diese Filterauswahl.</p>
@@ -258,7 +267,7 @@ export function BeltReportScreen({
                       <span className="badge">–</span>
                     )}
                   </td>
-                  <td>{lastChange ?? "–"}</td>
+                  <td>{lastChange ? formatGermanDate(lastChange) : "–"}</td>
                   <td>
                     {hasOpenSuggestion ? (
                       <span className="badge badge--warn">Offen</span>

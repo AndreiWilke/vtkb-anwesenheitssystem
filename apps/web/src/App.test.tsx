@@ -1,20 +1,39 @@
 // @vitest-environment jsdom
 
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render as testingRender,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 
-import App from "./App";
+import App, { canAccessScreen } from "./App";
+import { SettlementReviewNotes } from "./reportingScreens";
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
 
+function render(ui: ReactNode) {
+  const result = testingRender(ui);
+  const login = screen.queryByRole("button", { name: "Demo lokal öffnen" });
+  if (login) fireEvent.click(login);
+  return result;
+}
+
 async function openCaptureMethod(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: /Training starten/ }));
+  const sessionChoice = screen.queryByRole("heading", { name: "Trainingseinheit auswählen" });
+  if (sessionChoice) {
+    await user.click(screen.getAllByRole("button", { name: /Ebereschen|Senshi/ })[0]!);
+  }
   await user.click(screen.getByRole("button", { name: /Erfassungsart wählen/ }));
 }
 
@@ -35,10 +54,15 @@ async function openPhotoReview(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("klickbarer Paket-1-Prototyp", () => {
+  it("beginnt auf dem Login-Screen", () => {
+    testingRender(<App />);
+    expect(screen.getByRole("heading", { name: "VTKB Anwesenheit" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Demo lokal öffnen" })).toBeEnabled();
+  });
   it("rendert auf der Startseite eine vorgeschlagene Einheit", () => {
     render(<App />);
     expect(screen.getByRole("heading", { name: "Start" })).toBeInTheDocument();
-    expect(screen.getByText("Vorgeschlagen")).toBeInTheDocument();
+    expect(screen.getByText("Auswahl erforderlich")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Training starten/ })).toBeEnabled();
   });
 
@@ -52,9 +76,6 @@ describe("klickbarer Paket-1-Prototyp", () => {
       screen.getByRole("button", { name: "Maro Beispiel abwesend setzen" }),
     ).toBeInTheDocument();
   });
-
-  // Paket 1.6: Manuelle Gasterfassung wurde entfernt (kein "Gäste und Probetraining"-Button mehr).
-  // Gäste können weiterhin über den Fotoassistenz-Demo-Flow erfasst werden.
 
   it("blockiert die Speicherung mit offenen Foto-Demovorschlaegen", async () => {
     const user = userEvent.setup();
@@ -98,6 +119,175 @@ describe("klickbarer Paket-1-Prototyp", () => {
     ).toBeInTheDocument();
   });
 
+  it("enthält keinerlei Gastaktion mehr im Fotoablauf", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openPhotoReview(user);
+    expect(screen.queryByText(/Als Gast erfassen/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Gäste und Probetraining/i)).not.toBeInTheDocument();
+  });
+
+  it("erstellt eine Nachtragseinheit vollständig und zeigt sie in der Historie", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
+    await user.click(within(nav).getByRole("button", { name: "Verwaltung" }));
+    await user.click(screen.getByRole("button", { name: /Einheit nachträglich erstellen/ }));
+    await user.type(screen.getByLabelText("Datum"), "20.06.2026");
+    await user.type(screen.getByLabelText("Bezeichnung"), "Fiktive Nachtragseinheit");
+    await user.type(
+      screen.getByLabelText("Grund für die Nachtragserfassung"),
+      "Fiktive Dokumentationskorrektur",
+    );
+    await user.click(screen.getByRole("button", { name: /Trainer festlegen/ }));
+    await user.click(screen.getByRole("button", { name: "Anwesenheit erfassen" }));
+    await user.click(screen.getByRole("button", { name: "Liste prüfen" }));
+    await user.click(screen.getByRole("button", { name: "Nachtrag speichern und abschließen" }));
+    expect(screen.getByRole("heading", { name: "Verwaltung" })).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("retrospective-history")).getByText("Fiktive Nachtragseinheit"),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("runtime-audit")).getByText("RETROSPECTIVE_SESSION_CREATED"),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("retrospective-history")).getByText(/20\.06\.2026/),
+    ).toBeInTheDocument();
+  });
+
+  it("zeigt eine doppelte Nachtragseinheit mit vorhandener Session-ID an und blockiert sie", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(
+      within(screen.getByRole("navigation", { name: "Hauptnavigation" })).getByRole("button", {
+        name: "Verwaltung",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: /Einheit nachträglich erstellen/ }));
+    await user.type(screen.getByLabelText("Datum"), "01.06.2026");
+    await user.clear(screen.getByLabelText("Ende"));
+    await user.type(screen.getByLabelText("Ende"), "18:00");
+    await user.type(screen.getByLabelText("Bezeichnung"), "Doppelte Einheit");
+    await user.type(screen.getByLabelText("Grund für die Nachtragserfassung"), "Regressionstest");
+    expect(screen.getByRole("alert")).toHaveTextContent("history-2026-06-02");
+    await user.click(screen.getByRole("button", { name: /Trainer festlegen/ }));
+    expect(
+      screen.getAllByRole("alert").some((alert) => alert.textContent.includes("Doppelte Einheit")),
+    ).toBe(true);
+    expect(screen.queryByText("Schritt 2 von 4")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["BOARD", "Vorstand"],
+    ["TRAINER", "Trainer"],
+    ["ASSISTANT_TRAINER", "Assistenztrainer"],
+    ["TREASURER", "Kassenwart"],
+  ])("erlaubt %s die Nachtragserfassung und zeigt die aktive Rolle", async (role, label) => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Demo-Rolle wechseln"), role);
+    const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
+    await user.click(within(nav).getByRole("button", { name: "Verwaltung" }));
+    const open = screen.getByRole("button", { name: /Einheit nachträglich erstellen/ });
+    expect(open).toBeEnabled();
+    await user.click(open);
+    await user.type(screen.getByLabelText("Datum"), "20.06.2026");
+    await user.type(screen.getByLabelText("Bezeichnung"), "Fiktiver Rollentest");
+    await user.type(
+      screen.getByLabelText("Grund für die Nachtragserfassung"),
+      "Fiktive Rollenprüfung",
+    );
+    await user.click(screen.getByRole("button", { name: /Trainer festlegen/ }));
+    await user.click(screen.getByRole("button", { name: "Anwesenheit erfassen" }));
+    await user.click(screen.getByRole("button", { name: "Liste prüfen" }));
+    expect(screen.getByText(`Erstellt durch: ${label}`)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Nachtrag speichern und abschließen" }));
+    expect(
+      within(screen.getByTestId("runtime-audit")).getByText(new RegExp(label)),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    ["BOARD", true, true, true],
+    ["TRAINER", true, false, true],
+    ["ASSISTANT_TRAINER", false, false, true],
+    ["TREASURER", false, false, false],
+  ])(
+    "zeigt der Rolle %s nur freigegebene Verwaltungsbereiche",
+    async (role, trialsVisible, memberVisible, beltsVisible) => {
+      const user = userEvent.setup();
+      render(<App />);
+      await user.selectOptions(screen.getByLabelText("Demo-Rolle wechseln"), role);
+      await user.click(
+        within(screen.getByRole("navigation", { name: "Hauptnavigation" })).getByRole("button", {
+          name: "Verwaltung",
+        }),
+      );
+      expect(screen.getByRole("button", { name: /Einheit nachträglich erstellen/ })).toBeEnabled();
+      expect(screen.queryByRole("button", { name: /Probetraining-Liste/ }) !== null).toBe(
+        trialsVisible,
+      );
+      expect(screen.queryByRole("button", { name: /Neues Mitglied anlegen/ }) !== null).toBe(
+        memberVisible,
+      );
+      expect(screen.queryByRole("button", { name: /Gürtelauswertung/ }) !== null).toBe(
+        beltsVisible,
+      );
+    },
+  );
+
+  it("blockiert direkte Vorstand- und Gürtel-Screens auch bei direkter Navigation", () => {
+    expect(canAccessScreen("TREASURER", "MEMBER_DIRECT_NEW")).toBe(false);
+    expect(canAccessScreen("TREASURER", "BELT_CHANGE")).toBe(false);
+    expect(canAccessScreen("TREASURER", "BELT_SUGGESTION_REVIEW")).toBe(false);
+    expect(canAccessScreen("TRAINER", "MEMBER_DIRECT_NEW")).toBe(false);
+    expect(canAccessScreen("ASSISTANT_TRAINER", "BELT_CHANGE")).toBe(true);
+    expect(canAccessScreen("ASSISTANT_TRAINER", "BELT_SUGGESTION_REVIEW")).toBe(true);
+  });
+
+  it("macht Vorstandsausnahme, Umwandlung und Gürtelsimulation über sichtbare Wege erreichbar", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(
+      within(screen.getByRole("navigation", { name: "Hauptnavigation" })).getByRole("button", {
+        name: "Verwaltung",
+      }),
+    );
+    expect(screen.getByRole("button", { name: /Gürtelfarb-Vorschlag simulieren/ })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: /Probetraining-Liste/ }));
+    await user.click(screen.getByText("Luca Probetraining"));
+    expect(screen.getByRole("button", { name: /Vorstandsausnahme prüfen/ })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: /Profil in Mitglied umwandeln/ })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "← Zurück" }));
+    await user.click(screen.getByText("Sara Probetraining"));
+    expect(screen.getByRole("button", { name: /Profil in Mitglied umwandeln/ })).toBeEnabled();
+  });
+
+  it("rendert identische Prüfhinweise ohne React-Key-Warnung", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    render(<SettlementReviewNotes notes={["Gleicher Hinweis", "Gleicher Hinweis"]} />);
+    expect(screen.getAllByText("Gleicher Hinweis")).toHaveLength(2);
+    expect(consoleError.mock.calls.flat().join(" ")).not.toMatch(/unique.*key|same key/i);
+  });
+
+  it("weist ein ungültiges deutsches Datum ohne React-Key-Warnung zurück", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(
+      within(screen.getByRole("navigation", { name: "Hauptnavigation" })).getByRole("button", {
+        name: "Verwaltung",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: /Einheit nachträglich erstellen/ }));
+    await user.type(screen.getByLabelText("Datum"), "31.02.2026");
+    await user.click(screen.getByRole("button", { name: /Trainer festlegen/ }));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Bitte ein gültiges Datum im Format TT.MM.JJJJ eingeben.",
+    );
+    expect(consoleError.mock.calls.flat().join(" ")).not.toMatch(/unique.*key/i);
+  });
+
   it("öffnet Mitgliederübersicht und berechnetes Mitgliedsdetail", async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -111,6 +301,25 @@ describe("klickbarer Paket-1-Prototyp", () => {
     await user.click(screen.getByRole("button", { name: /Aiko Beispiel/ }));
     expect(screen.getByRole("heading", { name: "Aiko Beispiel" })).toBeInTheDocument();
     expect(screen.getAllByText(/Einheiten/).length).toBeGreaterThan(0);
+  });
+
+  it("verwendet im freien Auswertungszeitraum deutsche Datumsfelder", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(
+      within(screen.getByRole("navigation", { name: "Hauptnavigation" })).getByRole("button", {
+        name: "Auswertung",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Mitglieder" }));
+    await user.selectOptions(screen.getByLabelText("Zeitraum"), "RANGE");
+    expect(screen.getByLabelText("Freier Zeitraum von")).toHaveValue("01.01.2026");
+    expect(screen.getByLabelText("Freier Zeitraum bis")).toHaveValue("30.06.2026");
+    await user.clear(screen.getByLabelText("Freier Zeitraum von"));
+    await user.type(screen.getByLabelText("Freier Zeitraum von"), "31.02.2026");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Bitte gültige Datumswerte im Format TT.MM.JJJJ eingeben.",
+    );
   });
 
   it("begrenzt die Trainer-Demoansicht auf die eigene Abrechnung", async () => {
@@ -202,7 +411,7 @@ describe("klickbarer Paket-1-Prototyp", () => {
     expect(within(preselected).getByText("Sicher vorausgewählt")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Gesamtliste öffnen" }));
     expect(screen.getAllByText("Mika Beispiel")).toHaveLength(1);
-    expect(within(screen.getByTestId("summary-total")).getByText("2")).toBeInTheDocument();
+    expect(within(screen.getByTestId("summary-total")).getByText("3")).toBeInTheDocument();
   });
 
   it("bietet für ein unbekanntes Gesicht keine allgemeine Bestätigung an", async () => {
@@ -222,24 +431,8 @@ describe("klickbarer Paket-1-Prototyp", () => {
     await user.click(within(unknown).getByRole("button", { name: "Als unbekannt markieren" }));
     expect(within(unknown).getByText("Als unbekannt markiert")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Gesamtliste öffnen" }));
-    expect(within(screen.getByTestId("summary-total")).getByText("2")).toBeInTheDocument();
-    expect(
-      within(screen.getByTestId("summary-guests")).getByText("Keine Gäste"),
-    ).toBeInTheDocument();
-  });
-
-  it("erfasst ein unbekanntes Gesicht genau einmal als manuellen Gast", async () => {
-    const user = userEvent.setup();
-    render(<App />);
-    await openPhotoReview(user);
-    const unknown = screen.getByTestId("proposal-3");
-    await user.click(within(unknown).getByRole("button", { name: "Als Gast erfassen" }));
-    await user.click(within(unknown).getByRole("button", { name: "Als Gast erfassen" }));
-    expect(within(unknown).getByText("Als Gast erfasst")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Gesamtliste öffnen" }));
-    expect(
-      within(screen.getByTestId("summary-guests")).getAllByText(/Gast Demo guest-/),
-    ).toHaveLength(1);
+    expect(within(screen.getByTestId("summary-total")).getByText("3")).toBeInTheDocument();
+    expect(screen.queryByText(/Gast/)).not.toBeInTheDocument();
   });
 
   it("wählt für ein unbekanntes Gesicht sichtbar genau das ausgewählte Mitglied", async () => {
@@ -267,7 +460,7 @@ describe("klickbarer Paket-1-Prototyp", () => {
     await user.click(within(unknown).getByRole("button", { name: "Verwerfen" }));
     expect(within(unknown).getByText("Verworfen")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Gesamtliste öffnen" }));
-    expect(within(screen.getByTestId("summary-total")).getByText("2")).toBeInTheDocument();
+    expect(within(screen.getByTestId("summary-total")).getByText("3")).toBeInTheDocument();
   });
 
   it("zeigt bei Andere Person eine echte Auswahl mit Bestätigung und Abbruch", async () => {
@@ -298,7 +491,7 @@ describe("klickbarer Paket-1-Prototyp", () => {
     expect(within(preselected).getByText("Offen")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Gesamtliste öffnen" }));
     expect(screen.queryByText("Mika Beispiel")).not.toBeInTheDocument();
-    expect(within(screen.getByTestId("summary-total")).getByText("1")).toBeInTheDocument();
+    expect(within(screen.getByTestId("summary-total")).getByText("2")).toBeInTheDocument();
   });
 
   it("legt einen neuen Vergütungssatz an und protokolliert ihn", async () => {
@@ -317,7 +510,7 @@ describe("klickbarer Paket-1-Prototyp", () => {
       "RESPONSIBLE_TRAINER",
     );
     await user.type(screen.getByLabelText("Betrag neuer Vergütungssatz"), "25,00");
-    await user.type(screen.getByLabelText("Gültig ab neuer Vergütungssatz"), "2026-07-01");
+    await user.type(screen.getByLabelText("Gültig ab neuer Vergütungssatz"), "01.07.2026");
     await user.click(screen.getByLabelText("Neuer Vergütungssatz aktiv"));
     await user.click(screen.getByRole("button", { name: "Speichern" }));
     expect(screen.getByDisplayValue("Juli-Satz")).toBeInTheDocument();
@@ -343,9 +536,27 @@ describe("klickbarer Paket-1-Prototyp", () => {
     await user.click(screen.getByRole("button", { name: "Neuen Vergütungssatz anlegen" }));
     await user.type(screen.getByLabelText("Bezeichnung neuer Vergütungssatz"), "Überlappung");
     await user.type(screen.getByLabelText("Betrag neuer Vergütungssatz"), "25,00");
-    await user.type(screen.getByLabelText("Gültig ab neuer Vergütungssatz"), "2026-06-01");
+    await user.type(screen.getByLabelText("Gültig ab neuer Vergütungssatz"), "01.06.2026");
     await user.click(screen.getByRole("button", { name: "Speichern" }));
     expect(screen.getByRole("alert")).toHaveTextContent("überschneiden");
+    expect(screen.getByRole("heading", { name: "Neuer Vergütungssatz" })).toBeInTheDocument();
+  });
+
+  it("lehnt ein ungültiges deutsches Datum für Vergütungssätze ab", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(
+      within(screen.getByRole("navigation", { name: "Hauptnavigation" })).getByRole("button", {
+        name: "Auswertung",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Vergütungssätze" }));
+    await user.click(screen.getByRole("button", { name: "Neuen Vergütungssatz anlegen" }));
+    await user.type(screen.getByLabelText("Bezeichnung neuer Vergütungssatz"), "Datumstest");
+    await user.type(screen.getByLabelText("Betrag neuer Vergütungssatz"), "25,00");
+    await user.type(screen.getByLabelText("Gültig ab neuer Vergütungssatz"), "31.02.2026");
+    await user.click(screen.getByRole("button", { name: "Speichern" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("TT.MM.JJJJ");
     expect(screen.getByRole("heading", { name: "Neuer Vergütungssatz" })).toBeInTheDocument();
   });
 });

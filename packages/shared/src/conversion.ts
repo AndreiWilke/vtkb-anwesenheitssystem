@@ -4,7 +4,7 @@
  * Alle Funktionen sind zustandslos und rein berechenbar.
  *
  * Fachregeln:
- *   - Die gesamte Anwesenheitshistorie bleibt erhalten (memberId = neue Mitglieds-ID).
+ *   - Die Personen-ID bleibt erhalten; die Mitgliedsnummer ist ein separates Merkmal.
  *   - Ein TrialParticipant wird nicht geloescht, sondern erhaelt membershipStatus = ACTIVE_MEMBER.
  *   - Jede Umwandlung erzeugt einen AuditEntry.
  *   - Direktanlage eines Mitglieds ohne Probetraining ist ebenfalls moeglich.
@@ -19,6 +19,7 @@ import {
   type MemberQualification as MemberQualificationValue,
   type TrialParticipant,
 } from "./domain.js";
+import { checkForDuplicates, type PersonForDuplicateCheck } from "./person.js";
 
 // ---------------------------------------------------------------------------
 // Typen
@@ -26,8 +27,8 @@ import {
 
 export interface ConversionInput {
   participant: TrialParticipant;
-  newMemberId: string;
   memberNumber: string;
+  existingMemberNumbers: readonly string[];
   qualification: MemberQualificationValue;
   convertedBy: string;
   convertedAt: string;
@@ -39,6 +40,7 @@ export interface ConversionResult {
   auditEntry: AuditEntry;
   newMemberId: string;
   memberNumber: string;
+  qualification: MemberQualificationValue;
 }
 
 export interface DirectMemberInput {
@@ -47,10 +49,14 @@ export interface DirectMemberInput {
   lastName: string;
   gender: "MAENNLICH" | "WEIBLICH";
   birthDate: string;
+  contactPhone?: string;
   beltColor?: string;
   beltGrade?: string;
   qualification?: MemberQualificationValue;
   memberNumber: string;
+  existingPersonIds: readonly string[];
+  existingMemberNumbers: readonly string[];
+  existingPersons: readonly PersonForDuplicateCheck[];
   createdBy: string;
   createdAt: string;
   note?: string;
@@ -62,6 +68,7 @@ export interface DirectMemberResult {
   displayName: string;
   gender: "MAENNLICH" | "WEIBLICH";
   birthDate: string;
+  contactPhone?: string;
   beltColor: string;
   beltGrade: string;
   qualification: MemberQualificationValue;
@@ -133,12 +140,13 @@ export function checkConversionEligibility(
  * mit memberId === participant.id werden nach der Konvertierung unter
  * der neuen memberId weitergefuehrt (ID ist unveraendert, wenn newMemberId === participant.id).
  */
-export function convertTrialParticipantToMember(
-  input: ConversionInput,
-): ConversionResult {
+export function convertTrialParticipantToMember(input: ConversionInput): ConversionResult {
   const eligibility = checkConversionEligibility(input.participant);
   if (!eligibility.eligible) {
     throw new Error(`Umwandlung nicht moeglich: ${eligibility.reason}`);
+  }
+  if (input.existingMemberNumbers.includes(input.memberNumber.trim())) {
+    throw new Error(`Mitgliedsnummer ${input.memberNumber.trim()} ist bereits vergeben.`);
   }
 
   const combinedNote = input.note
@@ -148,26 +156,28 @@ export function convertTrialParticipantToMember(
     ...input.participant,
     membershipStatus: PersonMembershipStatus.ACTIVE_MEMBER,
     contractStatus: ContractStatus.MEMBERSHIP_ACTIVATED,
-    memberId: input.newMemberId,
+    memberId: input.participant.id,
+    convertedAt: input.convertedAt,
     ...(combinedNote !== undefined ? { note: combinedNote } : {}),
   };
 
   const auditEntry: AuditEntry = {
-    id: `audit-conv-${input.newMemberId}`,
+    id: `audit-conv-${input.participant.id}`,
     occurredAt: input.convertedAt,
     actor: input.convertedBy,
     action: "TRIAL_CONVERTED_TO_MEMBER",
     object: `TrialParticipant:${input.participant.id}`,
     previousValue: PersonMembershipStatus.TRIAL,
-    newValue: `${PersonMembershipStatus.ACTIVE_MEMBER}:${input.newMemberId}`,
+    newValue: `${PersonMembershipStatus.ACTIVE_MEMBER}:${input.participant.id}:${input.memberNumber}`,
     reason: input.note ?? null,
   };
 
   return {
     updatedParticipant,
     auditEntry,
-    newMemberId: input.newMemberId,
+    newMemberId: input.participant.id,
     memberNumber: input.memberNumber,
+    qualification: input.qualification,
   };
 }
 
@@ -184,6 +194,16 @@ export function createDirectMember(input: DirectMemberInput): DirectMemberResult
   if (!input.firstName.trim()) throw new Error("Vorname darf nicht leer sein.");
   if (!input.lastName.trim()) throw new Error("Nachname darf nicht leer sein.");
   if (!input.memberNumber.trim()) throw new Error("Mitgliedsnummer darf nicht leer sein.");
+  if (input.existingPersonIds.includes(input.id)) {
+    throw new Error(`Personen-ID ${input.id} ist bereits vergeben.`);
+  }
+  if (input.existingMemberNumbers.includes(input.memberNumber.trim())) {
+    throw new Error(`Mitgliedsnummer ${input.memberNumber.trim()} ist bereits vergeben.`);
+  }
+  const duplicate = checkForDuplicates(input, input.existingPersons);
+  if (duplicate.hasProbableDuplicate) {
+    throw new Error("Eine Person mit gleichem Namen und Geburtsjahr existiert bereits.");
+  }
 
   const displayName = `${input.lastName.trim()}, ${input.firstName.trim()}`;
   const beltColor = input.beltColor ?? "WEISS";
@@ -207,6 +227,7 @@ export function createDirectMember(input: DirectMemberInput): DirectMemberResult
     displayName,
     gender: input.gender,
     birthDate: input.birthDate,
+    ...(input.contactPhone?.trim() ? { contactPhone: input.contactPhone.trim() } : {}),
     beltColor,
     beltGrade,
     qualification,
@@ -223,6 +244,7 @@ export function createDirectMember(input: DirectMemberInput): DirectMemberResult
 
 export interface BoardOverrideInput {
   participant: TrialParticipant;
+  attendedTrialCount: number;
   grantedBy: string;
   grantedAt: string;
   reason: string;
@@ -243,7 +265,7 @@ export interface BoardOverrideResult {
  *   - reason nicht leer (Begruendungspflicht)
  */
 export function grantBoardOverride(input: BoardOverrideInput): BoardOverrideResult {
-  const { participant, grantedBy, grantedAt, reason } = input;
+  const { participant, attendedTrialCount, grantedBy, grantedAt, reason } = input;
 
   if (!reason.trim()) {
     throw new Error("Begruendung fuer Vorstandsausnahme ist Pflicht.");
@@ -251,8 +273,27 @@ export function grantBoardOverride(input: BoardOverrideInput): BoardOverrideResu
   if (participant.membershipStatus !== PersonMembershipStatus.TRIAL) {
     throw new Error("Vorstandsausnahme nur fuer Probetrainingsteilnehmer moeglich.");
   }
+  if (!participant.active) {
+    throw new Error("Vorstandsausnahme nur für ein aktives Probetrainingprofil möglich.");
+  }
   if (participant.overrideStatus !== "NONE") {
     throw new Error("Eine Vorstandsausnahme wurde bereits erteilt.");
+  }
+  if (participant.overrideUsed) {
+    throw new Error("Eine bereits verwendete Vorstandsausnahme darf nicht erneut erteilt werden.");
+  }
+  if (attendedTrialCount !== 4) {
+    throw new Error(
+      "Die Vorstandsausnahme ist nur nach genau vier besuchten Probetrainings möglich.",
+    );
+  }
+  if (
+    participant.contractStatus === ContractStatus.RECEIVED ||
+    participant.contractStatus === ContractStatus.MEMBERSHIP_ACTIVATED
+  ) {
+    throw new Error(
+      "Bei eingegangenem oder aktiviertem Vertrag ist keine Vorstandsausnahme nötig.",
+    );
   }
 
   const updatedParticipant: TrialParticipant = {

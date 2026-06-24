@@ -1,5 +1,21 @@
-import { useMemo, useRef, useState } from "react";
-import { DemoRole, PresenceStatus, SessionRole } from "@vtkb/shared";
+import { useMemo, useState } from "react";
+import {
+  DemoRole,
+  AppPermission,
+  ContractStatus,
+  CaptureSource,
+  PresenceStatus,
+  PersonMembershipStatus,
+  SessionRole,
+  TrainingSessionStatus,
+  type AttendanceRecord,
+  createRetrospectiveSession,
+  createRetrospectiveSessionIdGenerator,
+  checkConversionEligibility,
+  hasPermission,
+  useTrialOverride,
+  type RetrospectiveSessionInput,
+} from "@vtkb/shared";
 
 import { AppShell } from "./components";
 import {
@@ -11,7 +27,7 @@ import {
   ManualAttendanceScreen,
   PhotoDemoScreen,
   PhotoReviewScreen,
-  RetroDateSelectScreen,
+  RetrospectiveSessionScreen,
   SessionSelectScreen,
   StartScreen,
   SummaryScreen,
@@ -52,19 +68,50 @@ import type {
   ConversionResult,
   DemoRoleValue,
   DirectMemberResult,
-  LocalGuest,
   Member,
   PhotoProposal,
+  ProposalDecision,
   TrainingSessionMock,
   TrialParticipant,
   WorkflowState,
+  HistoricalTrainingSession,
+  TrainingType,
 } from "./types";
 import {
+  attendanceRecordsForSession,
   canCompleteSession,
   createInitialAttendance,
-  createLocalGuestIdFactory,
+  hasParallelSessionChoice,
   suggestSession,
 } from "./workflow";
+import { initialHistoricalSessions } from "./reportingMockData";
+import { blockedTrialParticipantsInSession, computeTrialSessionCount } from "./trialWorkflow";
+
+export function canAccessScreen(role: DemoRoleValue, screen: AppScreen): boolean {
+  switch (screen) {
+    case "TRIAL_LIST":
+    case "TRIAL_NEW":
+    case "TRIAL_PROFILE":
+    case "TRIAL_CONTRACT":
+      return hasPermission(role, AppPermission.MANAGE_TRIAL_PROFILES);
+    case "TRIAL_BOARD_OVERRIDE":
+      return hasPermission(role, AppPermission.GRANT_TRIAL_OVERRIDE);
+    case "TRIAL_CONVERT":
+      return hasPermission(role, AppPermission.CONVERT_TRIAL_MEMBER);
+    case "MEMBER_DIRECT_NEW":
+      return hasPermission(role, AppPermission.CREATE_DIRECT_MEMBER);
+    case "BELT_CHANGE":
+    case "BELT_SIM_DEMO":
+      return hasPermission(role, AppPermission.CHANGE_BELT);
+    case "BELT_SUGGESTION_REVIEW":
+      return hasPermission(role, AppPermission.DECIDE_BELT_SUGGESTION);
+    case "RETRO_DATE_SELECT":
+    case "RETRO_CREATE":
+      return hasPermission(role, AppPermission.CREATE_RETROSPECTIVE_SESSION);
+    default:
+      return true;
+  }
+}
 
 function cloneProposals(): PhotoProposal[] {
   return initialPhotoProposals.map((proposal) => ({ ...proposal }));
@@ -86,33 +133,34 @@ function proposalMemberIds(proposals: readonly PhotoProposal[]): Set<string> {
 }
 
 export default function App() {
-  const [retroDate, setRetroDate] = useState<string | null>(null);
-  const sessions = useMemo(
-    () => createTodaySessions(retroDate ? new Date(`${retroDate}T12:00:00`) : new Date()),
-    [retroDate],
-  );
+  const sessions = useMemo(() => createTodaySessions(new Date()), []);
 
   // Anwesenheits-Workflow
-  const [screen, setScreen] = useState<AppScreen>("START");
+  const [screen, setScreen] = useState<AppScreen>("LOGIN");
   const [selectedSession, setSelectedSession] = useState<TrainingSessionMock>(() =>
     suggestSession(sessions),
   );
   const [attendance, setAttendance] = useState<AttendanceState>(() =>
     createInitialAttendance(initialMembers, selectedSession),
   );
-  const [guests, setGuests] = useState<LocalGuest[]>([]);
   const [photoModeUsed, setPhotoModeUsed] = useState(false);
   const [proposals, setProposals] = useState<PhotoProposal[]>(cloneProposals);
   const [workflow, setWorkflow] = useState<WorkflowState>(initialWorkflow);
   const [demoRole, setDemoRole] = useState<DemoRoleValue>(DemoRole.BOARD);
-  const guestIdFactory = useRef(createLocalGuestIdFactory()).current;
 
   // Probetraining-State
-  const [trialParticipants, setTrialParticipants] = useState<TrialParticipant[]>(
-    () => [...initialTrialParticipants],
-  );
+  const [trialParticipants, setTrialParticipants] = useState<TrialParticipant[]>(() => [
+    ...initialTrialParticipants,
+  ]);
   const [selectedTrialId, setSelectedTrialId] = useState<string | null>(null);
+  const [selectedTrialAttendanceIds, setSelectedTrialAttendanceIds] = useState<string[]>([]);
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
+  const [trainingHistory, setTrainingHistory] = useState<HistoricalTrainingSession[]>(() => [
+    ...initialHistoricalSessions,
+  ]);
+  const [nextRetrospectiveId] = useState(() =>
+    createRetrospectiveSessionIdGenerator(initialHistoricalSessions.map((session) => session.id)),
+  );
 
   // Mitglieder-State (für neue/umgewandelte Mitglieder)
   const [members, setMembers] = useState<Member[]>(() => [...initialMembers]);
@@ -122,15 +170,22 @@ export default function App() {
     ...initialBeltHistory,
     ...beltHistoryExtended,
   ]);
-  const [beltSuggestions, setBeltSuggestions] = useState<BeltSuggestion[]>(
-    () => [...initialBeltSuggestions],
-  );
+  const [beltSuggestions, setBeltSuggestions] = useState<BeltSuggestion[]>(() => [
+    ...initialBeltSuggestions,
+  ]);
   const [selectedBeltMemberId, setSelectedBeltMemberId] = useState<string | null>(null);
 
   // Hilfsfunktionen
   const selectedTrialParticipant = trialParticipants.find((p) => p.id === selectedTrialId) ?? null;
+  const selectedTrialAttended = selectedTrialParticipant
+    ? computeTrialSessionCount(selectedTrialParticipant.id, trainingHistory).attended
+    : 0;
   const selectedBeltMember = members.find((m) => m.id === selectedBeltMemberId) ?? null;
   const isBoard = demoRole === DemoRole.BOARD;
+  const canManageTrials = hasPermission(demoRole, AppPermission.MANAGE_TRIAL_PROFILES);
+  const canCreateDirectMember = hasPermission(demoRole, AppPermission.CREATE_DIRECT_MEMBER);
+  const canChangeBelt = hasPermission(demoRole, AppPermission.CHANGE_BELT);
+  const canDecideBeltSuggestion = hasPermission(demoRole, AppPermission.DECIDE_BELT_SUGGESTION);
 
   const addAuditEntry = (entry: AuditEntry) => {
     setAuditEntries((prev) => [entry, ...prev]);
@@ -144,9 +199,20 @@ export default function App() {
   // Anwesenheits-Workflow-Hilfsfunktionen
   const activeProposals = photoModeUsed ? proposals : [];
   const unresolvedProposalCount = activeProposals.filter((proposal) => !proposal.resolved).length;
+  const blockedTrialParticipants = blockedTrialParticipantsInSession(
+    selectedTrialAttendanceIds,
+    trialParticipants,
+    trainingHistory,
+  );
   const completion = useMemo(
-    () => canCompleteSession(selectedSession, attendance, guests, unresolvedProposalCount),
-    [selectedSession, attendance, guests, unresolvedProposalCount],
+    () =>
+      canCompleteSession(
+        selectedSession,
+        attendance,
+        unresolvedProposalCount,
+        blockedTrialParticipants,
+      ),
+    [selectedSession, attendance, unresolvedProposalCount, blockedTrialParticipants],
   );
 
   const workflowMessages = [
@@ -179,14 +245,23 @@ export default function App() {
     setAttendance((current) => {
       const updated = { ...current };
       previousIds.forEach((memberId) => {
-        if (!nextIds.has(memberId) && updated[memberId]?.sessionRole === SessionRole.PARTICIPANT) {
-          updated[memberId] = { presenceStatus: PresenceStatus.ABSENT, sessionRole: null };
+        if (
+          !nextIds.has(memberId) &&
+          updated[memberId]?.sessionRole === SessionRole.PARTICIPANT &&
+          updated[memberId].captureSource === CaptureSource.PHOTO_ASSISTED
+        ) {
+          updated[memberId] = {
+            presenceStatus: PresenceStatus.ABSENT,
+            sessionRole: null,
+            captureSource: CaptureSource.MANUAL,
+          };
         }
       });
       nextIds.forEach((memberId) => {
         updated[memberId] = {
           presenceStatus: PresenceStatus.PRESENT,
           sessionRole: updated[memberId]?.sessionRole ?? SessionRole.PARTICIPANT,
+          captureSource: CaptureSource.PHOTO_ASSISTED,
         };
       });
       return updated;
@@ -196,7 +271,7 @@ export default function App() {
   const selectSession = (session: TrainingSessionMock) => {
     setSelectedSession(session);
     setAttendance(createInitialAttendance(members, session));
-    setGuests([]);
+    setSelectedTrialAttendanceIds([]);
     setPhotoModeUsed(false);
     setProposals(cloneProposals());
     resetWorkflowForSession();
@@ -204,8 +279,12 @@ export default function App() {
   };
 
   const beginTraining = () => {
+    if (hasParallelSessionChoice(sessions, selectedSession)) {
+      setScreen("SESSION_SELECT");
+      return;
+    }
     setAttendance(createInitialAttendance(members, selectedSession));
-    setGuests([]);
+    setSelectedTrialAttendanceIds([]);
     setPhotoModeUsed(false);
     setProposals(cloneProposals());
     resetWorkflowForSession();
@@ -220,12 +299,14 @@ export default function App() {
           next[id] = {
             presenceStatus: PresenceStatus.PRESENT,
             sessionRole: SessionRole.PARTICIPANT,
+            captureSource: CaptureSource.MANUAL,
           };
         }
       });
       next[memberId] = {
         presenceStatus: PresenceStatus.PRESENT,
         sessionRole: SessionRole.RESPONSIBLE_TRAINER,
+        captureSource: CaptureSource.MANUAL,
       };
       return next;
     });
@@ -245,6 +326,7 @@ export default function App() {
         [memberId]: {
           presenceStatus: PresenceStatus.PRESENT,
           sessionRole: selected ? SessionRole.PARTICIPANT : SessionRole.ASSISTANT_TRAINER,
+          captureSource: CaptureSource.MANUAL,
         },
       };
     });
@@ -257,11 +339,112 @@ export default function App() {
       return {
         ...current,
         [memberId]: present
-          ? { presenceStatus: PresenceStatus.ABSENT, sessionRole: null }
-          : { presenceStatus: PresenceStatus.PRESENT, sessionRole: SessionRole.PARTICIPANT },
+          ? {
+              presenceStatus: PresenceStatus.ABSENT,
+              sessionRole: null,
+              captureSource: CaptureSource.MANUAL,
+            }
+          : {
+              presenceStatus: PresenceStatus.PRESENT,
+              sessionRole: SessionRole.PARTICIPANT,
+              captureSource: CaptureSource.MANUAL,
+            },
       };
     });
     markCaptureActivity();
+  };
+
+  const toggleTrialAttendance = (participantId: string) => {
+    setSelectedTrialAttendanceIds((current) =>
+      current.includes(participantId)
+        ? current.filter((id) => id !== participantId)
+        : [...current, participantId],
+    );
+    markCaptureActivity();
+  };
+
+  const persistCurrentSession = () => {
+    if (!canSave || trainingHistory.some((session) => session.id === selectedSession.id)) return;
+    const date = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Berlin",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(selectedSession.startsAt);
+    const records: AttendanceRecord[] = attendanceRecordsForSession(
+      selectedSession,
+      attendance,
+    ).map((record) => ({
+      ...record,
+      membershipStatusAtTime: PersonMembershipStatus.ACTIVE_MEMBER,
+    }));
+    records.push(
+      ...selectedTrialAttendanceIds.map((memberId) => ({
+        sessionId: selectedSession.id,
+        memberId,
+        presenceStatus: PresenceStatus.PRESENT,
+        sessionRole: SessionRole.PARTICIPANT,
+        captureSource: CaptureSource.MANUAL,
+        membershipStatusAtTime: PersonMembershipStatus.TRIAL,
+      })),
+    );
+    const completedAt = new Date().toISOString();
+    const historicalSession: HistoricalTrainingSession = {
+      id: selectedSession.id,
+      date,
+      startsAt: selectedSession.startsAt.toISOString(),
+      endsAt: selectedSession.endsAt.toISOString(),
+      timeZone: "Europe/Berlin",
+      name: selectedSession.name,
+      trainingType: selectedSession.trainingType,
+      scheduledSlotId: selectedSession.scheduledSlotId,
+      dojoId: selectedSession.dojoId,
+      dojoNameSnapshot: selectedSession.dojoNameSnapshot,
+      dojo: selectedSession.dojo,
+      status: TrainingSessionStatus.COMPLETED,
+      attendance: records,
+      completedAt,
+      completedBy: demoRole,
+    };
+    setTrainingHistory((current) => [...current, historicalSession]);
+    const overrideAudits: AuditEntry[] = [];
+    const updatedTrialParticipants = trialParticipants.map((participant) => {
+      if (!selectedTrialAttendanceIds.includes(participant.id)) return participant;
+      let updated: TrialParticipant = {
+        ...participant,
+        firstTrialDate: participant.firstTrialDate ?? date,
+        lastTrialDate: date,
+      };
+      const attended = computeTrialSessionCount(participant.id, trainingHistory).attended;
+      if (
+        participant.overrideStatus === "ONE_ADDITIONAL_SESSION_APPROVED" &&
+        !participant.overrideUsed &&
+        attended === 4
+      ) {
+        const used = useTrialOverride(
+          participant,
+          attended,
+          demoRole,
+          completedAt,
+          selectedSession.id,
+        );
+        updated = { ...updated, ...used.updatedParticipant };
+        overrideAudits.push(used.auditEntry);
+      }
+      return updated;
+    });
+    setTrialParticipants(updatedTrialParticipants);
+    overrideAudits.forEach(addAuditEntry);
+    addAuditEntry({
+      id: `audit-session-${selectedSession.id}`,
+      occurredAt: completedAt,
+      actor: demoRole,
+      action: "TRAINING_SESSION_COMPLETED",
+      object: `TrainingSession:${selectedSession.id}`,
+      previousValue: null,
+      newValue: `${records.length} Anwesenheiten`,
+      reason: null,
+    });
   };
 
   const changeRole = (memberId: string, role: SessionRole) => {
@@ -271,14 +454,18 @@ export default function App() {
     }
     setAttendance((current) => ({
       ...current,
-      [memberId]: { presenceStatus: PresenceStatus.PRESENT, sessionRole: role },
+      [memberId]: {
+        presenceStatus: PresenceStatus.PRESENT,
+        sessionRole: role,
+        captureSource: CaptureSource.MANUAL,
+      },
     }));
     markCaptureActivity();
   };
 
   const resolveProposal = (
     proposalId: string,
-    action: import("./types").ProposalDecision,
+    action: ProposalDecision,
     selectedMemberId?: string,
   ) => {
     const proposal = proposals.find((item) => item.id === proposalId);
@@ -293,7 +480,6 @@ export default function App() {
         resolved: false,
         resolutionAction: null,
         selectedMemberId: undefined,
-        guestId: undefined,
       };
     } else if (action === "CONFIRM_CANDIDATE" && proposal.candidateMemberId) {
       nextProposal = {
@@ -301,7 +487,6 @@ export default function App() {
         resolved: true,
         resolutionAction: "CONFIRMED_MEMBER",
         selectedMemberId: proposal.candidateMemberId,
-        guestId: undefined,
       };
     } else if (action === "SELECT_MEMBER" && selectedMemberId) {
       nextProposal = {
@@ -309,7 +494,6 @@ export default function App() {
         resolved: true,
         resolutionAction: "SELECTED_MEMBER",
         selectedMemberId,
-        guestId: undefined,
       };
     } else if (action === "MARK_UNKNOWN") {
       nextProposal = {
@@ -317,7 +501,6 @@ export default function App() {
         resolved: true,
         resolutionAction: "MARKED_UNKNOWN",
         selectedMemberId: undefined,
-        guestId: undefined,
       };
     } else if (action === "DISCARD") {
       nextProposal = {
@@ -325,28 +508,11 @@ export default function App() {
         resolved: true,
         resolutionAction: "DISCARDED",
         selectedMemberId: undefined,
-        guestId: undefined,
       };
-    } else if (action === "CREATE_GUEST") {
-      const guestId = guestIdFactory();
-      nextProposal = {
-        ...proposal,
-        resolved: true,
-        resolutionAction: "GUEST_CREATED",
-        selectedMemberId: undefined,
-        guestId,
-      };
-      setGuests((current) => [
-        ...current.filter((guest) => guest.id !== proposal.guestId),
-        { id: guestId, firstName: `Gast Demo ${guestId}`, kind: "GAST" },
-      ]);
     } else {
       return;
     }
 
-    if (proposal.guestId && action !== "CREATE_GUEST") {
-      setGuests((current) => current.filter((guest) => guest.id !== proposal.guestId));
-    }
     const nextProposals = proposals.map((item) => (item.id === proposalId ? nextProposal : item));
     synchronizeProposalAttendance(proposals, nextProposals);
     setProposals(nextProposals);
@@ -356,8 +522,6 @@ export default function App() {
   const startManualCapture = () => {
     if (photoModeUsed) {
       synchronizeProposalAttendance(proposals, []);
-      const photoGuestIds = new Set(proposals.flatMap((proposal) => proposal.guestId ?? []));
-      setGuests((current) => current.filter((guest) => !photoGuestIds.has(guest.id)));
     }
     setPhotoModeUsed(false);
     setProposals(cloneProposals());
@@ -399,6 +563,10 @@ export default function App() {
   };
 
   const navigate = (next: AppScreen) => {
+    if (!canAccessScreen(demoRole, next)) {
+      setScreen("MANAGEMENT");
+      return;
+    }
     if (next === "MANUAL") {
       if (!workflow.trainingStarted) setScreen("LEADERSHIP");
       else if (!workflow.captureMethod) setScreen("CAPTURE_METHOD");
@@ -423,11 +591,33 @@ export default function App() {
   };
 
   // Bestehende Mitglieds-IDs und -Nummern für ID-Generatoren
-  const existingMemberIds = members.map((m) => m.id);
-  const existingMemberNumbers = members.map((m) => m.id); // Platzhalter bis echte Nummern im Member-Modell
+  const existingMemberIds = [
+    ...members.map((member) => member.id),
+    ...trialParticipants.map((participant) => participant.id),
+  ];
+  const existingMemberNumbers = members.map((m) => m.memberNumber ?? m.id);
+  const existingPersons = [
+    ...trialParticipants.map((participant) => ({
+      id: participant.id,
+      firstName: participant.firstName,
+      lastName: participant.lastName,
+      birthDate: participant.birthDate,
+    })),
+    ...members.map((member) => {
+      const [commaLast, commaFirst] = member.name.split(",").map((part) => part.trim());
+      const parts = member.name.trim().split(/\s+/);
+      return {
+        id: member.id,
+        firstName: commaFirst || parts[0] || member.name,
+        lastName: commaFirst ? commaLast || "Mitglied" : parts.slice(1).join(" ") || "Mitglied",
+        birthDate: member.birthDate ?? "0000",
+      };
+    }),
+  ];
 
+  const accessibleScreen = canAccessScreen(demoRole, screen) ? screen : "MANAGEMENT";
   let content;
-  switch (screen) {
+  switch (accessibleScreen) {
     // ------------------------------------------------------------------
     // Bestehende Anwesenheits-Screens (unverändert)
     // ------------------------------------------------------------------
@@ -440,6 +630,7 @@ export default function App() {
           members={members}
           selectedSession={selectedSession}
           sessions={sessions}
+          requiresExplicitSelection={hasParallelSessionChoice(sessions, selectedSession)}
           onChooseSession={() => setScreen("SESSION_SELECT")}
           onSelectHistory={() => setScreen("STATS")}
           onStart={beginTraining}
@@ -449,13 +640,9 @@ export default function App() {
     case "SESSION_SELECT":
       content = (
         <SessionSelectScreen
-          retroDate={retroDate ?? undefined}
           selectedId={selectedSession.id}
           sessions={sessions}
-          onBack={() => {
-            if (retroDate) setScreen("RETRO_DATE_SELECT");
-            else setScreen("START");
-          }}
+          onBack={() => setScreen("START")}
           onSelect={selectSession}
         />
       );
@@ -487,11 +674,14 @@ export default function App() {
         <ManualAttendanceScreen
           attendance={attendance}
           members={members}
+          trialParticipants={trialParticipants}
+          selectedTrialIds={selectedTrialAttendanceIds}
           responsibleId={selectedSession.responsibleTrainerId}
           onBack={() => setScreen("CAPTURE_METHOD")}
           onReview={reviewAttendance}
           onRoleChange={changeRole}
           onToggleAttendance={toggleAttendance}
+          onToggleTrial={toggleTrialAttendance}
         />
       );
       break;
@@ -522,8 +712,9 @@ export default function App() {
       content = (
         <SummaryScreen
           attendance={attendance}
+          trialParticipants={trialParticipants}
+          selectedTrialIds={selectedTrialAttendanceIds}
           canSave={canSave}
-          guests={guests}
           members={members}
           proposals={activeProposals}
           session={selectedSession}
@@ -531,7 +722,10 @@ export default function App() {
           onManual={editManualAttendance}
           onPhotoReview={() => setScreen(photoModeUsed ? "PHOTO_REVIEW" : "CAPTURE_METHOD")}
           onSave={() => {
-            if (canSave) setScreen("COMPLETE");
+            if (canSave) {
+              persistCurrentSession();
+              setScreen("COMPLETE");
+            }
           }}
         />
       );
@@ -540,15 +734,13 @@ export default function App() {
       content = (
         <CompleteScreen
           attendance={attendance}
-          guests={guests}
+          selectedTrialIds={selectedTrialAttendanceIds}
           members={members}
           session={selectedSession}
           onHome={() => {
-            setRetroDate(null);
             setScreen("START");
           }}
           onNext={() => {
-            setRetroDate(null);
             startNextSession();
           }}
           onOverview={() => setScreen("STATS")}
@@ -557,7 +749,12 @@ export default function App() {
       break;
     case "STATS":
       content = (
-        <ReportingScreen demoRole={demoRole} members={members} onBack={() => setScreen("START")} />
+        <ReportingScreen
+          demoRole={demoRole}
+          members={members}
+          history={trainingHistory}
+          onBack={() => setScreen("START")}
+        />
       );
       break;
 
@@ -568,12 +765,12 @@ export default function App() {
       content = (
         <TrialListScreen
           participants={trialParticipants}
-          history={[]}
+          history={trainingHistory}
           onSelect={(id) => {
             setSelectedTrialId(id);
             setScreen("TRIAL_PROFILE");
           }}
-          onNew={() => setScreen("TRIAL_NEW")}
+          onNew={() => navigate("TRIAL_NEW")}
           onBack={() => setScreen("START")}
         />
       );
@@ -582,8 +779,10 @@ export default function App() {
       content = (
         <TrialNewScreen
           existingParticipants={trialParticipants}
+          existingPersons={existingPersons}
           isBoard={isBoard}
           onSave={(participant) => {
+            if (!canManageTrials) return;
             setTrialParticipants((prev) => [...prev, participant]);
             setSelectedTrialId(participant.id);
             setScreen("TRIAL_PROFILE");
@@ -596,8 +795,25 @@ export default function App() {
       content = selectedTrialParticipant ? (
         <TrialProfileScreen
           participant={selectedTrialParticipant}
-          history={[]}
-          onContractView={() => setScreen("TRIAL_CONTRACT")}
+          history={trainingHistory}
+          onContractView={() => navigate("TRIAL_CONTRACT")}
+          onBoardOverride={
+            hasPermission(demoRole, AppPermission.GRANT_TRIAL_OVERRIDE) &&
+            selectedTrialParticipant.active &&
+            selectedTrialParticipant.membershipStatus === PersonMembershipStatus.TRIAL &&
+            (selectedTrialParticipant.contractStatus === ContractStatus.NOT_ISSUED ||
+              selectedTrialParticipant.contractStatus === ContractStatus.ISSUED) &&
+            selectedTrialParticipant.overrideStatus === "NONE" &&
+            selectedTrialAttended === 4
+              ? () => navigate("TRIAL_BOARD_OVERRIDE")
+              : undefined
+          }
+          onConvert={
+            hasPermission(demoRole, AppPermission.CONVERT_TRIAL_MEMBER) &&
+            checkConversionEligibility(selectedTrialParticipant).eligible
+              ? () => navigate("TRIAL_CONVERT")
+              : undefined
+          }
           onBack={() => setScreen("TRIAL_LIST")}
         />
       ) : null;
@@ -608,6 +824,12 @@ export default function App() {
           participant={selectedTrialParticipant}
           isBoard={isBoard}
           onUpdate={(updated) => {
+            if (!canManageTrials) return;
+            if (
+              updated.contractStatus === ContractStatus.MEMBERSHIP_ACTIVATED &&
+              !hasPermission(demoRole, AppPermission.ACTIVATE_CONTRACT)
+            )
+              return;
             updateTrialParticipant(updated);
           }}
           onBack={() => setScreen("TRIAL_PROFILE")}
@@ -622,7 +844,9 @@ export default function App() {
       content = selectedTrialParticipant ? (
         <BoardOverrideScreen
           participant={selectedTrialParticipant}
+          attendedTrialCount={selectedTrialAttended}
           onSave={(updated, audit) => {
+            if (!hasPermission(demoRole, AppPermission.GRANT_TRIAL_OVERRIDE)) return;
             updateTrialParticipant(updated);
             addAuditEntry(audit);
             setScreen("TRIAL_PROFILE");
@@ -635,11 +859,41 @@ export default function App() {
       content = selectedTrialParticipant ? (
         <TrialConversionScreen
           participant={selectedTrialParticipant}
-          existingMemberIds={existingMemberIds}
           existingMemberNumbers={existingMemberNumbers}
-          history={[]}
+          history={trainingHistory}
           onConvert={(result: ConversionResult) => {
+            if (!hasPermission(demoRole, AppPermission.CONVERT_TRIAL_MEMBER)) return;
             updateTrialParticipant(result.updatedParticipant);
+            const participant = result.updatedParticipant;
+            setMembers((current) =>
+              current.some((member) => member.id === participant.id)
+                ? current
+                : [
+                    ...current,
+                    {
+                      id: participant.id,
+                      memberNumber: result.memberNumber,
+                      name: `${participant.firstName} ${participant.lastName}`,
+                      initials:
+                        `${participant.firstName[0] ?? ""}${participant.lastName[0] ?? ""}`.toUpperCase(),
+                      gender: participant.gender,
+                      birthDate: participant.birthDate,
+                      beltColor: (participant.beltColor ?? "WEISS") as Member["beltColor"],
+                      beltGrade: participant.beltGrade ?? "10. Kyu",
+                      qualification: result.qualification,
+                      active: true,
+                      trainingsVisited: trainingHistory.filter((session) =>
+                        session.attendance.some(
+                          (record) =>
+                            record.memberId === participant.id &&
+                            record.presenceStatus === PresenceStatus.PRESENT,
+                        ),
+                      ).length,
+                      responsibleAssignments: 0,
+                      assistantAssignments: 0,
+                    },
+                  ],
+            );
             addAuditEntry(result.auditEntry);
             setScreen("TRIAL_LIST");
           }}
@@ -652,20 +906,26 @@ export default function App() {
         <DirectMemberNewScreen
           existingMemberIds={existingMemberIds}
           existingMemberNumbers={existingMemberNumbers}
+          existingPersons={existingPersons}
           onSave={(result: DirectMemberResult, audit: AuditEntry) => {
+            if (!canCreateDirectMember) return;
             // Neues Mitglied als vereinfachtes Member-Objekt in die Liste aufnehmen
             const newMember: Member = {
               id: result.memberId,
+              memberNumber: result.memberNumber,
               name: result.displayName,
-              initials: result.displayName
-                .split(" ")
-                .slice(0, 2)
-                .map((w) => w[0] ?? "")
-                .join("")
-                .toUpperCase() || "??",
+              initials:
+                result.displayName
+                  .split(" ")
+                  .slice(0, 2)
+                  .map((w) => w[0] ?? "")
+                  .join("")
+                  .toUpperCase() || "??",
               gender: result.gender,
-              beltColor: (result.beltColor ?? "WEISS") as Member["beltColor"],
-              beltGrade: result.beltGrade ?? "10. Kyu",
+              birthDate: result.birthDate,
+              contactPhone: result.contactPhone,
+              beltColor: result.beltColor as Member["beltColor"],
+              beltGrade: result.beltGrade,
               qualification: result.qualification,
               active: true,
               trainingsVisited: 0,
@@ -684,7 +944,7 @@ export default function App() {
       content = (
         <TrialReportScreen
           participants={trialParticipants}
-          history={[]}
+          history={trainingHistory}
           onSelectParticipant={(id) => {
             setSelectedTrialId(id);
             setScreen("TRIAL_PROFILE");
@@ -704,11 +964,10 @@ export default function App() {
           members={members}
           existingHistoryIds={beltHistory.map((e) => e.id)}
           actorName={demoRole}
-          canEdit={isBoard || demoRole === DemoRole.TRAINER}
+          canEdit={canDecideBeltSuggestion}
           onDecide={(updated, newEntry) => {
-            setBeltSuggestions((prev) =>
-              prev.map((s) => (s.id === updated.id ? updated : s)),
-            );
+            if (!canDecideBeltSuggestion) return;
+            setBeltSuggestions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
             if (newEntry) {
               setBeltHistory((prev) => [...prev, newEntry]);
               // Mitglied aktualisieren
@@ -738,8 +997,8 @@ export default function App() {
         <BeltHistoryScreen
           member={selectedBeltMember}
           history={beltHistory}
-          canEdit={isBoard || demoRole === DemoRole.TRAINER}
-          onChangesBelt={() => setScreen("BELT_CHANGE")}
+          canEdit={canChangeBelt}
+          onChangesBelt={() => navigate("BELT_CHANGE")}
           onBack={() => setScreen("BELT_REPORT")}
         />
       ) : null;
@@ -751,6 +1010,7 @@ export default function App() {
           existingHistoryIds={beltHistory.map((e) => e.id)}
           actorName={demoRole}
           onConfirm={(entry) => {
+            if (!canChangeBelt) return;
             setBeltHistory((prev) => [...prev, entry]);
             setMembers((prev) =>
               prev.map((m) =>
@@ -789,8 +1049,9 @@ export default function App() {
           members={members}
           onBack={() => setScreen("BELT_REPORT")}
           onSuggestionCreated={(suggestion) => {
+            if (!canChangeBelt) return;
             setBeltSuggestions((prev) => [...prev, suggestion]);
-            setScreen("BELT_SUGGESTION_REVIEW");
+            navigate("BELT_SUGGESTION_REVIEW");
           }}
         />
       );
@@ -803,11 +1064,21 @@ export default function App() {
       content = (
         <ManagementScreen
           openBeltSuggestionsCount={beltSuggestions.filter((s) => s.status === "OPEN").length}
-          onTrialList={() => setScreen("TRIAL_LIST")}
-          onNewMember={() => setScreen("MEMBER_DIRECT_NEW")}
-          onBeltReport={() => setScreen("BELT_REPORT")}
-          onBeltSuggestions={() => setScreen("BELT_SUGGESTION_REVIEW")}
-          onRetroEntry={() => setScreen("RETRO_DATE_SELECT")}
+          canManageTrials={canManageTrials}
+          canCreateDirectMember={canCreateDirectMember}
+          canManageBelts={canChangeBelt}
+          canDecideBeltSuggestions={canDecideBeltSuggestion}
+          onTrialList={() => navigate("TRIAL_LIST")}
+          onNewMember={() => navigate("MEMBER_DIRECT_NEW")}
+          onBeltReport={() => navigate("BELT_REPORT")}
+          onBeltSuggestions={() => navigate("BELT_SUGGESTION_REVIEW")}
+          onBeltSimulation={() => navigate("BELT_SIM_DEMO")}
+          onRetroEntry={() => navigate("RETRO_DATE_SELECT")}
+          recentRetrospectiveSessions={trainingHistory.filter((session) =>
+            session.id.startsWith("retro-"),
+          )}
+          auditCount={auditEntries.length}
+          auditEntries={auditEntries}
         />
       );
       break;
@@ -817,15 +1088,32 @@ export default function App() {
     // ------------------------------------------------------------------
     case "RETRO_DATE_SELECT":
       content = (
-        <RetroDateSelectScreen
-          onSelect={(date) => {
-            setRetroDate(date);
-            setScreen("SESSION_SELECT");
-          }}
-          onBack={() => {
-            setRetroDate(null);
+        <RetrospectiveSessionScreen
+          members={members}
+          trialParticipants={trialParticipants}
+          history={trainingHistory}
+          actorRole={demoRole}
+          onSave={(input: RetrospectiveSessionInput) => {
+            if (!hasPermission(demoRole, AppPermission.CREATE_RETROSPECTIVE_SESSION)) return;
+            const { session, auditEntry } = createRetrospectiveSession(
+              nextRetrospectiveId(),
+              input,
+              new Intl.DateTimeFormat("en-CA", {
+                timeZone: "Europe/Berlin",
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+              }).format(new Date()),
+            );
+            const historicalSession: HistoricalTrainingSession = {
+              ...session,
+              trainingType: session.trainingType as TrainingType,
+            };
+            setTrainingHistory((current) => [...current, historicalSession]);
+            addAuditEntry(auditEntry);
             setScreen("MANAGEMENT");
           }}
+          onBack={() => setScreen("MANAGEMENT")}
         />
       );
       break;

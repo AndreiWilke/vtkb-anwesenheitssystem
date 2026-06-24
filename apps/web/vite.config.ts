@@ -12,22 +12,28 @@ export default defineConfig({
         name: "VTKB Anwesenheit Demo",
         short_name: "VTKB Anwesenheit",
         description: "Lokaler UX-Prototyp fuer die Anwesenheitserfassung",
-        theme_color: "#b42318",
-        background_color: "#ffffff",
+        theme_color: "#9d1f17",
+        background_color: "#f4f1ea",
         display: "standalone",
         lang: "de",
         icons: [
           {
+            src: "VTKBLogo.png",
+            sizes: "704x704",
+            type: "image/png",
+            purpose: "any",
+          },
+          {
             src: "icon.svg",
             sizes: "any",
             type: "image/svg+xml",
-            purpose: "any",
+            purpose: "maskable",
           },
         ],
       },
     }),
   ],
   build: {
-    sourcemap: true,
+    sourcemap: false,
   },
 });

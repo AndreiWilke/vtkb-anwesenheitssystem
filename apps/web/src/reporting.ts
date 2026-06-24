@@ -1,9 +1,11 @@
 import {
+  BELT_LABELS,
   DemoRole,
   PresenceStatus,
   SessionRole,
   SettlementStatus,
   TrainingSessionStatus,
+  formatGermanDate,
   type AttendanceRecord,
   type CompensationCorrection,
   type CompensationRate,
@@ -13,13 +15,8 @@ import {
   type SettlementStatus as SettlementStatusValue,
 } from "@vtkb/shared";
 
-import type {
-  HistoricalTrainingSession,
-  Member,
-  TrainingType,
-  TrialParticipant,
-} from "./types";
-import { ContractStatus, PersonMembershipStatus } from "@vtkb/shared";
+import type { HistoricalTrainingSession, Member, TrainingType, TrialParticipant } from "./types";
+import { ContractStatus, PersonMembershipStatus, checkTrialEligibility } from "@vtkb/shared";
 import { computeTrialSessionCount } from "./trialWorkflow";
 
 export type PeriodFilter =
@@ -184,7 +181,11 @@ export function calculateDashboardMetrics(
   ).length;
 
   // Alle Settlement-Kennzahlen in einem einzigen Durchlauf
-  const settlementTotals = settlements.reduce(
+  const settlementTotals = settlements.reduce<{
+    totalCents: number;
+    openReviewNotes: number;
+    counts: Partial<Record<SettlementStatusValue, number>>;
+  }>(
     (acc, item) => {
       if (item.status !== SettlementStatus.CANCELLED) {
         acc.totalCents += item.view.totalCents;
@@ -196,7 +197,7 @@ export function calculateDashboardMetrics(
     {
       totalCents: 0,
       openReviewNotes: 0,
-      counts: {} as Partial<Record<SettlementStatusValue, number>>,
+      counts: {},
     },
   );
 
@@ -339,7 +340,9 @@ export function findCompensationRate(
       (rate.validUntil === null || rate.validUntil >= date),
   );
   if (matches.length > 1) {
-    throw new Error(`Mehrere aktive Vergütungssätze überschneiden sich für ${role} am ${date}.`);
+    throw new Error(
+      `Mehrere aktive Vergütungssätze überschneiden sich für ${role} am ${formatGermanDate(date)}.`,
+    );
   }
   return matches[0] ?? null;
 }
@@ -364,7 +367,9 @@ export function calculateSettlement(
         return [];
       }
       const rate = findCompensationRate(rates, record.sessionRole, session.date);
-      const reviewNote = rate ? null : `Kein aktiver Vergütungssatz für ${session.date}`;
+      const reviewNote = rate
+        ? null
+        : `Kein aktiver Vergütungssatz für ${formatGermanDate(session.date)}`;
       return [
         {
           sessionId: session.id,
@@ -432,6 +437,25 @@ function settlementViewFromLines(
   };
 }
 
+function snapshotTotal(
+  lines: readonly SettlementLine[],
+  corrections: readonly CompensationCorrection[],
+): number {
+  return (
+    lines.reduce((sum, line) => sum + (line.amountCents ?? 0), 0) +
+    corrections.reduce((sum, correction) => sum + correction.amountCents, 0)
+  );
+}
+
+function assertConsistentSnapshot(snapshot: SettlementSnapshot): void {
+  const expected = snapshotTotal(snapshot.lines, snapshot.corrections);
+  if (snapshot.totalCents !== expected) {
+    throw new Error(
+      `Inkonsistenter Abrechnungssnapshot: Gesamt ${snapshot.totalCents}, erwartet ${expected}.`,
+    );
+  }
+}
+
 export function resolveSettlementView(
   status: SettlementStatusValue,
   calculation: SettlementCalculation,
@@ -444,6 +468,7 @@ export function resolveSettlementView(
       status === SettlementStatus.PAID ||
       status === SettlementStatus.CANCELLED);
   if (snapshotIsBinding) {
+    assertConsistentSnapshot(snapshot);
     return settlementViewFromLines(
       snapshot.memberId,
       snapshot.month,
@@ -467,8 +492,10 @@ export function validateSettlementForReview(calculation: SettlementCalculation):
   const issues = [
     ...calculation.reviewNotes,
     ...calculation.lines.flatMap((line) => {
-      if (line.rateCents === null) return [`Vergütungssatz fehlt für ${line.date}.`];
-      if (line.amountCents === null) return [`Abrechnungsbetrag fehlt für ${line.date}.`];
+      if (line.rateCents === null)
+        return [`Vergütungssatz fehlt für ${formatGermanDate(line.date)}.`];
+      if (line.amountCents === null)
+        return [`Abrechnungsbetrag fehlt für ${formatGermanDate(line.date)}.`];
       return [];
     }),
   ];
@@ -541,12 +568,16 @@ export function createSettlementSnapshot(
   approvedBy: string,
   approvedAt: string,
 ): SettlementSnapshot {
+  const totalCents = snapshotTotal(calculation.lines, corrections);
+  if (calculation.totalCents !== totalCents) {
+    throw new Error("Abrechnung und Korrekturen ergeben keinen konsistenten Gesamtbetrag.");
+  }
   return Object.freeze({
     month: calculation.month,
     memberId: calculation.memberId,
     lines: Object.freeze(calculation.lines.map((line) => Object.freeze({ ...line }))),
     corrections: Object.freeze(corrections.map((correction) => Object.freeze({ ...correction }))),
-    totalCents: calculation.totalCents,
+    totalCents,
     snapshotKind: "APPROVAL",
     capturedAt: approvedAt,
     capturedBy: approvedBy,
@@ -561,12 +592,16 @@ export function createCancellationSnapshot(
   cancelledBy: string,
   cancelledAt: string,
 ): SettlementSnapshot {
+  const totalCents = snapshotTotal(calculation.lines, corrections);
+  if (calculation.totalCents !== totalCents) {
+    throw new Error("Abrechnung und Korrekturen ergeben keinen konsistenten Gesamtbetrag.");
+  }
   return Object.freeze({
     month: calculation.month,
     memberId: calculation.memberId,
     lines: Object.freeze(calculation.lines.map((line) => Object.freeze({ ...line }))),
     corrections: Object.freeze(corrections.map((correction) => Object.freeze({ ...correction }))),
-    totalCents: calculation.totalCents,
+    totalCents,
     snapshotKind: "CANCELLATION",
     capturedAt: cancelledAt,
     capturedBy: cancelledBy,
@@ -717,7 +752,10 @@ export function roleCan(
 }
 
 function csvCell(value: string | number): string {
-  const text = String(value);
+  const raw = String(value);
+  const trimmedStart = raw.trimStart();
+  const isNormalNegativeNumber = /^-\d+(?:[.,]\d+)?$/.test(trimmedStart);
+  const text = !isNormalNegativeNumber && /^[=+\-@]/.test(trimmedStart) ? `'${raw}` : raw;
   return /[;"\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
@@ -745,14 +783,14 @@ export function attendanceCsv(
     ...summaries.map((item) => [
       item.member.name,
       item.member.gender,
-      item.member.beltColor,
+      BELT_LABELS[item.member.beltColor],
       item.member.beltGrade,
       periodLabel,
       item.total,
       item.participant,
       item.responsible,
       item.assistant,
-      item.lastAttendance ?? "",
+      item.lastAttendance ? formatGermanDate(item.lastAttendance) : "",
     ]),
   ]);
 }
@@ -832,11 +870,13 @@ export function buildTrialSummaries(
 ): TrialSummary[] {
   return participants.map((participant) => {
     const { attended, remaining } = computeTrialSessionCount(participant.id, history);
-    const isBlocked =
-      attended >= 4 &&
-      participant.contractStatus === ContractStatus.NOT_ISSUED &&
-      participant.membershipStatus === PersonMembershipStatus.TRIAL &&
-      !participant.overrideUsed;
+    const isBlocked = !checkTrialEligibility({
+      attendedCount: attended,
+      contractStatus: participant.contractStatus,
+      membershipStatus: participant.membershipStatus,
+      overrideStatus: participant.overrideStatus,
+      overrideUsed: participant.overrideUsed,
+    }).allowed;
     const hasPendingContract =
       participant.contractStatus === ContractStatus.ISSUED ||
       participant.contractStatus === ContractStatus.NOT_ISSUED;
@@ -853,25 +893,22 @@ export interface TrialDashboardMetrics {
 
 export function trialDashboardMetrics(
   summaries: readonly TrialSummary[],
-  currentYear: number,
+  referenceYear: number,
 ): TrialDashboardMetrics {
   return {
     totalActive: summaries.filter(
       (s) =>
-        s.participant.active &&
-        s.participant.membershipStatus === PersonMembershipStatus.TRIAL,
+        s.participant.active && s.participant.membershipStatus === PersonMembershipStatus.TRIAL,
     ).length,
     blocked: summaries.filter((s) => s.isBlocked).length,
     contractPending: summaries.filter(
-      (s) =>
-        s.participant.active &&
-        s.hasPendingContract &&
-        s.attended >= 3,
+      (s) => s.participant.active && s.hasPendingContract && s.attended >= 3,
     ).length,
     convertedThisYear: summaries.filter(
       (s) =>
         s.participant.membershipStatus === PersonMembershipStatus.ACTIVE_MEMBER &&
-        !!s.participant.memberId,
+        !!s.participant.memberId &&
+        s.participant.convertedAt?.slice(0, 4) === String(referenceYear),
     ).length,
   };
 }
@@ -891,9 +928,9 @@ export function trialCsv(summaries: readonly TrialSummary[]): string {
     ...summaries.map(({ participant, attended }) => [
       participant.displayName,
       participant.gender,
-      participant.birthDate,
-      participant.firstTrialDate ?? "",
-      participant.lastTrialDate ?? "",
+      formatGermanDate(participant.birthDate),
+      participant.firstTrialDate ? formatGermanDate(participant.firstTrialDate) : "",
+      participant.lastTrialDate ? formatGermanDate(participant.lastTrialDate) : "",
       attended,
       participant.contractStatus,
       participant.membershipStatus,
@@ -910,8 +947,20 @@ export function trialCsv(summaries: readonly TrialSummary[]): string {
  */
 export function beltReportCsv(
   members: readonly Member[],
-  history: readonly { personId: string; effectiveFrom?: string; newBeltColor: string; newBeltGrade: string; source: string }[],
-  suggestions: readonly { memberId: string; status: string; suggestedBeltColor: string; confidencePercent: number; sessionDate: string }[],
+  history: readonly {
+    personId: string;
+    effectiveFrom?: string;
+    newBeltColor: string;
+    newBeltGrade: string;
+    source: string;
+  }[],
+  suggestions: readonly {
+    memberId: string;
+    status: string;
+    suggestedBeltColor: string;
+    confidencePercent: number;
+    sessionDate: string;
+  }[],
 ): string {
   const openByMember = new Map<string, string>();
   for (const s of suggestions) {
@@ -942,9 +991,9 @@ export function beltReportCsv(
       .map((m) => [
         m.name,
         m.gender,
-        m.beltColor,
+        BELT_LABELS[m.beltColor],
         m.beltGrade,
-        lastChangeByMember.get(m.id) ?? "",
+        lastChangeByMember.get(m.id) ? formatGermanDate(lastChangeByMember.get(m.id)!) : "",
         openByMember.get(m.id) ?? "",
       ]),
   ]);

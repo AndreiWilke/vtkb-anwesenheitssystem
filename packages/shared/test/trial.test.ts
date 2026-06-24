@@ -37,14 +37,11 @@ function trialRecord(
     participantId: "trial-001",
     presenceStatus: overrides.presenceStatus ?? PresenceStatus.PRESENT,
     sessionStatus: overrides.sessionStatus ?? TrainingSessionStatus.COMPLETED,
-    membershipStatusAtTime:
-      overrides.membershipStatusAtTime ?? PersonMembershipStatus.TRIAL,
+    membershipStatusAtTime: overrides.membershipStatusAtTime ?? PersonMembershipStatus.TRIAL,
   };
 }
 
-function baseParticipant(
-  overrides: Partial<TrialParticipant> = {},
-): TrialParticipant {
+function baseParticipant(overrides: Partial<TrialParticipant> = {}): TrialParticipant {
   return {
     id: "trial-001",
     firstName: "Lina",
@@ -79,9 +76,7 @@ describe("countTrialSessionsAttended", () => {
 
   it("zaehlt nur PRESENT-Datensaetze", () => {
     expect(
-      countTrialSessionsAttended([
-        trialRecord("s1", { presenceStatus: PresenceStatus.ABSENT }),
-      ]),
+      countTrialSessionsAttended([trialRecord("s1", { presenceStatus: PresenceStatus.ABSENT })]),
     ).toBe(0);
   });
 
@@ -212,6 +207,18 @@ describe("checkTrialEligibility", () => {
     expect(result.reason).toContain("Vier kostenlose Probetrainings");
   });
 
+  it("blockiert die fünfte Teilnahme bei lediglich ausgegebenem Vertrag", () => {
+    expect(
+      checkTrialEligibility({
+        attendedCount: 4,
+        contractStatus: ContractStatus.ISSUED,
+        membershipStatus: PersonMembershipStatus.TRIAL,
+        overrideStatus: TrialOverrideStatus.NONE,
+        overrideUsed: false,
+      }).allowed,
+    ).toBe(false);
+  });
+
   it("erlaubt fuenfte Teilnahme mit eingegangenen Vertrag (RECEIVED)", () => {
     const result = checkTrialEligibility({
       attendedCount: 4,
@@ -267,13 +274,22 @@ describe("useTrialOverride", () => {
       overrideStatus: TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED,
       overrideUsed: false,
     });
-    const updated = useTrialOverride(participant);
-    expect(updated.overrideUsed).toBe(true);
+    const result = useTrialOverride(
+      participant,
+      4,
+      "BOARD",
+      "2026-06-24T10:00:00.000Z",
+      "session-fifth",
+    );
+    expect(result.updatedParticipant.overrideUsed).toBe(true);
+    expect(result.auditEntry.action).toBe("BOARD_OVERRIDE_USED");
   });
 
   it("wirft bei fehlender Ausnahme", () => {
     const participant = baseParticipant({ overrideStatus: TrialOverrideStatus.NONE });
-    expect(() => useTrialOverride(participant)).toThrow();
+    expect(() =>
+      useTrialOverride(participant, 4, "BOARD", "2026-06-24T10:00:00.000Z", "session-fifth"),
+    ).toThrow();
   });
 
   it("wirft bei bereits genutzter Ausnahme", () => {
@@ -281,7 +297,26 @@ describe("useTrialOverride", () => {
       overrideStatus: TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED,
       overrideUsed: true,
     });
-    expect(() => useTrialOverride(participant)).toThrow();
+    expect(() =>
+      useTrialOverride(participant, 4, "BOARD", "2026-06-24T10:00:00.000Z", "session-fifth"),
+    ).toThrow();
+  });
+
+  it.each([0, 1, 2, 3])("verbraucht die Ausnahme nicht beim Besuch %s", (attended) => {
+    const participant = baseParticipant({
+      overrideStatus: TrialOverrideStatus.ONE_ADDITIONAL_SESSION_APPROVED,
+      overrideUsed: false,
+    });
+    expect(() =>
+      useTrialOverride(
+        participant,
+        attended,
+        "BOARD",
+        "2026-06-24T10:00:00.000Z",
+        "session-too-early",
+      ),
+    ).toThrow("fünfte");
+    expect(participant.overrideUsed).toBe(false);
   });
 });
 
@@ -291,69 +326,49 @@ describe("useTrialOverride", () => {
 
 describe("canTransitionContract / transitionContract", () => {
   it("erlaubt NOT_ISSUED → ISSUED", () => {
-    expect(
-      canTransitionContract(ContractStatus.NOT_ISSUED, ContractStatus.ISSUED),
-    ).toBe(true);
+    expect(canTransitionContract(ContractStatus.NOT_ISSUED, ContractStatus.ISSUED)).toBe(true);
   });
 
   it("erlaubt ISSUED → RECEIVED", () => {
-    expect(
-      canTransitionContract(ContractStatus.ISSUED, ContractStatus.RECEIVED),
-    ).toBe(true);
+    expect(canTransitionContract(ContractStatus.ISSUED, ContractStatus.RECEIVED)).toBe(true);
   });
 
   it("erlaubt RECEIVED → MEMBERSHIP_ACTIVATED", () => {
     expect(
-      canTransitionContract(
-        ContractStatus.RECEIVED,
-        ContractStatus.MEMBERSHIP_ACTIVATED,
-      ),
+      canTransitionContract(ContractStatus.RECEIVED, ContractStatus.MEMBERSHIP_ACTIVATED),
     ).toBe(true);
   });
 
   it("erlaubt ISSUED → NOT_ISSUED (Rueckgabe)", () => {
-    expect(
-      canTransitionContract(ContractStatus.ISSUED, ContractStatus.NOT_ISSUED),
-    ).toBe(true);
+    expect(canTransitionContract(ContractStatus.ISSUED, ContractStatus.NOT_ISSUED)).toBe(true);
   });
 
   it("verbietet NOT_ISSUED direkt zu MEMBERSHIP_ACTIVATED", () => {
     expect(
-      canTransitionContract(
-        ContractStatus.NOT_ISSUED,
-        ContractStatus.MEMBERSHIP_ACTIVATED,
-      ),
+      canTransitionContract(ContractStatus.NOT_ISSUED, ContractStatus.MEMBERSHIP_ACTIVATED),
     ).toBe(false);
   });
 
   it("verbietet MEMBERSHIP_ACTIVATED → NOT_ISSUED", () => {
     expect(
-      canTransitionContract(
-        ContractStatus.MEMBERSHIP_ACTIVATED,
-        ContractStatus.NOT_ISSUED,
-      ),
+      canTransitionContract(ContractStatus.MEMBERSHIP_ACTIVATED, ContractStatus.NOT_ISSUED),
     ).toBe(false);
   });
 
   it("verbietet NOT_ISSUED direkt zu RECEIVED", () => {
-    expect(
-      canTransitionContract(ContractStatus.NOT_ISSUED, ContractStatus.RECEIVED),
-    ).toBe(false);
+    expect(canTransitionContract(ContractStatus.NOT_ISSUED, ContractStatus.RECEIVED)).toBe(false);
   });
 
   it("transitionContract wirft bei unzulaessigem Uebergang", () => {
     expect(() =>
-      transitionContract(
-        ContractStatus.NOT_ISSUED,
-        ContractStatus.MEMBERSHIP_ACTIVATED,
-      ),
+      transitionContract(ContractStatus.NOT_ISSUED, ContractStatus.MEMBERSHIP_ACTIVATED),
     ).toThrow("nicht zulaessig");
   });
 
   it("transitionContract gibt den neuen Status zurueck bei erlaubtem Uebergang", () => {
-    expect(
-      transitionContract(ContractStatus.NOT_ISSUED, ContractStatus.ISSUED),
-    ).toBe(ContractStatus.ISSUED);
+    expect(transitionContract(ContractStatus.NOT_ISSUED, ContractStatus.ISSUED)).toBe(
+      ContractStatus.ISSUED,
+    );
   });
 });
 

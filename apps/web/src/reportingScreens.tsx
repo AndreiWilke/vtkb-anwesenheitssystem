@@ -1,12 +1,16 @@
 import { useMemo, useRef, useState } from "react";
 import {
   CompensationBillingType,
+  DOJOS,
   DemoRole,
   MemberQualification,
   PresenceStatus,
   SessionRole,
   SettlementStatus,
   TrainingSessionStatus,
+  formatGermanDate,
+  isValidGermanDate,
+  parseGermanDate,
   type AuditEntry,
   type CompensationCorrection,
   type CompensationRate,
@@ -33,6 +37,7 @@ import {
 
 import {
   BeltMark,
+  GermanDateInput,
   MemberAvatar,
   PageHeading,
   PrimaryButton,
@@ -72,9 +77,9 @@ import {
   type PeriodFilter,
   type SettlementView,
 } from "./reporting";
-import { historicalSessions, initialCompensationRates } from "./reportingMockData";
+import { initialCompensationRates } from "./reportingMockData";
 import { clubTimeFormatter } from "./time";
-import type { Member, ReportingView, TrainingType } from "./types";
+import type { HistoricalTrainingSession, Member, ReportingView, TrainingType } from "./types";
 
 const monthLabels = new Intl.DateTimeFormat("de-DE", {
   month: "long",
@@ -105,6 +110,7 @@ const roleLabels = {
 };
 
 const trainingTypeLabels: Record<TrainingType, string> = {
+  ALLGEMEINES_TRAINING: "Allgemeines Training",
   KINDERTRAINING: "Kindertraining",
   JUGENDTRAINING: "Jugendtraining",
   ERWACHSENENTRAINING: "Erwachsenentraining",
@@ -113,7 +119,38 @@ const trainingTypeLabels: Record<TrainingType, string> = {
 };
 
 function displayDate(date: string): string {
-  return dateFormatter.format(new Date(`${date}T12:00:00.000Z`));
+  return formatGermanDate(date);
+}
+
+function displayAuditValue(value: string | null): string {
+  if (value === null) return "–";
+  return value.replace(/\b\d{4}-\d{2}-\d{2}\b/g, (date) => formatGermanDate(date));
+}
+
+function displayActor(actor: string): string {
+  switch (actor) {
+    case DemoRole.BOARD:
+      return "Vorstand";
+    case DemoRole.TRAINER:
+      return "Trainer";
+    case DemoRole.ASSISTANT_TRAINER:
+      return "Assistenztrainer";
+    case DemoRole.TREASURER:
+      return "Kassenwart";
+    default:
+      return actor;
+  }
+}
+
+export function SettlementReviewNotes({ notes }: { notes: readonly string[] }) {
+  return (
+    <div className="validation-box">
+      <strong>Prüfhinweis</strong>
+      {notes.map((note, index) => (
+        <div key={`${index}-${note}`}>{note}</div>
+      ))}
+    </div>
+  );
 }
 
 function displayMonth(month: string): string {
@@ -157,11 +194,12 @@ function isCancellableStatus(status: SettlementStatusValue): boolean {
 
 interface ReportingScreenProps {
   members: readonly Member[];
+  history: readonly HistoricalTrainingSession[];
   demoRole: DemoRoleValue;
   onBack: () => void;
 }
 
-export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenProps) {
+export function ReportingScreen({ members, history, demoRole, onBack }: ReportingScreenProps) {
   const [view, setView] = useState<ReportingView>(
     demoRole === DemoRole.TRAINER
       ? "OWN"
@@ -188,8 +226,8 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
   const [transitionErrors, setTransitionErrors] = useState<Record<string, string>>({});
   const [periodMode, setPeriodMode] = useState<PeriodFilter["mode"]>("MONTH");
   const [year, setYear] = useState(2026);
-  const [rangeFrom, setRangeFrom] = useState("2026-01-01");
-  const [rangeUntil, setRangeUntil] = useState("2026-06-30");
+  const [rangeFrom, setRangeFrom] = useState("01.01.2026");
+  const [rangeUntil, setRangeUntil] = useState("30.06.2026");
   const [memberQuery, setMemberQuery] = useState("");
   const [gender, setGender] = useState("");
   const [trainingType, setTrainingType] = useState("");
@@ -201,16 +239,28 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
   const [detailRole, setDetailRole] = useState("");
   const [sortDescending, setSortDescending] = useState(true);
 
+  const rangeFromIso = parseGermanDate(rangeFrom);
+  const rangeUntilIso = parseGermanDate(rangeUntil);
+  const rangeError =
+    !rangeFromIso || !rangeUntilIso
+      ? "Bitte gültige Datumswerte im Format TT.MM.JJJJ eingeben."
+      : rangeFromIso > rangeUntilIso
+        ? "Das Von-Datum darf nicht nach dem Bis-Datum liegen."
+        : null;
   const period: PeriodFilter =
     periodMode === "MONTH"
       ? { mode: "MONTH", month }
       : periodMode === "YEAR"
         ? { mode: "YEAR", year }
-        : { mode: "RANGE", from: rangeFrom, until: rangeUntil };
+        : {
+            mode: "RANGE",
+            from: rangeError ? "9999-12-31" : rangeFromIso!,
+            until: rangeError ? "0001-01-01" : rangeUntilIso!,
+          };
 
   const summaries = useMemo(
     () =>
-      aggregateAttendance(members, historicalSessions, period, {
+      aggregateAttendance(members, history, period, {
         ...(gender ? { gender: gender as Member["gender"] } : {}),
         ...(trainingType ? { trainingType: trainingType as TrainingType } : {}),
         ...(dojo ? { dojo } : {}),
@@ -236,6 +286,7 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
       dojo,
       memberQuery,
       members,
+      history,
       period,
       qualification,
       sessionRole,
@@ -243,13 +294,13 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
     ],
   );
 
-  const trainerMembers = membersWithTrainerActivity(members, historicalSessions);
+  const trainerMembers = membersWithTrainerActivity(members, history);
   const keyFor = (memberId: string) => `${month}:${memberId}`;
   const hasStoredStatus = (memberId: string) => keyFor(memberId) in statuses;
   const statusFor = (memberId: string) => statuses[keyFor(memberId)] ?? SettlementStatus.DRAFT;
   const correctionsFor = (memberId: string) => corrections[keyFor(memberId)] ?? [];
   const calculationFor = (memberId: string) =>
-    calculateSettlement(memberId, month, historicalSessions, rates, correctionsFor(memberId));
+    calculateSettlement(memberId, month, history, rates, correctionsFor(memberId));
   const settlementViewFor = (memberId: string) =>
     resolveSettlementView(
       statusFor(memberId),
@@ -513,6 +564,7 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
 
       {activeView === "DASHBOARD" ? (
         <Dashboard
+          history={history}
           month={month}
           settlements={relevantSettlementMembers.map((member) => ({
             status: statusFor(member.id),
@@ -565,20 +617,25 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
               <>
                 <label>
                   <span>Von</span>
-                  <input
-                    type="date"
+                  <GermanDateInput
+                    aria-label="Freier Zeitraum von"
                     value={rangeFrom}
                     onChange={(event) => setRangeFrom(event.target.value)}
                   />
                 </label>
                 <label>
                   <span>Bis</span>
-                  <input
-                    type="date"
+                  <GermanDateInput
+                    aria-label="Freier Zeitraum bis"
                     value={rangeUntil}
                     onChange={(event) => setRangeUntil(event.target.value)}
                   />
                 </label>
+                {rangeError ? (
+                  <div className="field-error" role="alert">
+                    {rangeError}
+                  </div>
+                ) : null}
               </>
             ) : null}
             <label className="search-field">
@@ -609,11 +666,7 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
               label="Dojo"
               value={dojo}
               onChange={setDojo}
-              options={[
-                ["Dojo VTKB Berlin", "Dojo VTKB Berlin"],
-                ["Dojo Nord", "Dojo Nord"],
-                ["Dojo Süd", "Dojo Süd"],
-              ]}
+              options={DOJOS.map((dojo) => [dojo.name, dojo.name])}
             />
             <FilterSelect
               label="Gürtelfarbe"
@@ -685,6 +738,7 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
 
       {activeView === "MEMBER_DETAIL" ? (
         <MemberDetail
+          history={history}
           allMembers={members}
           member={members.find((member) => member.id === selectedMemberId)!}
           roleFilter={detailRole}
@@ -707,6 +761,7 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
             </button>
           ) : null}
           <TrainerList
+            history={history}
             members={
               activeView === "TRAINER_DETAIL"
                 ? members.filter((member) => member.id === selectedMemberId)
@@ -772,6 +827,7 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
 
       {activeView === "SETTLEMENT_DETAIL" || activeView === "OWN" ? (
         <SettlementDetail
+          history={history}
           member={
             members.find(
               (member) => member.id === (activeView === "OWN" ? "member-01" : selectedMemberId),
@@ -817,7 +873,7 @@ export function ReportingScreen({ members, demoRole, onBack }: ReportingScreenPr
               "Vergütungssatz angelegt",
               created.label,
               null,
-              `${formatEuro(created.amountCents)} · gültig ab ${created.validFrom}`,
+              `${formatEuro(created.amountCents)} · gültig ab ${formatGermanDate(created.validFrom)}`,
             );
           }}
           nextId={() => nextRateId.current()}
@@ -954,15 +1010,17 @@ function FilterSelect({
 }
 
 function Dashboard({
+  history,
   month,
   settlements,
   onMonthChange,
 }: {
+  history: readonly HistoricalTrainingSession[];
   month: string;
   settlements: ReadonlyArray<{ status: SettlementStatusValue; view: SettlementView }>;
   onMonthChange: (month: string) => void;
 }) {
-  const sessions = filterSessionsByPeriod(historicalSessions, { mode: "MONTH", month }).filter(
+  const sessions = filterSessionsByPeriod(history, { mode: "MONTH", month }).filter(
     (session) => session.status === TrainingSessionStatus.COMPLETED,
   );
   const dashboard = calculateDashboardMetrics(sessions, settlements);
@@ -981,7 +1039,7 @@ function Dashboard({
   ] as const;
   const development = Array.from({ length: 6 }, (_, index) => {
     const key = `2026-${String(index + 1).padStart(2, "0")}`;
-    const count = filterSessionsByPeriod(historicalSessions, { mode: "MONTH", month: key })
+    const count = filterSessionsByPeriod(history, { mode: "MONTH", month: key })
       .filter((session) => session.status === TrainingSessionStatus.COMPLETED)
       .flatMap((session) => session.attendance)
       .filter((record) => record.presenceStatus === PresenceStatus.PRESENT).length;
@@ -1048,7 +1106,8 @@ function MemberSummaryList({
             <span>
               <strong>{item.member.name}</strong>
               <small>
-                {item.member.gender === "WEIBLICH" ? "W" : "M"} · {item.member.active ? "aktiv" : "inaktiv"}
+                {item.member.gender === "WEIBLICH" ? "W" : "M"} ·{" "}
+                {item.member.active ? "aktiv" : "inaktiv"}
               </small>
               <BeltMark color={item.member.beltColor} grade={item.member.beltGrade} />
             </span>
@@ -1080,6 +1139,7 @@ function MemberSummaryList({
 }
 
 function MemberDetail({
+  history,
   allMembers,
   member,
   roleFilter,
@@ -1088,6 +1148,7 @@ function MemberDetail({
   onSort,
   onBack,
 }: {
+  history: readonly HistoricalTrainingSession[];
   allMembers: readonly Member[];
   member: Member;
   roleFilter: string;
@@ -1099,7 +1160,7 @@ function MemberDetail({
   const [monthFilter, setMonthFilter] = useState("");
   const [yearFilter, setYearFilter] = useState("");
   const [trainingFilter, setTrainingFilter] = useState("");
-  const entries = memberAttendanceEntries(member.id, historicalSessions, {
+  const entries = memberAttendanceEntries(member.id, history, {
     month: monthFilter,
     year: yearFilter,
     trainingType: trainingFilter,
@@ -1126,7 +1187,7 @@ function MemberDetail({
         </div>
       </div>
       <div className="monthly-summary">
-        {monthlyAttendance(member.id, historicalSessions).map((item) => (
+        {monthlyAttendance(member.id, history).map((item) => (
           <div key={item.month}>
             <span>{displayMonth(item.month)}</span>
             <strong>{item.count} Einheiten</strong>
@@ -1213,19 +1274,21 @@ function MemberDetail({
 }
 
 function TrainerList({
+  history,
   members,
   month,
   statusFor,
   settlementViewFor,
   onOpen,
 }: {
+  history: readonly HistoricalTrainingSession[];
   members: readonly Member[];
   month: string;
   statusFor: (id: string) => SettlementStatusValue;
   settlementViewFor: (id: string) => SettlementView;
   onOpen: (id: string) => void;
 }) {
-  const yearly = aggregateAttendance(members, historicalSessions, { mode: "YEAR", year: 2026 });
+  const yearly = aggregateAttendance(members, history, { mode: "YEAR", year: 2026 });
   return (
     <div className="responsive-data-list">
       {members.map((member) => {
@@ -1339,6 +1402,7 @@ function SettlementList({
 }
 
 function SettlementDetail({
+  history,
   member,
   month,
   calculation,
@@ -1352,6 +1416,7 @@ function SettlementDetail({
   onRemoveCorrection,
   onTransition,
 }: {
+  history: readonly HistoricalTrainingSession[];
   member: Member;
   month: string;
   calculation: ReturnType<typeof calculateSettlement>;
@@ -1365,7 +1430,7 @@ function SettlementDetail({
   onRemoveCorrection: (correction: CompensationCorrection) => void;
   onTransition: (status: SettlementStatusValue) => void;
 }) {
-  const ownAttendance = aggregateAttendance([member], historicalSessions, {
+  const ownAttendance = aggregateAttendance([member], history, {
     mode: "YEAR",
     year: 2026,
   })[0];
@@ -1425,12 +1490,7 @@ function SettlementDetail({
         ) : null}
       </div>
       {settlement.reviewNotes.length ? (
-        <div className="validation-box">
-          <strong>Prüfhinweis</strong>
-          {settlement.reviewNotes.map((note) => (
-            <div key={note}>{note}</div>
-          ))}
-        </div>
+        <SettlementReviewNotes notes={settlement.reviewNotes} />
       ) : null}
       {transitionError ? (
         <div className="validation-box" role="alert">
@@ -1578,28 +1638,59 @@ function RateEditor({
       rates.map((rate) => [rate.id, (rate.amountCents / 100).toFixed(2).replace(".", ",")]),
     ),
   );
+  const [validFromInputs, setValidFromInputs] = useState<Record<string, string>>(() =>
+    Object.fromEntries(rates.map((rate) => [rate.id, formatGermanDate(rate.validFrom)])),
+  );
+  const [validUntilInputs, setValidUntilInputs] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      rates.map((rate) => [rate.id, rate.validUntil ? formatGermanDate(rate.validUntil) : ""]),
+    ),
+  );
   const [rateErrors, setRateErrors] = useState<Record<string, string[]>>({});
   const [newRate, setNewRate] = useState<CompensationRate | null>(null);
   const [newAmountInput, setNewAmountInput] = useState("");
+  const [newValidFromInput, setNewValidFromInput] = useState("");
+  const [newValidUntilInput, setNewValidUntilInput] = useState("");
 
   const saveRate = (rate: CompensationRate) => {
     const parsed = parseEuroToCents(amountInputs[rate.id] ?? "");
-    const updated = { ...rate, amountCents: parsed.cents ?? Number.NaN };
+    const validFromInput = validFromInputs[rate.id] ?? "";
+    const validUntilInput = validUntilInputs[rate.id] ?? "";
+    const validFrom = parseGermanDate(validFromInput);
+    const validUntil = validUntilInput.trim() ? parseGermanDate(validUntilInput) : null;
+    const datesValid =
+      isValidGermanDate(validFromInput) &&
+      (!validUntilInput.trim() || isValidGermanDate(validUntilInput));
+    const updated = {
+      ...rate,
+      amountCents: parsed.cents ?? Number.NaN,
+      validFrom: validFrom ?? "",
+      validUntil,
+    };
     const proposedRates = rates.map((item) => (item.id === rate.id ? updated : item));
     const messages = [
       ...(parsed.ok ? [] : [parsed.error ?? "Betrag ist ungültig."]),
+      ...(datesValid ? [] : ["Bitte gültige Datumswerte im Format TT.MM.JJJJ eingeben."]),
       ...validateCompensationRates(proposedRates)
         .filter((issue) => issue.rateId === rate.id)
         .map((issue) => issue.message),
     ];
     const uniqueMessages = [...new Set(messages)];
     setRateErrors((current) => ({ ...current, [rate.id]: uniqueMessages }));
-    if (uniqueMessages.length > 0 || parsed.cents === undefined) return;
+    if (uniqueMessages.length > 0 || parsed.cents === undefined || !datesValid) return;
     onSave(updated, rates.find((item) => item.id === rate.id)!);
     setDrafts((current) => current.map((item) => (item.id === rate.id ? updated : item)));
     setAmountInputs((current) => ({
       ...current,
       [rate.id]: (updated.amountCents / 100).toFixed(2).replace(".", ","),
+    }));
+    setValidFromInputs((current) => ({
+      ...current,
+      [rate.id]: formatGermanDate(updated.validFrom),
+    }));
+    setValidUntilInputs((current) => ({
+      ...current,
+      [rate.id]: updated.validUntil ? formatGermanDate(updated.validUntil) : "",
     }));
   };
 
@@ -1615,29 +1706,52 @@ function RateEditor({
       active: true,
     });
     setNewAmountInput("");
+    setNewValidFromInput("");
+    setNewValidUntilInput("");
   };
 
   const saveNewRate = () => {
     if (!newRate) return;
     const parsed = parseEuroToCents(newAmountInput);
-    const created = { ...newRate, amountCents: parsed.cents ?? Number.NaN };
+    const validFrom = parseGermanDate(newValidFromInput);
+    const validUntil = newValidUntilInput.trim() ? parseGermanDate(newValidUntilInput) : null;
+    const datesValid =
+      isValidGermanDate(newValidFromInput) &&
+      (!newValidUntilInput.trim() || isValidGermanDate(newValidUntilInput));
+    const created = {
+      ...newRate,
+      amountCents: parsed.cents ?? Number.NaN,
+      validFrom: validFrom ?? "",
+      validUntil,
+    };
     const messages = [
       ...(parsed.ok ? [] : [parsed.error ?? "Betrag ist ungültig."]),
+      ...(datesValid ? [] : ["Bitte gültige Datumswerte im Format TT.MM.JJJJ eingeben."]),
       ...validateCompensationRates([...rates, created])
         .filter((issue) => issue.rateId === created.id)
         .map((issue) => issue.message),
     ];
     const uniqueMessages = [...new Set(messages)];
     setRateErrors((current) => ({ ...current, [created.id]: uniqueMessages }));
-    if (uniqueMessages.length > 0 || parsed.cents === undefined) return;
+    if (uniqueMessages.length > 0 || parsed.cents === undefined || !datesValid) return;
     onCreate(created);
     setDrafts((current) => [...current, created]);
     setAmountInputs((current) => ({
       ...current,
       [created.id]: (created.amountCents / 100).toFixed(2).replace(".", ","),
     }));
+    setValidFromInputs((current) => ({
+      ...current,
+      [created.id]: formatGermanDate(created.validFrom),
+    }));
+    setValidUntilInputs((current) => ({
+      ...current,
+      [created.id]: created.validUntil ? formatGermanDate(created.validUntil) : "",
+    }));
     setNewRate(null);
     setNewAmountInput("");
+    setNewValidFromInput("");
+    setNewValidUntilInput("");
   };
   return (
     <section>
@@ -1712,22 +1826,18 @@ function RateEditor({
           </label>
           <label>
             <span>Gültig ab</span>
-            <input
+            <GermanDateInput
               aria-label="Gültig ab neuer Vergütungssatz"
-              type="date"
-              value={newRate.validFrom}
-              onChange={(event) => setNewRate({ ...newRate, validFrom: event.target.value })}
+              value={newValidFromInput}
+              onChange={(event) => setNewValidFromInput(event.target.value)}
             />
           </label>
           <label>
             <span>Gültig bis · optional</span>
-            <input
+            <GermanDateInput
               aria-label="Gültig bis neuer Vergütungssatz"
-              type="date"
-              value={newRate.validUntil ?? ""}
-              onChange={(event) =>
-                setNewRate({ ...newRate, validUntil: event.target.value || null })
-              }
+              value={newValidUntilInput}
+              onChange={(event) => setNewValidUntilInput(event.target.value)}
             />
           </label>
           <label className="check-row">
@@ -1746,6 +1856,8 @@ function RateEditor({
                 setRateErrors((current) => ({ ...current, [newRate.id]: [] }));
                 setNewRate(null);
                 setNewAmountInput("");
+                setNewValidFromInput("");
+                setNewValidUntilInput("");
               }}
             >
               Abbrechen
@@ -1753,8 +1865,8 @@ function RateEditor({
           </div>
           {(rateErrors[newRate.id] ?? []).length > 0 ? (
             <div className="field-error" role="alert">
-              {(rateErrors[newRate.id] ?? []).map((message) => (
-                <div key={message}>{message}</div>
+              {(rateErrors[newRate.id] ?? []).map((message, index) => (
+                <div key={`${index}-${message}`}>{message}</div>
               ))}
             </div>
           ) : null}
@@ -1795,33 +1907,29 @@ function RateEditor({
             </label>
             <label>
               <span>Gültig ab</span>
-              <input
+              <GermanDateInput
+                aria-label={`Gültig ab ${rate.label}`}
                 disabled={disabled}
-                type="date"
-                value={rate.validFrom}
+                value={validFromInputs[rate.id] ?? ""}
                 onChange={(event) =>
-                  setDrafts((current) =>
-                    current.map((item) =>
-                      item.id === rate.id ? { ...item, validFrom: event.target.value } : item,
-                    ),
-                  )
+                  setValidFromInputs((current) => ({
+                    ...current,
+                    [rate.id]: event.target.value,
+                  }))
                 }
               />
             </label>
             <label>
               <span>Gültig bis · optional</span>
-              <input
+              <GermanDateInput
+                aria-label={`Gültig bis ${rate.label}`}
                 disabled={disabled}
-                type="date"
-                value={rate.validUntil ?? ""}
+                value={validUntilInputs[rate.id] ?? ""}
                 onChange={(event) =>
-                  setDrafts((current) =>
-                    current.map((item) =>
-                      item.id === rate.id
-                        ? { ...item, validUntil: event.target.value || null }
-                        : item,
-                    ),
-                  )
+                  setValidUntilInputs((current) => ({
+                    ...current,
+                    [rate.id]: event.target.value,
+                  }))
                 }
               />
             </label>
@@ -1845,8 +1953,8 @@ function RateEditor({
             </PrimaryButton>
             {(rateErrors[rate.id] ?? []).length > 0 ? (
               <div className="field-error" role="alert">
-                {(rateErrors[rate.id] ?? []).map((message) => (
-                  <div key={message}>{message}</div>
+                {(rateErrors[rate.id] ?? []).map((message, index) => (
+                  <div key={`${index}-${message}`}>{message}</div>
                 ))}
               </div>
             ) : null}
@@ -1873,7 +1981,7 @@ function AuditLog({ entries }: { entries: readonly AuditEntry[] }) {
               <span>
                 <small>Zeitpunkt / Bearbeitung</small>
                 <strong>
-                  {dateFormatter.format(new Date(entry.occurredAt))} · {entry.actor}
+                  {dateFormatter.format(new Date(entry.occurredAt))} · {displayActor(entry.actor)}
                 </strong>
               </span>
               <span>
@@ -1885,7 +1993,7 @@ function AuditLog({ entries }: { entries: readonly AuditEntry[] }) {
               <span>
                 <small>Vorher → nachher</small>
                 <strong>
-                  {entry.previousValue ?? "–"} → {entry.newValue ?? "–"}
+                  {displayAuditValue(entry.previousValue)} → {displayAuditValue(entry.newValue)}
                 </strong>
               </span>
               {entry.reason ? (

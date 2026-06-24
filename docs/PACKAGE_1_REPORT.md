@@ -1,155 +1,73 @@
-# Paket 1 · Lokaler UX-Prototyp
+# Paket 1 – UX-Prototyp und Korrekturstand
 
-- Datum: 2026-06-21
-- Status: lokal implementiert, korrigiert und geprüft
-- Branch: `feature/package-1-ux-prototype`
-- Cloudaktionen: keine
-- Deployment: keines
+## Umfang
 
-## Umgesetzter Umfang
+Der lokale React-Prototyp bildet den vollständigen Anwesenheitsablauf mit fiktiven Daten ab:
 
-- React-/TypeScript-/Vite-PWA im Workspace `@vtkb/web`.
-- Smartphone-first-Oberfläche in Weiß, Anthrazit und VTKB-Rot mit Tastaturfokus, großen Touch-Zielen und responsivem Desktop-Rahmen.
-- 40 eindeutig fiktive Mitglieder mit Altersgruppe, Gürtelgrad/-farbe und dauerhafter Qualifikation.
-- Mehrere Trainingseinheiten mit zeitbasierter Empfehlung und freier Auswahl.
-- Genau ein verantwortlicher Trainer, optional mehrere Assistenztrainer; Trainingsfunktion setzt Anwesenheit und erzeugt keine Doppelzählung.
-- Vollständige manuelle Schnellerfassung mit Suche, Filtern, Einzelumschaltung, Rollenänderung und manuellen Gästen/Probetraining.
-- Rein lokale Fotoassistenz-Demo mit drei abstrakten Aufnahmebereichen, simulierten Vorschlägen, eindeutigen/unsicheren/unbekannten/Dubletten-Fällen und verpflichtender Trainerentscheidung.
-- Prüfbare Gesamtliste, fachlich gesperrter Abschluss bei offenen Vorschlägen und lokale Abschlussansicht.
-- Interne Demo-Auswertung mit fiktiven aggregierten Statistiken.
-- Installierbare PWA-Grundlage mit Manifest und generiertem Service Worker.
+- Start und Auswahl einer Trainingseinheit,
+- genau ein verantwortlicher Trainer und mehrere Assistenztrainer,
+- manuelle Erfassung sowie Fotoassistenz-Demo ohne Kamera oder Bildverarbeitung,
+- Trainerprüfung vor dem Speichern,
+- dauerhafte Probetrainingprofile mit Teilnahmegrenze,
+- Mitglieder-, Trainer-, Gürtel- und Vergütungsauswertungen,
+- vollständige nachträgliche Erstellung vergangener Einheiten,
+- vier Dojo-Stammdatensätze und elf stabile Wochenzeiten in `Europe/Berlin`,
+- Laufzeit-Historie und Audit.
 
-## Korrekturen nach dem Paket-1-Review
+## Fotoassistenz
 
-### Vereinszeit
+Unbekannte Vorschläge können einem bestehenden Mitglied zugeordnet, als unbekannt markiert,
+verworfen oder später manuell geprüft werden. Die Demo erzeugt keine neuen Personenprofile und
+keine biometrischen Daten. Jede Entscheidung bleibt bis zum Abschluss änderbar.
 
-- Die fachliche Zeitzone ist `Europe/Berlin` und wird sowohl bei der Erzeugung als auch bei der Darstellung lokaler Trainingseinheiten ausdrücklich verwendet.
-- Die Implementierung ermittelt den Berlin-Offset einschließlich Sommerzeit mit der eingebauten `Intl`-API; es gibt weder einen fest codierten UTC-Offset noch eine Abhängigkeit von lokalem `setHours()`.
-- Einheiten verwenden das halb offene Intervall `Start <= Zeitpunkt < Ende`. Deshalb ist die Einheit 17:30–19:00 Uhr exakt um 19:00 Uhr beendet und die direkt folgende Einheit läuft bereits.
+## Personenmodell
 
-### Nachvollziehbare Fotoentscheidungen
+Probetrainingsteilnehmer besitzen dauerhafte `TrialParticipant`-Profile. Dieselbe Personen-ID
+bleibt bei einer Umwandlung zum Mitglied erhalten; die Mitgliedsnummer wird separat ergänzt.
+Anwesenheits-, Probetraining- und Gürtelhistorie bleiben dadurch derselben Person zugeordnet.
 
-- Jeder Vorschlag besitzt neben `resolved` eine konkrete `resolutionAction` und optional `selectedMemberId` oder `guestId`.
-- Sichere Vorschläge sind sichtbar vorausgewählt und die ausgewählte Person wird genau einmal in die Anwesenheit übernommen.
-- Angezeigt werden die tatsächlichen Zustände: sicher vorausgewählt, Person bestätigt, andere Person gewählt, als unbekannt markiert, als Gast erfasst oder verworfen.
-- Entscheidungen können vor dem Speichern geändert oder zurückgenommen werden; Anwesenheit und Demo-Gäste werden dabei synchron korrigiert.
-- Unbekannte Gesichter besitzen keine allgemeine Schaltfläche „Bestätigen“. Zulässig sind nur Mitglied auswählen, als unbekannt markieren, als Gast erfassen oder verwerfen.
-- „Andere Person“ öffnet eine sichtbare lokale Auswahl mit Suche, Avatar, Name, Gürtelgrad, Bestätigung und Abbruch.
+## Nachtragseinheiten
 
-### Gast-IDs und Navigation
+Jede der vier definierten angemeldeten Rollen kann eine vergangene Einheit mit Datum, Zeit, Bezeichnung, Trainingsart, Dojo,
+Trainingsleitung, Anwesenheit, Pflichtgrund und optionaler Notiz vollständig erstellen. Rollen,
+Zeitspanne, Vergangenheit, Dubletten und Probetraininggrenze werden geprüft. Der Abschluss fließt
+in Historie, Auswertung, Vergütung, Exporte und Audit ein.
 
-- Lokale Gast-IDs stammen aus einem monotonen, instanzgebundenen Zähler (`guest-001`, `guest-002`, …). Entfernen und erneutes Hinzufügen kann dadurch keine ID wiederverwenden.
-- Der Workflow hält Trainingsstart, Erfassungsart, tatsächliche Erfassungsaktivität und Listenprüfung getrennt fest.
-- Die Navigation „Prüfung“ ist bis zur Listenprüfung deaktiviert. Direkte Navigation kann Trainingsleitung und Erfassungsart nicht umgehen.
-- Ein verantwortlicher Trainer allein gilt nicht als aktiv erfasste Anwesenheitsliste; ohne tatsächliche manuelle Aktion oder Foto-Demo bleibt Speichern gesperrt.
+## Aktueller Korrekturstand
 
-## Bewusst nicht umgesetzt
+Probetrainingbesuche stammen ausschließlich aus `HistoricalTrainingSession[]`; eine separate
+Zweithistorie existiert nicht. Anwesenheiten speichern Mitgliedschaftsstatus und Erfassungsquelle
+als Snapshot. Der React-Zustand ist die einzige veränderliche Historienquelle des laufenden Tabs.
+Fotozuordnungen bleiben `PHOTO_ASSISTED`, manuelle Korrekturen `MANUAL`.
 
-- kein Backend, keine Datenbank und keine dauerhafte Speicherung,
-- kein produktiver Login und keine Autorisierung,
-- keine Kamera, keine Bildaufnahme, kein Upload und keine Gesichtserkennung,
-- keine biometrische Enrollment-ID für Gäste,
-- keine AWS-, Terraform-, Rekognition- oder Deployment-Aktion,
-- keine produktive Einwilligungsverwaltung und keine Verarbeitung echter Personen.
+## Datenschutz und Demo-Grenzen
 
-## Lokaler Start
+- ausschließlich fiktive Namen und lokale Mockdaten,
+- kein Kamerazugriff,
+- keine Gesichtserkennung,
+- keine Referenzbilder oder biometrischen Enrollment-Daten,
+- keine Cloud-, AWS- oder Deployment-Aktion.
 
-Empfohlen wird Node.js 22.12 oder neuer innerhalb der Engine-Vorgabe `^20.19.0 || ^22.12.0 || >=24.0.0`.
+## Qualität
 
-```powershell
-npm ci
-npm run dev
-```
+Aktueller lokaler Nachweis vom 24.06.2026 auf `fix/package-1-7-design-and-quality`:
 
-Build und lokale Vorschau:
+| Befehl                  | Ergebnis                                                                               |
+| ----------------------- | -------------------------------------------------------------------------------------- |
+| `npm ci`                | erfolgreich, 545 Pakete installiert, 0 Schwachstellen                                  |
+| `npm run format:check`  | erfolgreich                                                                            |
+| `npm run lint`          | erfolgreich                                                                            |
+| `npm run typecheck`     | erfolgreich                                                                            |
+| `npm test`              | 17 Testdateien, 347 Tests bestanden                                                    |
+| UTC: `npm test`         | 17 Testdateien, 347 Tests bestanden                                                    |
+| `npm run check`         | erfolgreich                                                                            |
+| `npm run test:coverage` | erfolgreich; V8-Coverage erzeugt                                                       |
+| `npm run build`         | erfolgreich; Produktionsbuild ohne Source Maps                                         |
+| `npm audit`             | 0 bekannte Schwachstellen                                                              |
+| `npm query .workspace`  | vier Workspaces erkannt                                                                |
+| `npm run qa:browser`    | erfolgreich; fünf Viewports und fünf Fachabläufe, keine Konsolenfehler oder 404-Assets |
 
-```powershell
-npm run build
-npm run preview
-npm run qa:browser
-```
-
-Für `npm run qa:browser` muss die Vorschau in einem zweiten Terminal unter `http://127.0.0.1:4173` laufen.
-
-## Ausgeführte Abschlussprüfung
-
-Ausführungsumgebung: Node.js `v24.14.0`, npm `11.4.2`.
-
-| Befehl                 | Ergebnis                                                               |
-| ---------------------- | ---------------------------------------------------------------------- |
-| `npm ci`               | erfolgreich, 590 Pakete installiert, 0 Schwachstellen                  |
-| `npm run format:check` | erfolgreich                                                            |
-| `npm run lint`         | erfolgreich                                                            |
-| `npm run typecheck`    | erfolgreich                                                            |
-| `npm test`             | erfolgreich, 4 Testdateien und 43 Tests                                |
-| UTC: `npm test`        | erfolgreich, 4 Testdateien und 43 Tests bei gesetztem `TZ=UTC`         |
-| `npm run check`        | erfolgreich; Format, Lint, Typecheck und 43 Tests erneut bestanden     |
-| `npm run build`        | erfolgreich, Vite-Produktionserzeugnis und PWA-Service-Worker erstellt |
-| `npm audit`            | erfolgreich, 0 Schwachstellen                                          |
-| `npm query .workspace` | erfolgreich, alle vier erwarteten Workspaces erkannt                   |
-| `npm run qa:browser`   | erfolgreich, fünf Viewports, zwei Hauptabläufe, keine Konsolenfehler   |
-
-Der erste `npm ci`-Versuch scheiterte an einem Windows-Dateilock des zuvor gestarteten lokalen Vite-Prozesses. Nach dem gezielten Beenden dieses Prozesses wurde `npm ci` erfolgreich wiederholt; es war keine Quellcodekorrektur dafür erforderlich.
-
-## Automatisierte Tests
-
-Die Paket-1-Tests decken insbesondere ab:
-
-- Vorschlag einer passenden Trainingseinheit,
-- laufende und bevorstehende Einheiten in `Europe/Berlin`, den exakten Wechsel um 19:00 Uhr sowie Ausführung mit `TZ=UTC`,
-- verantwortliche Trainingsleitung als Abschlussvoraussetzung,
-- keine Doppelzählung von Assistenztrainern,
-- vollständige manuelle Erfassung und lokales Speichern,
-- manuelle Gäste ohne biometrische Felder,
-- Sperre bei ungeklärten Foto-Demovorschlägen,
-- sichere Vorauswahl samt genau einem Anwesenheitseintrag und Rücknahme,
-- alle zulässigen Entscheidungen für unbekannte Gesichter sowie das fehlende allgemeine „Bestätigen“,
-- sichtbare Mitgliederauswahl bei „Andere Person“,
-- monotone Gast-IDs nach Hinzufügen, Entfernen und erneutem Hinzufügen,
-- gesperrte Prüfungsnavigation und Abschluss ohne tatsächliche Erfassungsaktivität,
-- mobile Hauptnavigation,
-- exakt 40 fiktive Mockmitglieder.
-
-Zusammen mit Paket 0 bestehen 43 Tests in vier Testdateien. Derselbe vollständige Testbestand besteht auch bei gesetzter Prozesszeitzone `UTC`.
-
-## Browser- und Responsive-Prüfung
-
-Der bevorzugte eingebettete Browser wurde initial erfolgreich verbunden, brach nach einer Benutzerunterbrechung jedoch wegen fehlender Sitzungs-/Sandbox-Metadaten ab. Die reproduzierbare Abschlussprüfung wurde deshalb mit dem vorhandenen Playwright 1.60.0 und lokalem Microsoft Edge ausgeführt.
-
-Geprüfte Viewports:
-
-| Viewport | Größe      | Horizontaler Überlauf |
-| -------- | ---------- | --------------------- |
-| Mobile   | 375 × 812  | keiner                |
-| Mobile   | 390 × 844  | keiner                |
-| Mobile   | 430 × 932  | keiner                |
-| Tablet   | 768 × 1024 | keiner                |
-| Desktop  | 1280 × 900 | keiner                |
-
-Der Ablauf Start → Trainingsleitung → manuell bzw. Foto-Demo → Zusammenfassung → lokaler Abschluss wurde geprüft. Die Browser-QA trifft pro Vorschlagstyp eine passende Entscheidung: sichere Vorauswahl beibehalten, unsichere Person ausdrücklich bestätigen, unbekanntes Gesicht als Gast erfassen und Dublette ausdrücklich bestätigen. Sie weist anschließend genau einen vorausgewählten Mitgliedseintrag, genau einen Gast, keine offenen Vorschläge, keine Doppelzählung und die Übereinstimmung von Gesamtsumme und sichtbaren Einzelgruppen nach. Die Foto-Demo griff nicht auf eine Kamera zu und die Browserkonsole enthielt keine Fehler. Die maschinenlesbaren Ergebnisse stehen in [screenshots/package1/qa-results.json](screenshots/package1/qa-results.json).
-
-Ausgewählte Ansichten:
-
-![Startansicht auf 390 Pixeln](screenshots/package1/start-390.png)
-
-![Manuelle Erfassung auf 390 Pixeln](screenshots/package1/manual-attendance-390.png)
-
-![Prüfung der Foto-Demovorschläge](screenshots/package1/photo-review-390.png)
-
-![Geprüfte Zusammenfassung](screenshots/package1/summary-390.png)
-
-## Gestaltungsgrundlage
-
-Der vor der Implementierung erzeugte visuelle Konzeptentwurf liegt unter [reference/diagrams/package1_ux_concept.png](reference/diagrams/package1_ux_concept.png). Die Implementierung übernimmt dessen klare mobile Informationshierarchie, die VTKB-Farbwelt, abstrakte neutrale Avatare und die hervorgehobenen Hauptaktionen, ohne echte Personen oder Fotografien zu verwenden.
-
-## Grenzen des Prototyps
-
-- Zustände leben nur im aktuellen Browser-Tab und gehen beim Neuladen verloren.
-- Die zeitbasierte Empfehlung arbeitet ausschließlich mit lokalen Mockeinheiten.
-- Die PWA ist installierbar, besitzt aber noch keine produktive Offline- oder Synchronisationslogik.
-- Statistikwerte sind fiktiv und nicht aus gespeicherten Anwesenheiten berechnet.
-- Datenschutz-, Rollen- und Validierungsregeln werden im Frontend demonstriert; produktive Durchsetzung benötigt spätere Backend-Pakete.
-
-## Stoppgrenze
-
-Paket 2 wurde nicht begonnen. Es wurden weder AWS-Ressourcen verändert noch Terraform- oder Deployment-Befehle ausgeführt.
+Die Browser-QA verwendet Playwright Chromium und legt ihre temporären Ergebnisse unter
+`%TEMP%\vtkb-package-1-7-browser-qa` ab. Nach dem Lauf verbleibt kein Listener auf Port 4173.
+Historische Screenshots sind keine fachliche Quelle; maßgeblich sind der aktuelle Code, die
+automatisierten Tests und die Browser-QA.

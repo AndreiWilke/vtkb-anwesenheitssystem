@@ -4,3 +4,7 @@ export * from "./trial.js";
 export * from "./person.js";
 export * from "./belt.js";
 export * from "./conversion.js";
+export * from "./retrospective.js";
+export * from "./schedule.js";
+export * from "./date.js";
+export * from "./permissions.js";

@@ -11,17 +11,24 @@ import {
 import { isValidIsoDate } from "./date.js";
 import { AppPermission, hasPermission } from "./permissions.js";
 import { assertValidTrainingSession } from "./validation.js";
-import { berlinClockFromIso, berlinLocalDateTimeToIso } from "./schedule.js";
+import {
+  DOJOS,
+  SCHEDULED_TRAINING_SLOTS,
+  berlinClockFromIso,
+  berlinLocalDateTimeToIso,
+  clubWeekdayForIsoDate,
+} from "./schedule.js";
 
 export const RetrospectiveValidationCode = {
   INVALID_DATE: "INVALID_DATE",
   DATE_NOT_IN_PAST: "DATE_NOT_IN_PAST",
+  MISSING_SCHEDULED_SLOT: "MISSING_SCHEDULED_SLOT",
+  SCHEDULE_SLOT_MISMATCH: "SCHEDULE_SLOT_MISMATCH",
   INVALID_TIME_RANGE: "INVALID_TIME_RANGE",
   MISSING_NAME: "MISSING_NAME",
   MISSING_TRAINING_TYPE: "MISSING_TRAINING_TYPE",
   MISSING_DOJO: "MISSING_DOJO",
   MISSING_RESPONSIBLE_TRAINER: "MISSING_RESPONSIBLE_TRAINER",
-  MISSING_REASON: "MISSING_REASON",
   DUPLICATE_ASSISTANT: "DUPLICATE_ASSISTANT",
   RESPONSIBLE_ALSO_ASSISTANT: "RESPONSIBLE_ALSO_ASSISTANT",
   DUPLICATE_PARTICIPANT: "DUPLICATE_PARTICIPANT",
@@ -40,6 +47,7 @@ export interface RetrospectiveValidationIssue {
 
 export interface RetrospectiveSessionInput {
   date: string;
+  scheduledSlotId: string;
   startTime: string;
   endTime: string;
   name: string;
@@ -50,7 +58,6 @@ export interface RetrospectiveSessionInput {
   assistantTrainerIds: readonly string[];
   participantIds: readonly string[];
   membershipStatusByPersonId: Readonly<Record<string, PersonMembershipStatus>>;
-  reason: string;
   note?: string;
   createdBy: string;
   createdAt: string;
@@ -64,7 +71,7 @@ export interface RetrospectiveSession {
   timeZone: "Europe/Berlin";
   name: string;
   trainingType: string;
-  scheduledSlotId: null;
+  scheduledSlotId: string;
   dojoId: string;
   dojoNameSnapshot: string;
   dojo: string;
@@ -72,7 +79,6 @@ export interface RetrospectiveSession {
   attendance: readonly AttendanceRecord[];
   completedAt: string;
   completedBy: string;
-  retrospectiveReason: string;
   internalNote: string | null;
 }
 
@@ -86,7 +92,7 @@ export function validateRetrospectiveSession(
   if (!isValidIsoDate(input.date)) {
     issues.push({
       code: RetrospectiveValidationCode.INVALID_DATE,
-      message: "Bitte ein gültiges Datum im Format TT.MM.JJJJ eingeben.",
+      message: "Bitte ein gültiges Datum auswählen.",
       field: "date",
     });
   } else if (!isValidIsoDate(today) || input.date >= today) {
@@ -95,6 +101,40 @@ export function validateRetrospectiveSession(
       message: "Das Datum muss vor dem heutigen Tag liegen.",
       field: "date",
     });
+  }
+  const scheduledSlot = SCHEDULED_TRAINING_SLOTS.find((slot) => slot.id === input.scheduledSlotId);
+  if (!input.scheduledSlotId.trim()) {
+    issues.push({
+      code: RetrospectiveValidationCode.MISSING_SCHEDULED_SLOT,
+      message: "Bitte genau eine reguläre Trainingseinheit auswählen.",
+      field: "scheduledSlotId",
+    });
+  } else if (!scheduledSlot) {
+    issues.push({
+      code: RetrospectiveValidationCode.SCHEDULE_SLOT_MISMATCH,
+      message: "Die ausgewählte Trainingseinheit ist nicht im zentralen Wochenplan hinterlegt.",
+      field: "scheduledSlotId",
+    });
+  } else {
+    const dojo = DOJOS.find((candidate) => candidate.id === scheduledSlot.dojoId);
+    const matchesDate =
+      isValidIsoDate(input.date) && scheduledSlot.weekday === clubWeekdayForIsoDate(input.date);
+    const matchesSlot =
+      matchesDate &&
+      input.startTime === scheduledSlot.startTime &&
+      input.endTime === scheduledSlot.endTime &&
+      input.name === scheduledSlot.name &&
+      input.trainingType === scheduledSlot.trainingType &&
+      input.dojoId === scheduledSlot.dojoId &&
+      input.dojo === dojo?.name;
+    if (!matchesSlot) {
+      issues.push({
+        code: RetrospectiveValidationCode.SCHEDULE_SLOT_MISMATCH,
+        message:
+          "Datum, Zeit und Dojo müssen vollständig aus dem gewählten Wochenplan-Slot stammen.",
+        field: "scheduledSlotId",
+      });
+    }
   }
   if (
     !CLOCK_TIME.test(input.startTime) ||
@@ -116,7 +156,6 @@ export function validateRetrospectiveSession(
       "responsibleTrainerId",
       RetrospectiveValidationCode.MISSING_RESPONSIBLE_TRAINER,
     ],
-    [input.reason, "reason", RetrospectiveValidationCode.MISSING_REASON],
   ];
   for (const [value, field, code] of required) {
     if (!value.trim()) issues.push({ code, message: `${field} ist ein Pflichtfeld.`, field });
@@ -184,16 +223,27 @@ export function createRetrospectiveSessionIdGenerator(
 }
 
 export function findRetrospectiveDuplicate(
-  input: Pick<RetrospectiveSessionInput, "date" | "startTime" | "endTime" | "dojoId">,
-  sessions: readonly Pick<RetrospectiveSession, "id" | "date" | "startsAt" | "endsAt" | "dojoId">[],
+  input: Pick<
+    RetrospectiveSessionInput,
+    "date" | "scheduledSlotId" | "startTime" | "endTime" | "dojoId"
+  >,
+  sessions: readonly {
+    id: string;
+    date: string;
+    startsAt: string;
+    endsAt: string;
+    dojoId: string;
+    scheduledSlotId: string | null;
+  }[],
 ): string | null {
   return (
     sessions.find(
       (session) =>
         session.date === input.date &&
-        berlinClockFromIso(session.startsAt) === input.startTime &&
-        berlinClockFromIso(session.endsAt) === input.endTime &&
-        session.dojoId === input.dojoId,
+        (session.scheduledSlotId === input.scheduledSlotId ||
+          (berlinClockFromIso(session.startsAt) === input.startTime &&
+            berlinClockFromIso(session.endsAt) === input.endTime &&
+            session.dojoId === input.dojoId)),
     )?.id ?? null
   );
 }
@@ -244,7 +294,7 @@ export function createRetrospectiveSession(
     timeZone: "Europe/Berlin",
     name: input.name.trim(),
     trainingType: input.trainingType.trim(),
-    scheduledSlotId: null,
+    scheduledSlotId: input.scheduledSlotId,
     dojoId: input.dojoId.trim(),
     dojoNameSnapshot: input.dojo.trim(),
     dojo: input.dojo.trim(),
@@ -252,13 +302,12 @@ export function createRetrospectiveSession(
     attendance,
     completedAt: input.createdAt,
     completedBy: input.createdBy,
-    retrospectiveReason: input.reason.trim(),
     internalNote: input.note?.trim() || null,
   };
   const validationSession: TrainingSession = {
     id: session.id,
     templateId: null,
-    scheduledSlotId: null,
+    scheduledSlotId: session.scheduledSlotId,
     name: session.name,
     trainingType: session.trainingType,
     dojoId: session.dojoId,
@@ -280,7 +329,7 @@ export function createRetrospectiveSession(
       object: `TrainingSession:${id}`,
       previousValue: null,
       newValue: `${input.date}:${input.startTime}-${input.endTime}:${input.dojo.trim()}`,
-      reason: input.reason.trim(),
+      reason: null,
     },
   };
 }

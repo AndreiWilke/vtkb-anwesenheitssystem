@@ -12,9 +12,14 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
+import { TrainingSessionStatus } from "@vtkb/shared";
 
 import App, { canAccessScreen } from "./App";
+import { createTodaySessions, members } from "./mockData";
+import { initialHistoricalSessions } from "./reportingMockData";
 import { SettlementReviewNotes } from "./reportingScreens";
+import { StartScreen } from "./screens";
+import { clubDateKey } from "./time";
 
 afterEach(() => {
   cleanup();
@@ -51,6 +56,22 @@ async function openPhotoReview(user: ReturnType<typeof userEvent.setup>) {
       expect(screen.getByRole("heading", { name: "Demo-Vorschläge prüfen" })).toBeInTheDocument(),
     { timeout: 1500 },
   );
+}
+
+async function openRetrospectiveFromStart(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: "Vergangene Einheit nachtragen" }));
+  expect(
+    screen.getByRole("heading", { name: "Einheit nachträglich erstellen" }),
+  ).toBeInTheDocument();
+}
+
+async function selectRetrospectiveSlot(
+  user: ReturnType<typeof userEvent.setup>,
+  date: string,
+  slotId: string,
+) {
+  fireEvent.change(screen.getByLabelText("Datum"), { target: { value: date } });
+  await user.click(screen.getByRole("radio", { name: new RegExp(`Slot-ID ${slotId}$`) }));
 }
 
 describe("klickbarer Paket-1-Prototyp", () => {
@@ -130,45 +151,32 @@ describe("klickbarer Paket-1-Prototyp", () => {
   it("erstellt eine Nachtragseinheit vollständig und zeigt sie in der Historie", async () => {
     const user = userEvent.setup();
     render(<App />);
-    const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
-    await user.click(within(nav).getByRole("button", { name: "Verwaltung" }));
-    await user.click(screen.getByRole("button", { name: /Einheit nachträglich erstellen/ }));
-    await user.type(screen.getByLabelText("Datum"), "20.06.2026");
-    await user.type(screen.getByLabelText("Bezeichnung"), "Fiktive Nachtragseinheit");
-    await user.type(
-      screen.getByLabelText("Grund für die Nachtragserfassung"),
-      "Fiktive Dokumentationskorrektur",
-    );
+    await openRetrospectiveFromStart(user);
+    expect(screen.getByLabelText("Datum")).toHaveAttribute("type", "date");
+    expect(screen.queryByLabelText("Grund für die Nachtragserfassung")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Interne Bemerkung")).toBeInTheDocument();
+    await selectRetrospectiveSlot(user, "2026-06-15", "mon-seikatsu-1700");
     await user.click(screen.getByRole("button", { name: /Trainer festlegen/ }));
     await user.click(screen.getByRole("button", { name: "Anwesenheit erfassen" }));
     await user.click(screen.getByRole("button", { name: "Liste prüfen" }));
+    expect(screen.queryByText("Grund", { selector: "dt" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Nachtrag speichern und abschließen" }));
-    expect(screen.getByRole("heading", { name: "Verwaltung" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Start" })).toBeInTheDocument();
     expect(
-      within(screen.getByTestId("retrospective-history")).getByText("Fiktive Nachtragseinheit"),
+      within(screen.getByTestId("recent-completed-history")).getByText(/15\.06\.2026/),
     ).toBeInTheDocument();
+    const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
+    await user.click(within(nav).getByRole("button", { name: "Verwaltung" }));
     expect(
       within(screen.getByTestId("runtime-audit")).getByText("RETROSPECTIVE_SESSION_CREATED"),
-    ).toBeInTheDocument();
-    expect(
-      within(screen.getByTestId("retrospective-history")).getByText(/20\.06\.2026/),
     ).toBeInTheDocument();
   });
 
   it("zeigt eine doppelte Nachtragseinheit mit vorhandener Session-ID an und blockiert sie", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.click(
-      within(screen.getByRole("navigation", { name: "Hauptnavigation" })).getByRole("button", {
-        name: "Verwaltung",
-      }),
-    );
-    await user.click(screen.getByRole("button", { name: /Einheit nachträglich erstellen/ }));
-    await user.type(screen.getByLabelText("Datum"), "01.06.2026");
-    await user.clear(screen.getByLabelText("Ende"));
-    await user.type(screen.getByLabelText("Ende"), "18:00");
-    await user.type(screen.getByLabelText("Bezeichnung"), "Doppelte Einheit");
-    await user.type(screen.getByLabelText("Grund für die Nachtragserfassung"), "Regressionstest");
+    await openRetrospectiveFromStart(user);
+    await selectRetrospectiveSlot(user, "2026-06-01", "mon-seikatsu-1700");
     expect(screen.getByRole("alert")).toHaveTextContent("history-2026-06-02");
     await user.click(screen.getByRole("button", { name: /Trainer festlegen/ }));
     expect(
@@ -186,25 +194,102 @@ describe("klickbarer Paket-1-Prototyp", () => {
     const user = userEvent.setup();
     render(<App />);
     await user.selectOptions(screen.getByLabelText("Demo-Rolle wechseln"), role);
-    const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
-    await user.click(within(nav).getByRole("button", { name: "Verwaltung" }));
-    const open = screen.getByRole("button", { name: /Einheit nachträglich erstellen/ });
+    const open = screen.getByRole("button", { name: "Vergangene Einheit nachtragen" });
     expect(open).toBeEnabled();
     await user.click(open);
-    await user.type(screen.getByLabelText("Datum"), "20.06.2026");
-    await user.type(screen.getByLabelText("Bezeichnung"), "Fiktiver Rollentest");
-    await user.type(
-      screen.getByLabelText("Grund für die Nachtragserfassung"),
-      "Fiktive Rollenprüfung",
-    );
+    await selectRetrospectiveSlot(user, "2026-06-15", "mon-ebereschen-1600");
     await user.click(screen.getByRole("button", { name: /Trainer festlegen/ }));
     await user.click(screen.getByRole("button", { name: "Anwesenheit erfassen" }));
     await user.click(screen.getByRole("button", { name: "Liste prüfen" }));
     expect(screen.getByText(`Erstellt durch: ${label}`)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Nachtrag speichern und abschließen" }));
+    await user.click(
+      within(screen.getByRole("navigation", { name: "Hauptnavigation" })).getByRole("button", {
+        name: "Verwaltung",
+      }),
+    );
     expect(
       within(screen.getByTestId("runtime-audit")).getByText(new RegExp(label)),
     ).toBeInTheDocument();
+  });
+
+  it("zeigt für vergangene Montage drei und für vergangene Mittwoche zwei zentrale Slots", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openRetrospectiveFromStart(user);
+    fireEvent.change(screen.getByLabelText("Datum"), { target: { value: "2026-06-15" } });
+    expect(screen.getAllByRole("radio", { name: /Slot-ID/ })).toHaveLength(3);
+    fireEvent.change(screen.getByLabelText("Datum"), { target: { value: "2026-06-17" } });
+    expect(screen.getAllByRole("radio", { name: /Slot-ID/ })).toHaveLength(2);
+  });
+
+  it("blockiert an einem Wochentag ohne Plan das Fortfahren mit verständlicher Meldung", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openRetrospectiveFromStart(user);
+    fireEvent.change(screen.getByLabelText("Datum"), { target: { value: "2026-06-16" } });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Für diesen Wochentag ist keine reguläre Trainingseinheit hinterlegt.",
+    );
+    await user.click(screen.getByRole("button", { name: /Trainer festlegen/ }));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Für diesen Wochentag ist keine reguläre Trainingseinheit hinterlegt.",
+    );
+    expect(screen.queryByText("Schritt 2 von 4")).not.toBeInTheDocument();
+  });
+
+  it("lehnt den heutigen Vereinstag und zukünftige Daten sichtbar ab", async () => {
+    const user = userEvent.setup();
+    const today = clubDateKey(new Date());
+    const tomorrow = new Date(`${today}T12:00:00.000Z`);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const tomorrowIso = tomorrow.toISOString().slice(0, 10);
+    render(<App />);
+    await openRetrospectiveFromStart(user);
+
+    fireEvent.change(screen.getByLabelText("Datum"), { target: { value: today } });
+    await user.click(screen.getByRole("button", { name: /Trainer festlegen/ }));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Das Datum muss vor dem heutigen Tag liegen.",
+    );
+
+    fireEvent.change(screen.getByLabelText("Datum"), { target: { value: tomorrowIso } });
+    await user.click(screen.getByRole("button", { name: /Trainer festlegen/ }));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Das Datum muss vor dem heutigen Tag liegen.",
+    );
+    expect(screen.queryByText("Schritt 2 von 4")).not.toBeInTheDocument();
+  });
+
+  it("zeigt unter zuletzt abgeschlossen ausschließlich gespeicherte COMPLETED-Einheiten", () => {
+    const selectedSession = createTodaySessions(new Date("2026-06-24T14:30:00.000Z"))[0]!;
+    const base = initialHistoricalSessions[0]!;
+    testingRender(
+      <StartScreen
+        sessions={[selectedSession]}
+        selectedSession={selectedSession}
+        members={members}
+        requiresExplicitSelection={false}
+        trainingHistory={[
+          { ...base, id: "completed-visible", name: "Tatsächlich abgeschlossen" },
+          {
+            ...base,
+            id: "planned-hidden",
+            name: "Bloße Wochenplanvorlage",
+            status: TrainingSessionStatus.PLANNED,
+            completedAt: null,
+            completedBy: null,
+          },
+        ]}
+        canCreateRetrospectiveSession={true}
+        onStart={vi.fn()}
+        onChooseSession={vi.fn()}
+        onSelectHistory={vi.fn()}
+        onCreateRetrospectiveSession={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Tatsächlich abgeschlossen")).toBeInTheDocument();
+    expect(screen.queryByText("Bloße Wochenplanvorlage")).not.toBeInTheDocument();
   });
 
   it.each([
@@ -270,7 +355,7 @@ describe("klickbarer Paket-1-Prototyp", () => {
     expect(consoleError.mock.calls.flat().join(" ")).not.toMatch(/unique.*key|same key/i);
   });
 
-  it("weist ein ungültiges deutsches Datum ohne React-Key-Warnung zurück", async () => {
+  it("verwendet den nativen Kalender und weist ein fehlendes Datum ohne React-Key-Warnung zurück", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const user = userEvent.setup();
     render(<App />);
@@ -280,11 +365,11 @@ describe("klickbarer Paket-1-Prototyp", () => {
       }),
     );
     await user.click(screen.getByRole("button", { name: /Einheit nachträglich erstellen/ }));
-    await user.type(screen.getByLabelText("Datum"), "31.02.2026");
+    expect(screen.getByLabelText("Datum")).toHaveAttribute("type", "date");
+    expect(screen.queryByLabelText("Grund für die Nachtragserfassung")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Interne Bemerkung")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Trainer festlegen/ }));
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Bitte ein gültiges Datum im Format TT.MM.JJJJ eingeben.",
-    );
+    expect(screen.getByRole("alert")).toHaveTextContent("Bitte ein gültiges Datum auswählen.");
     expect(consoleError.mock.calls.flat().join(" ")).not.toMatch(/unique.*key/i);
   });
 

@@ -1661,6 +1661,7 @@ textarea {
   resize: vertical;
 }
 
+.retrospective-form fieldset,
 .retrospective-step fieldset {
   display: grid;
   gap: 8px;

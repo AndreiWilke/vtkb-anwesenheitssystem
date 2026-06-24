@@ -20,15 +20,16 @@ import {
 import {
   MemberQualification,
   DemoRole,
-  DOJOS,
   BELT_COLORS,
   BELT_LABELS,
   PresenceStatus,
   PersonMembershipStatus,
   SessionRole,
+  TrainingSessionStatus,
+  dojoById,
   formatGermanDate,
   findRetrospectiveDuplicate,
-  parseGermanDate,
+  slotsForClubDate,
   validateRetrospectiveSession,
   type DemoRole as DemoRoleValue,
   type RetrospectiveSessionInput,
@@ -36,7 +37,6 @@ import {
 
 import {
   BeltMark,
-  GermanDateInput,
   MemberAvatar,
   PageHeading,
   PrimaryButton,
@@ -44,7 +44,6 @@ import {
   StatusTag,
   ToriiMark,
 } from "./components";
-import { completedSessionHistory } from "./mockData";
 import type {
   AttendanceState,
   AuditEntry,
@@ -113,19 +112,29 @@ export function StartScreen({
   selectedSession,
   members,
   requiresExplicitSelection,
+  trainingHistory,
+  canCreateRetrospectiveSession,
   onStart,
   onChooseSession,
   onSelectHistory,
+  onCreateRetrospectiveSession,
 }: {
   sessions: readonly TrainingSessionMock[];
   selectedSession: TrainingSessionMock;
   members: readonly Member[];
   requiresExplicitSelection: boolean;
+  trainingHistory: readonly HistoricalTrainingSession[];
+  canCreateRetrospectiveSession: boolean;
   onStart: () => void;
   onChooseSession: () => void;
   onSelectHistory: () => void;
+  onCreateRetrospectiveSession: () => void;
 }) {
   const otherSessions = sessions.filter((session) => session.id !== selectedSession.id);
+  const recentCompletedSessions = [...trainingHistory]
+    .filter((session) => session.status === TrainingSessionStatus.COMPLETED)
+    .sort((left, right) => right.startsAt.localeCompare(left.startsAt))
+    .slice(0, 3);
   return (
     <section>
       <PageHeading title="Start" description={clubDateFormatter.format(new Date())} />
@@ -206,6 +215,16 @@ export function StartScreen({
         </section>
       ) : null}
 
+      {canCreateRetrospectiveSession ? (
+        <section className="open-section">
+          <div className="section-label">Bereits durchgeführte Einheit</div>
+          <SecondaryButton onClick={onCreateRetrospectiveSession}>
+            <History aria-hidden="true" />
+            Vergangene Einheit nachtragen
+          </SecondaryButton>
+        </section>
+      ) : null}
+
       <section className="open-section">
         <div className="section-heading-row">
           <div className="section-label">Zuletzt abgeschlossen</div>
@@ -213,14 +232,25 @@ export function StartScreen({
             Auswertung
           </button>
         </div>
-        <div className="history-list">
-          {completedSessionHistory.map((item) => (
-            <div className="history-row" key={item.id}>
-              <span>{item.label}</span>
-              <strong>{item.count} anwesend</strong>
-            </div>
-          ))}
-        </div>
+        {recentCompletedSessions.length ? (
+          <div className="history-list" data-testid="recent-completed-history">
+            {recentCompletedSessions.map((session) => (
+              <div className="history-row" key={session.id}>
+                <span>
+                  <strong>{session.name}</strong>
+                  <small>
+                    {formatGermanDate(session.date)} ·{" "}
+                    {clubTimeFormatter.format(new Date(session.startsAt))} ·{" "}
+                    {session.dojoNameSnapshot}
+                  </small>
+                </span>
+                <strong>{session.attendance.length} anwesend</strong>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p>Noch keine abgeschlossene Einheit gespeichert.</p>
+        )}
       </section>
     </section>
   );
@@ -1313,29 +1343,29 @@ export function RetrospectiveSessionScreen({
         member.qualification === MemberQualification.ASSISTANT_TRAINER),
   );
   const [step, setStep] = useState(1);
-  const [dateInput, setDateInput] = useState("");
-  const [startTime, setStartTime] = useState("17:00");
-  const [endTime, setEndTime] = useState("18:30");
-  const [name, setName] = useState("");
-  const [trainingType, setTrainingType] = useState("GRUNDLAGENTRAINING");
-  const [dojoId, setDojoId] = useState(DOJOS[0]?.id ?? "");
-  const dojo = DOJOS.find((candidate) => candidate.id === dojoId)?.name ?? "";
+  const [date, setDate] = useState("");
+  const [selectedSlotId, setSelectedSlotId] = useState("");
   const [responsibleTrainerId, setResponsibleTrainerId] = useState(trainers[0]?.id ?? "");
   const [assistantTrainerIds, setAssistantTrainerIds] = useState<string[]>([]);
   const [participantIds, setParticipantIds] = useState<string[]>([]);
-  const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
 
-  const parsedDate = parseGermanDate(dateInput);
+  const latestRetrospectiveDate = new Date(`${today}T12:00:00.000Z`);
+  latestRetrospectiveDate.setUTCDate(latestRetrospectiveDate.getUTCDate() - 1);
+  const maxDate = latestRetrospectiveDate.toISOString().slice(0, 10);
+  const availableSlots = date ? slotsForClubDate(date) : [];
+  const selectedSlot = availableSlots.find((slot) => slot.id === selectedSlotId) ?? null;
+  const selectedDojo = selectedSlot ? dojoById(selectedSlot.dojoId) : null;
   const input = (): RetrospectiveSessionInput => ({
-    date: parsedDate ?? "",
-    startTime,
-    endTime,
-    name,
-    trainingType,
-    dojoId,
-    dojo,
+    date,
+    scheduledSlotId: selectedSlot?.id ?? "",
+    startTime: selectedSlot?.startTime ?? "",
+    endTime: selectedSlot?.endTime ?? "",
+    name: selectedSlot?.name ?? "",
+    trainingType: selectedSlot?.trainingType ?? "",
+    dojoId: selectedSlot?.dojoId ?? "",
+    dojo: selectedDojo?.name ?? "",
     responsibleTrainerId,
     assistantTrainerIds,
     participantIds,
@@ -1345,20 +1375,34 @@ export function RetrospectiveSessionScreen({
         (participant) => [participant.id, participant.membershipStatus] as const,
       ),
     ]),
-    reason,
     ...(note.trim() ? { note } : {}),
     createdBy: actorRole,
     createdAt: new Date().toISOString(),
   });
-  const duplicateId = parsedDate ? findRetrospectiveDuplicate(input(), history) : null;
+  const duplicateId = date && selectedSlot ? findRetrospectiveDuplicate(input(), history) : null;
   const blockedTrials = blockedTrialParticipantsInSession(
     participantIds.filter((id) => id.startsWith("trial-")),
     trialParticipants,
     history,
   );
   const continueFromDetails = () => {
-    if (!parsedDate) {
-      setErrors(["Bitte ein gültiges Datum im Format TT.MM.JJJJ eingeben."]);
+    if (!date) {
+      setErrors(["Bitte ein gültiges Datum auswählen."]);
+      return;
+    }
+    const dateIssue = validateRetrospectiveSession(input(), today).find(
+      (issue) => issue.field === "date",
+    );
+    if (dateIssue) {
+      setErrors([dateIssue.message]);
+      return;
+    }
+    if (availableSlots.length === 0) {
+      setErrors(["Für diesen Wochentag ist keine reguläre Trainingseinheit hinterlegt."]);
+      return;
+    }
+    if (!selectedSlot) {
+      setErrors(["Bitte genau eine reguläre Trainingseinheit auswählen."]);
       return;
     }
     if (duplicateId) {
@@ -1388,76 +1432,53 @@ export function RetrospectiveSessionScreen({
         <div className="form-grid retrospective-form">
           <label>
             <span>Datum</span>
-            <GermanDateInput
-              aria-label="Datum"
-              value={dateInput}
-              onChange={(event) => setDateInput(event.target.value)}
-            />
-          </label>
-          <div className="form-row">
-            <label>
-              <span>Beginn</span>
-              <input
-                aria-label="Beginn"
-                type="time"
-                value={startTime}
-                onChange={(event) => setStartTime(event.target.value)}
-              />
-            </label>
-            <label>
-              <span>Ende</span>
-              <input
-                aria-label="Ende"
-                type="time"
-                value={endTime}
-                onChange={(event) => setEndTime(event.target.value)}
-              />
-            </label>
-          </div>
-          <label>
-            <span>Bezeichnung</span>
             <input
-              aria-label="Bezeichnung"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
+              aria-label="Datum"
+              max={maxDate}
+              type="date"
+              value={date}
+              onChange={(event) => {
+                setDate(event.target.value);
+                setSelectedSlotId("");
+                setErrors([]);
+              }}
             />
           </label>
-          <label>
-            <span>Trainingsart</span>
-            <select
-              aria-label="Trainingsart"
-              value={trainingType}
-              onChange={(event) => setTrainingType(event.target.value)}
-            >
-              <option value="GRUNDLAGENTRAINING">Grundlagentraining</option>
-              <option value="FORTGESCHRITTENENTRAINING">Fortgeschrittenentraining</option>
-              <option value="KINDERTRAINING">Kindertraining</option>
-              <option value="JUGENDTRAINING">Jugendtraining</option>
-              <option value="ERWACHSENENTRAINING">Erwachsenentraining</option>
-            </select>
-          </label>
-          <label>
-            <span>Dojo</span>
-            <select
-              aria-label="Dojo"
-              value={dojoId}
-              onChange={(event) => setDojoId(event.target.value)}
-            >
-              {DOJOS.filter((dojo) => dojo.active).map((dojo) => (
-                <option key={dojo.id} value={dojo.id}>
-                  {dojo.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Grund für die Nachtragserfassung</span>
-            <textarea
-              aria-label="Grund für die Nachtragserfassung"
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-            />
-          </label>
+          {date ? (
+            availableSlots.length ? (
+              <fieldset>
+                <legend>Reguläre Trainingseinheit</legend>
+                {availableSlots.map((slot) => {
+                  const dojo = dojoById(slot.dojoId);
+                  return (
+                    <label className="check-row" key={slot.id}>
+                      <input
+                        aria-label={`${slot.startTime}–${slot.endTime}, ${dojo.name}, Slot-ID ${slot.id}`}
+                        checked={selectedSlotId === slot.id}
+                        name="retrospective-slot"
+                        type="radio"
+                        value={slot.id}
+                        onChange={() => {
+                          setSelectedSlotId(slot.id);
+                          setErrors([]);
+                        }}
+                      />
+                      <span>
+                        <strong>
+                          {slot.startTime}–{slot.endTime} · {dojo.name}
+                        </strong>
+                        <small>Slot-ID: {slot.id}</small>
+                      </span>
+                    </label>
+                  );
+                })}
+              </fieldset>
+            ) : (
+              <div className="validation-box" role="status">
+                Für diesen Wochentag ist keine reguläre Trainingseinheit hinterlegt.
+              </div>
+            )
+          ) : null}
           <label>
             <span>Interne Bemerkung · optional</span>
             <textarea
@@ -1593,25 +1614,21 @@ export function RetrospectiveSessionScreen({
           <dl className="completion-details">
             <div>
               <dt>Einheit</dt>
-              <dd>{name}</dd>
+              <dd>{selectedSlot?.name}</dd>
             </div>
             <div>
               <dt>Datum und Zeit</dt>
               <dd>
-                {parsedDate ? formatGermanDate(parsedDate) : dateInput} · {startTime}–{endTime}
+                {formatGermanDate(date)} · {selectedSlot?.startTime}–{selectedSlot?.endTime}
               </dd>
             </div>
             <div>
               <dt>Dojo</dt>
-              <dd>{dojo}</dd>
+              <dd>{selectedDojo?.name}</dd>
             </div>
             <div>
               <dt>Anwesend</dt>
               <dd>{1 + assistantTrainerIds.length + participantIds.length} Personen</dd>
-            </div>
-            <div>
-              <dt>Grund</dt>
-              <dd>{reason}</dd>
             </div>
           </dl>
           <div className="success-box">

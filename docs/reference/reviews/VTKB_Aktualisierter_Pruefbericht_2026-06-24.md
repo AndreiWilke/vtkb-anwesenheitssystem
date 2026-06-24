@@ -1,9 +1,9 @@
 # Aktualisierter Prüfbericht – VTKB-Anwesenheitssystem
 
-**Prüfdatum:** 24.06.2026  
-**Neu geprüfter Stand:** `/mnt/data/vtkb_current_review` als Abbild des erneut übergebenen lokalen Ordners `D:\Anwesenheit`  
-**Repository laut Übergabe:** `AndreiWilke/vtkb-anwesenheitssystem`  
-**Vorgesehener Arbeitsbranch laut Übergabe:** `fix/package-1-7-design-and-quality`  
+**Prüfdatum:** 24.06.2026
+**Neu geprüfter Stand:** `/mnt/data/vtkb_current_review` als Abbild des erneut übergebenen lokalen Ordners `D:\Anwesenheit`
+**Repository laut Übergabe:** `AndreiWilke/vtkb-anwesenheitssystem`
+**Vorgesehener Arbeitsbranch laut Übergabe:** `fix/package-1-7-design-and-quality`
 
 ## 1. Prüfgrenzen
 
@@ -154,7 +154,7 @@ Trainer, Assistenztrainer, Zielgruppen und Gürtelstufen dürfen dabei noch kein
 
 Die geforderte Bereinigung wurde noch nicht durchgeführt. Im Ordner `scripts` liegen weiterhin 17 PowerShell-Dateien. Mehrere davon wechseln auf `main`, führen harte Resets aus, mergen automatisch oder pushen direkt auf `main`.
 
-**Zu entfernen:** sämtliche `*.ps1` im Ordner `scripts`.  
+**Zu entfernen:** sämtliche `*.ps1` im Ordner `scripts`.
 **Einzig zu erhalten:** `scripts/package1-browser-qa.mjs`.
 
 Bis zur Entfernung dürfen die PowerShell-Dateien nicht ausgeführt werden.
@@ -206,5 +206,5 @@ Es darf nicht auf `main` gewechselt und nicht gemergt werden.
 
 Der neu übergebene Stand bestätigt die angekündigte technische Verbesserung auf **308 erfolgreich getestete Fälle**. Die Korrekturen an Datum, Gürtelkatalog, Rollen und Nachtragserfassung sind real vorhanden. Sie beheben jedoch nicht die fachlichen Kernprobleme aus der unabhängigen Prüfung.
 
-**Freigabestatus:** weiterhin nicht freigabefähig.  
+**Freigabestatus:** weiterhin nicht freigabefähig.
 **Nächster sinnvoller Schritt:** Umsetzung der sieben Blocker, der hohen Datenintegritätsfehler, der Dojo-/Wochenplanfunktion und des Repository-Cleanups auf dem bestehenden Arbeitsbranch; anschließend vollständige Regression einschließlich portablem Browser-QA.

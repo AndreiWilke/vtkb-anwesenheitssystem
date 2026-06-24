@@ -1,3 +1,5 @@
+import { isValidIsoDate } from "./date.js";
+
 export const CLUB_TIME_ZONE = "Europe/Berlin" as const;
 
 const berlinPartsFormatter = new Intl.DateTimeFormat("en-GB", {
@@ -130,6 +132,20 @@ export function slotsForWeekday(weekday: number): ScheduledTrainingSlot[] {
       left.startTime.localeCompare(right.startTime) ||
       dojoById(left.dojoId).name.localeCompare(dojoById(right.dojoId).name, "de"),
   );
+}
+
+export function clubWeekdayForIsoDate(date: string): ScheduledTrainingSlot["weekday"] {
+  if (!isValidIsoDate(date)) throw new Error("Ungültiges Vereinsdatum.");
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) throw new Error("Ungültiges Vereinsdatum.");
+  const weekday = new Date(
+    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
+  ).getUTCDay();
+  return (weekday === 0 ? 7 : weekday) as ScheduledTrainingSlot["weekday"];
+}
+
+export function slotsForClubDate(date: string): ScheduledTrainingSlot[] {
+  return slotsForWeekday(clubWeekdayForIsoDate(date));
 }
 
 export function scheduledSlotsOverlap(

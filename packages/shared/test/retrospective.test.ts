@@ -12,13 +12,14 @@ import {
 } from "../src/index.js";
 
 const validInput: RetrospectiveSessionInput = {
-  date: "2026-06-20",
+  date: "2026-06-22",
+  scheduledSlotId: "mon-seikatsu-1700",
   startTime: "17:00",
-  endTime: "18:30",
-  name: "Fiktive Nachtragseinheit",
-  trainingType: "GRUNDLAGENTRAINING",
+  endTime: "18:00",
+  name: "Training",
+  trainingType: "ALLGEMEINES_TRAINING",
   dojoId: "dojo-seikatsu",
-  dojo: "Test-Dojo",
+  dojo: "Seikatsu Dojo",
   responsibleTrainerId: "member-01",
   assistantTrainerIds: ["member-02"],
   participantIds: ["member-03", "trial-01"],
@@ -28,7 +29,6 @@ const validInput: RetrospectiveSessionInput = {
     "member-03": "ACTIVE_MEMBER",
     "trial-01": "TRIAL",
   },
-  reason: "Fiktiver Dokumentationsnachtrag",
   note: "Nur Testdaten",
   createdBy: DemoRole.BOARD,
   createdAt: "2026-06-23T12:00:00.000Z",
@@ -39,9 +39,20 @@ describe("Nachtragseinheit", () => {
     expect(validateRetrospectiveSession(validInput, "2026-06-23")).toEqual([]);
     const result = createRetrospectiveSession("retro-0001", validInput, "2026-06-23");
     expect(result.session.status).toBe("COMPLETED");
+    expect(result.session).toMatchObject({
+      scheduledSlotId: "mon-seikatsu-1700",
+      dojoId: "dojo-seikatsu",
+      dojoNameSnapshot: "Seikatsu Dojo",
+      name: "Training",
+      trainingType: "ALLGEMEINES_TRAINING",
+    });
+    expect(result.session.startsAt).toBe("2026-06-22T15:00:00.000Z");
+    expect(result.session.endsAt).toBe("2026-06-22T16:00:00.000Z");
+    expect(result.session.internalNote).toBe("Nur Testdaten");
     expect(result.session.attendance).toHaveLength(4);
     expect(result.session.attendance[0]?.sessionRole).toBe(SessionRole.RESPONSIBLE_TRAINER);
     expect(result.auditEntry.action).toBe("RETROSPECTIVE_SESSION_CREATED");
+    expect(result.auditEntry.reason).toBeNull();
   });
 
   it.each(["2026-06-23", "2026-06-24"])("blockiert heutiges oder zukünftiges Datum %s", (date) => {
@@ -58,17 +69,39 @@ describe("Nachtragseinheit", () => {
     );
     expect(issues.map((issue) => issue.code)).toContain(RetrospectiveValidationCode.INVALID_DATE);
     expect(issues.find((issue) => issue.field === "date")?.message).toBe(
-      "Bitte ein gültiges Datum im Format TT.MM.JJJJ eingeben.",
+      "Bitte ein gültiges Datum auswählen.",
     );
   });
 
-  it("verlangt Grund und eine gültige Zeitspanne", () => {
+  it("verlangt weiterhin eine gültige Zeitspanne, aber keinen Freitextgrund", () => {
     const codes = validateRetrospectiveSession(
-      { ...validInput, reason: " ", startTime: "19:00", endTime: "18:00" },
+      { ...validInput, startTime: "19:00", endTime: "18:00" },
       "2026-06-23",
     ).map((issue) => issue.code);
-    expect(codes).toContain(RetrospectiveValidationCode.MISSING_REASON);
     expect(codes).toContain(RetrospectiveValidationCode.INVALID_TIME_RANGE);
+  });
+
+  it("speichert eine fehlende interne Bemerkung als null und blockiert nicht", () => {
+    const inputWithoutNote: RetrospectiveSessionInput = { ...validInput };
+    delete inputWithoutNote.note;
+    expect(validateRetrospectiveSession(inputWithoutNote, "2026-06-23")).toEqual([]);
+    expect(
+      createRetrospectiveSession("retro-without-note", inputWithoutNote, "2026-06-23").session
+        .internalNote,
+    ).toBeNull();
+  });
+
+  it("verlangt einen zentralen Wochenplan-Slot und lehnt manipulierte Slot-Daten ab", () => {
+    expect(
+      validateRetrospectiveSession({ ...validInput, scheduledSlotId: "" }, "2026-06-23").map(
+        (issue) => issue.code,
+      ),
+    ).toContain(RetrospectiveValidationCode.MISSING_SCHEDULED_SLOT);
+    expect(
+      validateRetrospectiveSession({ ...validInput, endTime: "18:30" }, "2026-06-23").map(
+        (issue) => issue.code,
+      ),
+    ).toContain(RetrospectiveValidationCode.SCHEDULE_SLOT_MISMATCH);
   });
 
   it("verhindert doppelte Assistenz und doppelte Trainerrollen", () => {
@@ -88,6 +121,15 @@ describe("Nachtragseinheit", () => {
   it("warnt bei identischem Datum, Zeit und Dojo", () => {
     const { session } = createRetrospectiveSession("retro-existing", validInput, "2026-06-23");
     expect(findRetrospectiveDuplicate(validInput, [session])).toBe("retro-existing");
+  });
+
+  it("warnt bei identischem Datum und Slot auch bei abweichenden Eingabezeiten", () => {
+    const { session } = createRetrospectiveSession("retro-existing", validInput, "2026-06-23");
+    expect(
+      findRetrospectiveDuplicate({ ...validInput, startTime: "16:45", endTime: "18:15" }, [
+        session,
+      ]),
+    ).toBe("retro-existing");
   });
 
   it.each([DemoRole.BOARD, DemoRole.TRAINER, DemoRole.ASSISTANT_TRAINER, DemoRole.TREASURER])(

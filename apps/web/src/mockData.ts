@@ -130,12 +130,6 @@ export function createTodaySessions(now = new Date()): TrainingSessionMock[] {
   });
 }
 
-export const completedSessionHistory = [
-  { id: "history-1", label: "Dienstag · Grundlagentraining", count: 31 },
-  { id: "history-2", label: "Samstag · Freies Training", count: 24 },
-  { id: "history-3", label: "Donnerstag · Fortgeschrittene", count: 28 },
-] as const;
-
 // ---------------------------------------------------------------------------
 // Paket 1.2 – Probetrainingsteilnehmer (ausschliesslich fiktive Daten)
 // ---------------------------------------------------------------------------

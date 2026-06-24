@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   DOJOS,
   SCHEDULED_TRAINING_SLOTS,
+  clubWeekdayForIsoDate,
   scheduledSlotsOverlap,
+  slotsForClubDate,
   slotsForWeekday,
   validateScheduledTrainingSlots,
 } from "../src/index.js";
@@ -33,6 +35,14 @@ describe("Dojo- und Trainingszeit-Stammdaten", () => {
     expect(ebereschen?.startTime).toBe("16:00");
     expect(senshi?.startTime).toBe("16:00");
     expect(scheduledSlotsOverlap(ebereschen!, senshi!)).toBe(false);
+  });
+
+  it("löst vergangene Vereinsdaten auf die zentralen Montag- und Mittwochsslots auf", () => {
+    expect(clubWeekdayForIsoDate("2026-06-15")).toBe(1);
+    expect(slotsForClubDate("2026-06-15")).toHaveLength(3);
+    expect(clubWeekdayForIsoDate("2026-06-17")).toBe(3);
+    expect(slotsForClubDate("2026-06-17")).toHaveLength(2);
+    expect(slotsForClubDate("2026-06-16")).toEqual([]);
   });
 
   it.each([4, 5])(

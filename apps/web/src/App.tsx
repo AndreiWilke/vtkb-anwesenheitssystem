@@ -147,6 +147,9 @@ export default function App() {
   const [proposals, setProposals] = useState<PhotoProposal[]>(cloneProposals);
   const [workflow, setWorkflow] = useState<WorkflowState>(initialWorkflow);
   const [demoRole, setDemoRole] = useState<DemoRoleValue>(DemoRole.BOARD);
+  const [retrospectiveReturnScreen, setRetrospectiveReturnScreen] = useState<
+    "START" | "MANAGEMENT"
+  >("START");
 
   // Probetraining-State
   const [trialParticipants, setTrialParticipants] = useState<TrialParticipant[]>(() => [
@@ -186,6 +189,10 @@ export default function App() {
   const canCreateDirectMember = hasPermission(demoRole, AppPermission.CREATE_DIRECT_MEMBER);
   const canChangeBelt = hasPermission(demoRole, AppPermission.CHANGE_BELT);
   const canDecideBeltSuggestion = hasPermission(demoRole, AppPermission.DECIDE_BELT_SUGGESTION);
+  const canCreateRetrospectiveSession = hasPermission(
+    demoRole,
+    AppPermission.CREATE_RETROSPECTIVE_SESSION,
+  );
 
   const addAuditEntry = (entry: AuditEntry) => {
     setAuditEntries((prev) => [entry, ...prev]);
@@ -631,8 +638,14 @@ export default function App() {
           selectedSession={selectedSession}
           sessions={sessions}
           requiresExplicitSelection={hasParallelSessionChoice(sessions, selectedSession)}
+          trainingHistory={trainingHistory}
+          canCreateRetrospectiveSession={canCreateRetrospectiveSession}
           onChooseSession={() => setScreen("SESSION_SELECT")}
           onSelectHistory={() => setScreen("STATS")}
+          onCreateRetrospectiveSession={() => {
+            setRetrospectiveReturnScreen("START");
+            navigate("RETRO_DATE_SELECT");
+          }}
           onStart={beginTraining}
         />
       );
@@ -1073,7 +1086,10 @@ export default function App() {
           onBeltReport={() => navigate("BELT_REPORT")}
           onBeltSuggestions={() => navigate("BELT_SUGGESTION_REVIEW")}
           onBeltSimulation={() => navigate("BELT_SIM_DEMO")}
-          onRetroEntry={() => navigate("RETRO_DATE_SELECT")}
+          onRetroEntry={() => {
+            setRetrospectiveReturnScreen("MANAGEMENT");
+            navigate("RETRO_DATE_SELECT");
+          }}
           recentRetrospectiveSessions={trainingHistory.filter((session) =>
             session.id.startsWith("retro-"),
           )}
@@ -1111,9 +1127,9 @@ export default function App() {
             };
             setTrainingHistory((current) => [...current, historicalSession]);
             addAuditEntry(auditEntry);
-            setScreen("MANAGEMENT");
+            setScreen("START");
           }}
-          onBack={() => setScreen("MANAGEMENT")}
+          onBack={() => setScreen(retrospectiveReturnScreen)}
         />
       );
       break;
